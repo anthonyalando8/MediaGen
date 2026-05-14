@@ -1,21 +1,21 @@
 """
 assemble.py -- FFmpeg assembly pipeline.
 
-Stages:
-  1. slide_video  -- concat slide PNGs held for beat duration -> silent .mp4
-  2. audio_mix    -- loudnorm voice + duck BGM -> .aac
-  3. mux          -- merge slide_video + audio_mix -> muxed.mp4
-  4. captions     -- burn ASS subtitles onto muxed.mp4 -> final.mp4
+Supports two input modes, auto-detected:
 
-Windows + FFmpeg subtitles filter notes:
-  The subtitles= filter on Windows is extremely sensitive to paths.
-  fontsdir= cannot contain a colon at all (even D:/...) -- the filter
-  parser treats the whole vf string as one token and breaks on it.
-  Solution: copy the .ass file to a short temp path (C:/tmp/) before
-  burning, eliminating drive-letter colons and spaces from the filter
-  string entirely.  fontsdir is omitted; FFmpeg uses its built-in font
-  fallback (DejaVu) which is fine -- the font was already embedded into
-  the slide PNGs by Pillow.  Captions still render correctly.
+  Pillow mode   slide_paths = [slide_0.png, slide_1.png, ...]
+                Each PNG held for beat duration via concat demuxer.
+
+  HTML mode     slide_paths = [beat_0/, beat_1/, ...]  (frame directories)
+                Each directory contains frame_00000.png ... frame_NNNNN.png
+                captured by Playwright. Assembled via image2 demuxer.
+
+Stages (both modes share stages 2-4):
+  1a. (Pillow) build_slide_video         -- PNG stills -> silent .mp4
+  1b. (HTML)   build_slide_video_from_frames -- frame dirs -> silent .mp4
+  2.  mix_audio                          -- loudnorm voice + duck BGM -> .aac
+  3.  mux                                -- video + audio -> muxed.mp4
+  4.  burn_captions                      -- ASS subtitles -> final.mp4
 """
 
 import pathlib
@@ -37,10 +37,11 @@ def _run(cmd, label):
 
 
 # -----------------------------------------------------------------------
-# Stage 1 -- slide video
+# Stage 1a -- Pillow mode: PNG stills -> silent video
 # -----------------------------------------------------------------------
 
 def build_slide_video(slide_paths, durations, out_path, cfg, gap_s=0.38):
+    """Each PNG held for its beat duration + a short gap between beats."""
     fps = cfg["video"]["fps"]
     w   = cfg["video"]["width"]
     h   = cfg["video"]["height"]
@@ -51,6 +52,7 @@ def build_slide_video(slide_paths, durations, out_path, cfg, gap_s=0.38):
         hold = dur + (gap_s if i < len(slide_paths) - 1 else 0)
         lines.append(f"file '{slide.resolve().as_posix()}'")
         lines.append(f"duration {hold:.4f}")
+    # concat demuxer needs last file repeated without duration to flush
     lines.append(f"file '{slide_paths[-1].resolve().as_posix()}'")
     concat_file.write_text("\n".join(lines), encoding="utf-8")
 
@@ -68,7 +70,67 @@ def build_slide_video(slide_paths, durations, out_path, cfg, gap_s=0.38):
         "-pix_fmt", "yuv420p",
         "-r", str(fps),
         str(out_path),
-    ], "Build slide video")
+    ], "Build slide video (Pillow mode)")
+    return out_path
+
+
+# -----------------------------------------------------------------------
+# Stage 1b -- HTML renderer mode: frame dirs -> silent video
+# -----------------------------------------------------------------------
+
+def build_slide_video_from_frames(beat_dirs, out_path, cfg):
+    """
+    Convert Playwright frame sequences to a video.
+
+    For each beat dir:
+      frame_00000.png ... frame_NNNNN.png  ->  beat_N.mp4
+    Then concat all beat_N.mp4 -> out_path (stream copy, no re-encode).
+    """
+    fps    = cfg["video"]["fps"]
+    w      = cfg["video"]["width"]
+    h      = cfg["video"]["height"]
+    preset = cfg["video"]["preset"]
+    crf    = str(cfg["video"]["crf"])
+    work   = out_path.parent
+
+    beat_videos = []
+
+    for i, beat_dir in enumerate(sorted(pathlib.Path(d) for d in beat_dirs)):
+        frames = sorted(beat_dir.glob("frame_*.png"))
+        if not frames:
+            raise RuntimeError(f"[assemble] No frames found in {beat_dir}")
+
+        beat_mp4 = work / f"beat_{i}.mp4"
+        pattern  = beat_dir / "frame_%05d.png"
+
+        _run([
+            "ffmpeg", "-y",
+            "-framerate", str(fps),
+            "-i", str(pattern),
+            "-vf", f"scale={w}:{h}",
+            "-c:v", "libx264",
+            "-preset", preset,
+            "-crf", crf,
+            "-pix_fmt", "yuv420p",
+            str(beat_mp4),
+        ], f"Beat {i} frames → video ({len(frames)} frames)")
+
+        beat_videos.append(beat_mp4)
+
+    # stream-copy concat (no re-encode)
+    concat_file = work / "concat_beats.txt"
+    concat_file.write_text(
+        "\n".join(f"file '{p.resolve().as_posix()}'" for p in beat_videos),
+        encoding="utf-8",
+    )
+    _run([
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(concat_file),
+        "-c", "copy",
+        str(out_path),
+    ], "Concat beat videos")
+
     return out_path
 
 
@@ -141,39 +203,22 @@ def mux(video_path, audio_path, out_path):
 # -----------------------------------------------------------------------
 
 def _short_temp_ass(ass_path):
-    """
-    Copy the .ass file to a short path with no spaces and no drive-letter
-    ambiguity for the FFmpeg subtitles filter.
-
-    Strategy (Windows):
-      Try C:/tmp/mg_captions.ass first (short, no colon issues in vf string
-      because we use a relative or UNC workaround).
-      Fall back to a system temp dir.
-
-    Returns the temp path as a plain forward-slash POSIX string suitable
-    for embedding directly in the FFmpeg -vf subtitles= value.
-    """
-    # Use the Windows short temp dir -- usually C:\Users\...\AppData\Local\Temp
-    # but we want something without spaces.  Try a few options:
+    """Copy .ass to C:/tmp (short path, no spaces) for FFmpeg on Windows."""
     candidates = [
         pathlib.Path("C:/tmp"),
         pathlib.Path(os.environ.get("TEMP", "C:/tmp")),
         pathlib.Path(tempfile.gettempdir()),
     ]
-
     tmp_dir = None
     for c in candidates:
         try:
             c.mkdir(parents=True, exist_ok=True)
             tmp_dir = c
-            # prefer C:/tmp because it has no spaces
             if "C:/tmp" in c.as_posix() or c == pathlib.Path("C:/tmp"):
                 break
         except Exception:
             continue
-
     if tmp_dir is None:
-        # last resort: use the run dir itself
         tmp_dir = ass_path.parent
 
     dst = tmp_dir / "mg_captions.ass"
@@ -183,26 +228,22 @@ def _short_temp_ass(ass_path):
 
 def burn_captions(video_path, ass_path, out_path, cfg):
     """
-    Burn ASS subtitles onto video.
-
-    Windows FFmpeg path strategy:
-      - Resolve ALL paths to absolute BEFORE changing cwd.
+    Burn ASS subtitles.  Windows FFmpeg path workaround:
+      - Resolve ALL paths to absolute BEFORE chdir.
       - Copy .ass to C:/tmp (short, no spaces).
-      - chdir to drive root so the .ass can be a relative path (no colon).
-      - Restore cwd in finally regardless of outcome.
+      - chdir to drive root so the .ass is a relative path (no colon in vf).
     """
     tmp_ass = _short_temp_ass(ass_path)
     print(f"[assemble] ASS temp copy: {tmp_ass}")
 
-    # Resolve everything to absolute strings NOW before any chdir
     video_abs = str(video_path.resolve())
     out_abs   = str(out_path.resolve())
     tmp_abs   = tmp_ass.resolve()
 
     cwd_before = pathlib.Path.cwd()
-    drive      = tmp_abs.drive             # "C:"
-    drive_root = pathlib.Path(drive + "/") # C:/
-    rel        = tmp_abs.relative_to(drive_root).as_posix()  # tmp/mg_captions.ass
+    drive      = tmp_abs.drive
+    drive_root = pathlib.Path(drive + "/")
+    rel        = tmp_abs.relative_to(drive_root).as_posix()
     vf         = f"subtitles='{rel}'"
     print(f"[assemble] cwd -> {drive_root}  |  vf: {vf}")
 
@@ -225,7 +266,16 @@ def burn_captions(video_path, ass_path, out_path, cfg):
     return out_path
 
 
+# -----------------------------------------------------------------------
+# Public API -- unified entry point
+# -----------------------------------------------------------------------
+
 def assemble(slide_paths, durations, voice_path, ass_path, run_dir, cfg):
+    """
+    Auto-detects renderer mode from slide_paths:
+      - list of .png files  ->  Pillow mode (static slide hold)
+      - list of directories ->  HTML renderer mode (frame sequences)
+    """
     bgm_dir = pathlib.Path(cfg["paths"]["bgm"])
 
     silent = run_dir / "slides_silent.mp4"
@@ -233,7 +283,15 @@ def assemble(slide_paths, durations, voice_path, ass_path, run_dir, cfg):
     muxed  = run_dir / "muxed.mp4"
     final  = run_dir / "final.mp4"
 
-    build_slide_video(slide_paths, durations, silent, cfg)
+    # detect mode: is the first item a directory?
+    first = pathlib.Path(slide_paths[0])
+    if first.is_dir():
+        print("[assemble] HTML renderer mode — assembling from frame directories")
+        build_slide_video_from_frames(slide_paths, silent, cfg)
+    else:
+        print("[assemble] Pillow mode — assembling from static PNGs")
+        build_slide_video(slide_paths, durations, silent, cfg)
+
     mix_audio(voice_path, bgm_dir, mixed, cfg["video"]["bgm_volume"])
     mux(silent, mixed, muxed)
     burn_captions(muxed, ass_path, final, cfg)

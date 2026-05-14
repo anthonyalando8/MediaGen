@@ -1,0 +1,106 @@
+<!-- scenes/insight.html -->
+<!-- Injected: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
+
+<style>
+.insight-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(50% 40% at 20% 80%, oklch(from var(--acc) 0.32 0.12 h / .4), transparent 65%),
+    var(--bg);
+}
+.insight-noise {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='3.2' numOctaves='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.04;
+  pointer-events: none;
+}
+
+/* Depth ghost word behind keyword */
+.depth-ghost {
+  position: absolute;
+  top: calc(var(--safe-top) + 60px);
+  left: -30px;
+  font-size: 180px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  color: oklch(1 0 0 / .03);
+  white-space: nowrap;
+  pointer-events: none;
+  filter: blur(4px);
+  animation: parallaxSlow 14s ease-in-out infinite alternate;
+  z-index: 1;
+}
+
+.insight-content {
+  position: absolute;
+  top: calc(var(--safe-top) + 100px);
+  left: var(--left-mg);
+  right: 72px;
+  z-index: 4;
+}
+
+.insight-eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 18px;
+  letter-spacing: 0.18em;
+  color: var(--acc);
+  text-transform: uppercase;
+  opacity: 0;
+  animation: fadeUp 0.4s ease-out 0.0s forwards;
+  margin-bottom: 20px;
+}
+
+.insight-keyword {
+  font-size: var(--sz-stat);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  color: var(--fg);
+  text-transform: uppercase;
+  text-shadow: 0 4px 0 oklch(0 0 0 / .45);
+  opacity: 0;
+  animation: wordIn 0.65s cubic-bezier(.2,.9,.25,1.08) 0.15s forwards;
+}
+
+.insight-divider {
+  width: 0px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--acc), transparent);
+  margin: 28px 0 28px;
+  animation: underlineGrow 0.45s ease-out 0.65s forwards;
+}
+@keyframes underlineGrow {
+  from { width: 0px; }
+  to   { width: 120px; }
+}
+
+.insight-body {
+  font-size: var(--sz-body);
+  font-weight: 500;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+  color: var(--fg-2);
+  text-shadow: 0 2px 0 oklch(0 0 0 / .3);
+  opacity: 0;
+  animation: fadeUp 0.5s ease-out 0.8s forwards;
+}
+</style>
+
+<div class="scene">
+  <div class="insight-bg"></div>
+  <div class="insight-noise"></div>
+  <div class="depth-ghost">{{KEYWORD}}</div>
+
+  <div class="hud-tag">{{HUD_TAG}}</div>
+
+  <div class="insight-content">
+    <div class="insight-keyword">{{KEYWORD}}</div>
+    <div class="insight-divider"></div>
+    <div class="insight-body">{{BODY}}</div>
+  </div>
+
+  <div class="brand">{{BRAND}}</div>
+  <div class="grain"></div>
+  <div class="vignette"></div>
+</div>

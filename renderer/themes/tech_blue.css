@@ -1,0 +1,7 @@
+/* themes/tech_blue.css  --  default theme */
+:root {
+  --acc:   oklch(0.78 0.19 230);   /* electric blue */
+  --spike: oklch(0.78 0.19 30);    /* coral spike, climax beat only */
+  --bg:    oklch(0.12 0.02 250);
+  --fg:    oklch(0.97 0.005 250);
+}

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>
+/* ─── THEME BASE TOKENS ─────────────────────────────────────────── */
+:root {
+  /* These are overridden by the injected theme + palette from JSON */
+  --bg:     oklch(0.12 0.02 250);
+  --bg-2:   oklch(0.16 0.022 250);
+  --fg:     oklch(0.97 0.005 250);
+  --fg-2:   oklch(0.82 0.012 250);
+  --fg-dim: oklch(0.6 0.015 250);
+  --acc:    oklch(0.78 0.19 230);
+  --acc-s:  oklch(0.78 0.19 230 / .18);
+  --acc-l:  oklch(0.78 0.19 230 / .45);
+  --spike:  oklch(0.78 0.19 30);
+
+  /* Safe zone — TikTok 1080×1920 */
+  --safe-top:  240px;
+  --safe-bot:  480px;   /* from bottom */
+  --left-mg:   72px;
+
+  /* Type scale */
+  --sz-hero:   clamp(120px, 18vw, 200px);
+  --sz-stat:   clamp(80px, 12vw, 130px);
+  --sz-body:   clamp(40px, 6vw, 64px);
+  --sz-hud:    22px;
+  --sz-brand:  30px;
+}
+
+/* ─── RESET ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width:  1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Space Grotesk", ui-sans-serif, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── SCENE WRAPPER ─────────────────────────────────────────────── */
+.scene {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ─── SAFE ZONE ANCHOR ──────────────────────────────────────────── */
+.safe {
+  position: absolute;
+  top:    var(--safe-top);
+  bottom: var(--safe-bot);
+  left:   var(--left-mg);
+  right:  72px;
+}
+
+/* ─── LEFT EDGE BAR ─────────────────────────────────────────────── */
+.scene::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 5px;
+  background: var(--acc);
+  opacity: 0.85;
+  z-index: 10;
+}
+
+/* ─── BOTTOM ACCENT LINE ────────────────────────────────────────── */
+.scene::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 4px;
+  background: var(--acc);
+  opacity: 0.55;
+  z-index: 10;
+}
+
+/* ─── BACKGROUND GLOW ───────────────────────────────────────────── */
+.bg-glow {
+  position: absolute;
+  width: 700px; height: 700px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--acc) 0%, transparent 65%);
+  filter: blur(60px);
+  opacity: 0.12;
+  bottom: -200px; left: -200px;
+  pointer-events: none;
+  animation: bloomPulse 5s ease-in-out infinite;
+}
+
+/* ─── GRAIN OVERLAY ─────────────────────────────────────────────── */
+.grain {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 8;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+  opacity: 0.28;
+}
+
+/* ─── VIGNETTE ──────────────────────────────────────────────────── */
+.vignette {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  /* anisotropic: tighter right + top to bias attention left */
+  background: radial-gradient(110% 90% at 38% 55%, transparent 42%, oklch(0 0 0 / .88) 130%);
+}
+
+/* ─── HUD TAG ───────────────────────────────────────────────────── */
+.hud-tag {
+  position: absolute;
+  top: calc(var(--safe-top) + 32px);
+  left: var(--left-mg);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: var(--sz-hud);
+  letter-spacing: 0.1em;
+  color: var(--acc);
+  background: oklch(from var(--acc) l c h / 0.12);
+  border: 1px solid oklch(from var(--acc) l c h / 0.35);
+  padding: 8px 18px;
+  border-radius: 6px;
+  z-index: 5;
+}
+
+/* ─── KEYWORD ───────────────────────────────────────────────────── */
+.keyword {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  color: var(--fg);
+  text-transform: uppercase;
+  text-shadow: 0 4px 0 oklch(0 0 0 / .4);
+}
+
+.keyword-underline {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--acc);
+  margin-top: 12px;
+}
+
+/* ─── BODY TEXT ─────────────────────────────────────────────────── */
+.body-text {
+  font-size: var(--sz-body);
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: var(--fg-2);
+  text-shadow: 0 2px 0 oklch(0 0 0 / .3);
+}
+
+/* ─── BRAND ─────────────────────────────────────────────────────── */
+.brand {
+  position: absolute;
+  bottom: calc(var(--safe-bot) + 50px);
+  right: 72px;
+  font-size: var(--sz-brand);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--acc);
+  opacity: 0.45;
+  z-index: 5;
+}
+
+/* ─── SHARED KEYFRAMES ──────────────────────────────────────────── */
+@keyframes bloomPulse {
+  0%, 100% { transform: scale(1);    opacity: 0.12; }
+  50%      { transform: scale(1.15); opacity: 0.18; }
+}
+@keyframes wordIn {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes wordPunch {
+  0%   { transform: scale(0.72); opacity: 0; letter-spacing: 0.04em; }
+  65%  { transform: scale(1.04); opacity: 1; letter-spacing: -0.06em; }
+  100% { transform: scale(1);    opacity: 1; letter-spacing: -0.04em; }
+}
+@keyframes lineIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes kenBurns {
+  from { transform: scale(1.0) translate(0, 0); }
+  to   { transform: scale(1.06) translate(-1.5%, -1%); }
+}
+@keyframes parallaxSlow {
+  from { transform: translate(0, 0); }
+  to   { transform: translate(-3%, 1%); }
+}
+@keyframes glitchIn {
+  0%   { clip-path: inset(40% 0 40% 0); opacity: 0; }
+  33%  { clip-path: inset(0 30% 0 0);   opacity: 1; }
+  66%  { clip-path: inset(0 0 0 20%); }
+  100% { clip-path: inset(0 0 0 0);     opacity: 1; }
+}
+@keyframes glitchR {
+  0%, 100% { transform: translateX(2px); }
+  92%      { transform: translateX(6px); }
+  96%      { transform: translateX(8px); }
+}
+@keyframes glitchB {
+  0%, 100% { transform: translateX(-2px); }
+  92%      { transform: translateX(-6px); }
+  96%      { transform: translateX(-8px); }
+}
+@keyframes gridDrift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 56px 56px, 56px 56px; }
+}
+</style>
+
+<!-- Fonts loaded once in base; cached for all scenes in same session -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+</head>
+<body>
+<!-- Scene HTML is injected here by the renderer -->
+{{SCENE_CONTENT}}
+</body>
+</html>
