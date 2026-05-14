@@ -87,7 +87,11 @@ def run_one(topic: str, cfg: dict) -> dict:
 
     # ── 4. Slides ─────────────────────────────────────────────────────────
     _step(4, "Slide rendering  (Pillow)")
-    slide_paths = render_slides(script, run_dir, cfg)
+    # Convert beat durations from seconds to milliseconds for the HTML renderer.
+    # The frame count per beat is ceil(duration_ms / 1000 * fps), so this
+    # directly controls how long each animated scene plays — matching the voice.
+    durations_ms = [int(d * 1000) for d in durations]
+    slide_paths = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)
 
     # ── 5. Assembly ───────────────────────────────────────────────────────
     _step(5, "Assembly  (FFmpeg)")

@@ -148,7 +148,12 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
   // Extra wait for fonts
   await page.waitForTimeout(200);
 
-  const duration_ms  = beat.duration_ms;
+  // Add a 380ms silence gap at the end of every beat except the last,
+  // matching the gap_s=0.38 in assemble.py's build_slide_video_from_frames.
+  // This prevents the video from cutting off before the narration ends.
+  const isLastBeat   = beatIdx === sceneJson.beats.length - 1;
+  const gap_ms       = isLastBeat ? 0 : 380;
+  const duration_ms  = beat.duration_ms + gap_ms;
   const frame_count  = Math.ceil((duration_ms / 1000) * fps);
   const frame_ms     = 1000 / fps;
 
