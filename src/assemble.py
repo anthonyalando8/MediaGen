@@ -148,10 +148,36 @@ def _pick_bgm(bgm_dir):
     return track
 
 
+def _voice_duration(wav_path: pathlib.Path) -> float:
+    """Get duration of a WAV file in seconds via ffprobe."""
+    import json as _json
+    try:
+        out = subprocess.check_output([
+            "ffprobe", "-v", "quiet",
+            "-print_format", "json",
+            "-show_format",
+            str(wav_path),
+        ], text=True, stderr=subprocess.DEVNULL)
+        return float(_json.loads(out)["format"]["duration"])
+    except Exception:
+        return 0.0
+
+
 def mix_audio(voice_path, bgm_dir, out_path, bgm_vol=0.10):
+    """
+    Mix narration voice with a background music track.
+
+    BGM treatment:
+      - Trimmed/looped to exactly the voice duration.
+      - Volume set to bgm_vol (default 10% — audible but not competing).
+      - 1s fade-in at the start.
+      - 2s fade-out at the end (calculated from actual voice duration).
+      - Voice normalized to -16 LUFS so levels are consistent.
+    """
     bgm = _pick_bgm(bgm_dir)
 
     if bgm is None:
+        print("[assemble] No BGM — normalizing voice only")
         _run([
             "ffmpeg", "-y",
             "-i", str(voice_path),
@@ -161,14 +187,31 @@ def mix_audio(voice_path, bgm_dir, out_path, bgm_vol=0.10):
         ], "Normalize voice (no BGM)")
         return out_path
 
+    # Get actual voice duration so we can set the BGM fade-out correctly.
+    # afade st= must be (duration - fade_length), not 0.
+    voice_dur = _voice_duration(voice_path)
+    fade_in   = 1.0
+    fade_out  = 2.5
+    fade_out_start = max(0.0, voice_dur - fade_out)
+
+    print(f"[assemble] BGM: {bgm.name}  voice={voice_dur:.1f}s  "
+          f"fade_out at t={fade_out_start:.1f}s  vol={bgm_vol}")
+
     _run([
         "ffmpeg", "-y",
         "-i", str(voice_path),
+        # Loop BGM so it always covers the full video regardless of track length
         "-stream_loop", "-1", "-i", str(bgm),
         "-filter_complex", (
+            # Voice: loudnorm to -16 LUFS
             "[0:a]loudnorm=I=-16:LRA=11:TP=-1.5[voice];"
-            f"[1:a]volume={bgm_vol},afade=t=in:st=0:d=1,"
-            f"afade=t=out:st=0:d=2[bgm];"
+            # BGM: set volume, trim to voice duration, fade in + fade out
+            f"[1:a]"
+            f"volume={bgm_vol},"
+            f"afade=t=in:st=0:d={fade_in},"
+            f"afade=t=out:st={fade_out_start:.3f}:d={fade_out}"
+            f"[bgm];"
+            # Mix: voice takes priority; BGM fills the full duration
             "[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[out]"
         ),
         "-map", "[out]",

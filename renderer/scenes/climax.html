@@ -1,156 +1,133 @@
 <!-- scenes/climax.html -->
-<!-- Uses --spike as primary accent. Injected: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
+
+<!--
+  CLIMAX SCENE DESIGN RATIONALE
+  ─────────────────────────────────
+  Beat 3. The pivot. The uncomfortable truth or the key insight.
+  This scene should feel different from the others — but not louder.
+  Different in pace, not in decoration.
+
+  What the previous design got wrong:
+  ─ glitchIn (clip-path steps) — this is a 2016 cyberpunk UI pattern.
+    It immediately reads as "template from a motion graphics pack".
+  ─ chromatic aberration pseudo-elements — same problem, overused.
+  ─ bloomPulse on the background — the pulsing background competes
+    with the text. The background should be still. The text is the event.
+  ─ depth-far and depth-mid (ghost blurred keyword layers) — the multiple
+    depth copies create visual noise. Delete them.
+
+  New approach:
+  ─ The spike colour (--spike, set to var(--acc) override below) gives
+    the scene its differentiation. Colour alone is enough.
+  ─ The keyword enters with a longer delay than other scenes — 0.6s.
+    The pause before it lands IS the dramatic effect.
+  ─ A larger type size creates the "wow" — size, not glow.
+  ─ The background has a very faint horizontal light band positioned
+    just behind the keyword — like a practical light source.
+    Pure atmosphere, no animation.
+
+  Motion sequence:
+  0.00s — label
+  0.60s — keyword (delayed — the pause creates tension)
+  1.20s — rule
+  1.35s — body
+
+  The 0.6s delay on the keyword is the entire cinematic effect.
+  If you cut the delay to 0.3s it becomes just another scene.
+-->
 
 <style>
-/* Override accent to spike for this whole scene */
-.scene { --acc: var(--spike); }
-.scene::before { background: var(--spike); }
-.scene::after  { background: var(--spike); }
-
-.climax-bg {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(60% 50% at 15% 65%, oklch(from var(--spike) 0.35 0.15 h / .45), transparent 65%),
-    radial-gradient(50% 40% at 80% 30%, oklch(from var(--spike) 0.28 0.1 h / .3), transparent 65%),
-    var(--bg);
+/* Switch to spike hue for this entire scene */
+.scene.climax-scene {
+  --acc: var(--spike, #e8804a);   /* fallback to warm orange if --spike not set */
+}
+.scene.climax-scene .rule-left::after {
+  background: var(--acc);
 }
 
-.climax-bloom {
+/* Faint practical light — static, no animation */
+.climax-light {
   position: absolute;
-  width: 70%; height: 60%;
-  left: -15%; top: 30%;
-  background: radial-gradient(circle, var(--spike) 0%, transparent 60%);
-  filter: blur(65px);
-  opacity: 0.35;
-  animation: bloomPulse 3.5s ease-in-out infinite;
-}
-
-/* Depth layers — parallax ghost words */
-.depth-far {
-  position: absolute;
-  top: 8%; left: -5%;
-  font-size: 220px;
-  font-weight: 700;
-  letter-spacing: -0.06em;
-  color: oklch(1 0 0 / .03);
+  top: 28%;
+  left: -8%;
+  right: -8%;
+  height: 38%;
+  background: radial-gradient(
+    ellipse 70% 50% at 28% 50%,
+    oklch(from var(--acc) 0.28 0.06 h / .09),
+    transparent 65%
+  );
   pointer-events: none;
-  filter: blur(10px);
-  animation: parallaxSlow 16s ease-in-out infinite alternate;
   z-index: 1;
-}
-.depth-mid {
-  position: absolute;
-  top: 15%; left: -2%;
-  font-size: 220px;
-  font-weight: 700;
-  letter-spacing: -0.06em;
-  color: oklch(1 0 0 / .06);
-  pointer-events: none;
-  filter: blur(3px);
-  animation: parallaxSlow 10s ease-in-out infinite alternate-reverse;
-  z-index: 2;
 }
 
 .climax-content {
   position: absolute;
-  top: calc(var(--safe-top) + 140px);
-  left: var(--left-mg);
-  right: 72px;
+  top: calc(var(--safe-top) + 50px);
+  left: calc(var(--left) + 20px);
+  right: 0;   /* bleeds right — same as hook, signals elevated intensity */
   z-index: 4;
 }
 
-.climax-keyword {
+/* Keyword: larger than insight, hero-scale */
+.climax-kw {
   font-size: var(--sz-hero);
   font-weight: 700;
   letter-spacing: -0.055em;
   line-height: 0.88;
   color: var(--fg);
   text-transform: uppercase;
-  text-shadow:
-    0 0 50px oklch(from var(--spike) l c h / .5),
-    0 0 100px oklch(from var(--spike) l c h / .3),
-    0 5px 0 oklch(0 0 0 / .5);
-  position: relative;
-  animation: glitchIn 0.6s steps(3) forwards;
+  word-break: break-word;
+
+  /* NO text-shadow, NO glow. The colour does the work. */
+  opacity: 0;
+  animation: titleReveal 0.90s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
 }
 
-/* Chromatic aberration fringe on keyword */
-.climax-keyword::before {
-  content: attr(data-text);
-  position: absolute; inset: 0;
-  color: oklch(from var(--acc) l c h);
-  transform: translateX(-3px);
-  mix-blend-mode: screen;
-  opacity: 0.7;
-  animation: glitchB 4s infinite steps(10);
-}
-.climax-keyword::after {
-  content: attr(data-text);
-  position: absolute; inset: 0;
-  color: oklch(from var(--spike) l c h);
-  transform: translateX(3px);
-  mix-blend-mode: screen;
-  opacity: 0.7;
-  animation: glitchR 4s infinite steps(10);
-}
-
-.climax-underline {
-  height: 8px;
-  width: 0%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--spike), oklch(from var(--spike) l c h / .2));
-  margin-top: 16px;
-  animation: underlineGrow 0.5s ease-out 0.55s forwards;
-}
-@keyframes underlineGrow {
-  from { width: 0%; }
-  to   { width: 100%; }
+/* The accent-coloured rule under the keyword is wider here — more emphatic */
+.climax-rule {
+  display: block;
+  margin-top: 22px;
+  width: min(480px, calc(1080px - var(--left) * 2));
+  height: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.40s cubic-bezier(0.16,1,0.3,1) 1.20s forwards;
 }
 
 .climax-body {
-  margin-top: 44px;
+  position: absolute;
+  top: calc(var(--safe-top) + 680px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 100px);
+  z-index: 4;
+
   font-size: var(--sz-body);
-  font-weight: 500;
-  line-height: 1.2;
+  font-weight: 400;
+  line-height: 1.30;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-  text-shadow: 0 2px 0 oklch(0 0 0 / .35);
-  opacity: 0;
-  animation: lineIn 0.5s ease-out 0.9s forwards;
-}
 
-/* Chroma fringe overlay */
-.chroma-fringe {
-  position: absolute; inset: 0;
-  background: linear-gradient(
-    90deg,
-    oklch(from var(--spike) l c h / .07) 0%,
-    transparent 35%,
-    transparent 65%,
-    oklch(from var(--acc) l c h / .07) 100%
-  );
-  mix-blend-mode: screen;
-  pointer-events: none;
-  z-index: 7;
+  opacity: 0;
+  animation: bodyReveal 0.70s cubic-bezier(0.16,1,0.3,1) 1.35s forwards;
 }
 </style>
 
-<div class="scene">
-  <div class="climax-bg"></div>
-  <div class="climax-bloom"></div>
-  <div class="depth-far">{{KEYWORD}}</div>
-  <div class="depth-mid">{{KEYWORD}}</div>
+<div class="scene climax-scene">
+  <div class="climax-light"></div>
 
-  <div class="hud-tag">{{HUD_TAG}}</div>
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
 
   <div class="climax-content">
-    <div class="climax-keyword" data-text="{{KEYWORD}}">{{KEYWORD}}</div>
-    <div class="climax-underline"></div>
-    <div class="climax-body">{{BODY}}</div>
+    <div class="climax-kw">{{KEYWORD}}</div>
+    <span class="climax-rule"></span>
   </div>
 
+  <div class="climax-body">{{BODY}}</div>
+
   <div class="brand">{{BRAND}}</div>
-  <div class="chroma-fringe"></div>
-  <div class="grain"></div>
   <div class="vignette"></div>
 </div>

@@ -1,0 +1,8 @@
+/* editorial_white  —  warm off-white accent
+   Maximum restraint. The accent is barely a colour — more a warmth.
+   Works when the content is the colour, not the chrome.
+   Feels like a high-end editorial magazine or A24 title card. */
+:root {
+  --acc:   #e8e0d0;   /* warm off-white — almost no hue */
+  --spike: #c8a882;   /* warm tan — subtle shift for climax */
+}

@@ -103,7 +103,7 @@ renderer/
     "fg":     "oklch(0.97 0.005 250)"
   },
 
-  "brand": "TechBytes",
+  "brand": "SeaBytes",
 
   "beats": [
     {

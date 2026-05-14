@@ -3,47 +3,48 @@
 <head>
 <meta charset="utf-8"/>
 <style>
-/* ─── THEME BASE TOKENS ─────────────────────────────────────────── */
+
+/* ================================================================
+   DESIGN TOKENS
+   ----------------------------------------------------------------
+   2-value palette: --bg (near-black) + --acc (single accent hue).
+   Everything else is neutral greys. No secondary accents.
+   No gradients. No decorative colour.
+   ================================================================ */
 :root {
-  /* These are overridden by the injected theme + palette from JSON */
-  --bg:     oklch(0.12 0.02 250);
-  --bg-2:   oklch(0.16 0.022 250);
-  --fg:     oklch(0.97 0.005 250);
-  --fg-2:   oklch(0.82 0.012 250);
-  --fg-dim: oklch(0.6 0.015 250);
-  --acc:    oklch(0.78 0.19 230);
-  --acc-s:  oklch(0.78 0.19 230 / .18);
-  --acc-l:  oklch(0.78 0.19 230 / .45);
-  --spike:  oklch(0.78 0.19 30);
+  --bg:    #09090b;
+  --fg:    #efefed;
+  --fg-2:  #868682;
+  --fg-3:  #2a2a28;
+  --acc:   #efefed;   /* overridden per-theme to a single hue */
 
-  /* Safe zone — TikTok 1080×1920 */
-  --safe-top:  240px;
-  --safe-bot:  480px;   /* from bottom */
-  --left-mg:   72px;
+  /* Fixed type scale — rendered at fixed 1080px */
+  --sz-hero:    168px;
+  --sz-stat:    104px;
+  --sz-body:     50px;
+  --sz-label:    20px;
+  --sz-brand:    22px;
 
-  /* Type scale */
-  --sz-hero:   clamp(120px, 18vw, 200px);
-  --sz-stat:   clamp(80px, 12vw, 130px);
-  --sz-body:   clamp(40px, 6vw, 64px);
-  --sz-hud:    22px;
-  --sz-brand:  30px;
+  /* Layout constants */
+  --left:        80px;
+  --right:       80px;
+  --safe-top:   260px;   /* TikTok UI obstruction — top */
+  --safe-bot:   500px;   /* TikTok UI obstruction — from bottom */
 }
 
-/* ─── RESET ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  width:  1080px;
+  width: 1080px;
   height: 1920px;
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
-  font-family: "Space Grotesk", ui-sans-serif, sans-serif;
+  font-family: "Space Grotesk", "Helvetica Neue", ui-sans-serif, sans-serif;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  text-rendering: geometricPrecision;
 }
 
-/* ─── SCENE WRAPPER ─────────────────────────────────────────────── */
 .scene {
   position: relative;
   width: 1080px;
@@ -52,184 +53,203 @@ html, body {
   background: var(--bg);
 }
 
-/* ─── SAFE ZONE ANCHOR ──────────────────────────────────────────── */
-.safe {
+/* ================================================================
+   STRUCTURAL CHROME  —  NEVER ANIMATES
+   ----------------------------------------------------------------
+   One hairline rule on the left edge. That is the only persistent
+   visual element. It replaces the 5px coloured bar (too decorative)
+   and the particles, grids, ghost words.
+   ================================================================ */
+.rule-left {
   position: absolute;
-  top:    var(--safe-top);
-  bottom: var(--safe-bot);
-  left:   var(--left-mg);
-  right:  72px;
+  top: 0;
+  bottom: 0;
+  left: var(--left);
+  width: 1px;
+  background: var(--fg-3);
+  z-index: 3;
 }
 
-/* ─── LEFT EDGE BAR ─────────────────────────────────────────────── */
-.scene::before {
+/* Short accent segment at the top of the rule, within the safe zone */
+.rule-left::after {
   content: "";
   position: absolute;
-  top: 0; left: 0; bottom: 0;
-  width: 5px;
+  top: var(--safe-top);
+  width: 1px;
+  height: 40px;
   background: var(--acc);
-  opacity: 0.85;
-  z-index: 10;
 }
 
-/* ─── BOTTOM ACCENT LINE ────────────────────────────────────────── */
-.scene::after {
-  content: "";
+/* Scene category label — top-left, always monospace, always small */
+.scene-label {
   position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 4px;
-  background: var(--acc);
-  opacity: 0.55;
-  z-index: 10;
+  top: calc(var(--safe-top) + 16px);
+  left: calc(var(--left) + 18px);
+  font-size: var(--sz-label);
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+  z-index: 5;
+  opacity: 0;
+  animation: labelReveal 0.55s cubic-bezier(0.16,1,0.3,1) 0.08s forwards;
 }
 
-/* ─── BACKGROUND GLOW ───────────────────────────────────────────── */
-.bg-glow {
+/* Brand — bottom right, very dim */
+.brand {
   position: absolute;
-  width: 700px; height: 700px;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--acc) 0%, transparent 65%);
-  filter: blur(60px);
-  opacity: 0.12;
-  bottom: -200px; left: -200px;
-  pointer-events: none;
-  animation: bloomPulse 5s ease-in-out infinite;
-}
-
-/* ─── GRAIN OVERLAY ─────────────────────────────────────────────── */
-.grain {
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 8;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-  mix-blend-mode: overlay;
-  opacity: 0.28;
-}
-
-/* ─── VIGNETTE ──────────────────────────────────────────────────── */
-.vignette {
-  position: absolute; inset: 0;
-  pointer-events: none;
-  z-index: 9;
-  /* anisotropic: tighter right + top to bias attention left */
-  background: radial-gradient(110% 90% at 38% 55%, transparent 42%, oklch(0 0 0 / .88) 130%);
-}
-
-/* ─── HUD TAG ───────────────────────────────────────────────────── */
-.hud-tag {
-  position: absolute;
-  top: calc(var(--safe-top) + 32px);
-  left: var(--left-mg);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: var(--sz-hud);
-  letter-spacing: 0.1em;
-  color: var(--acc);
-  background: oklch(from var(--acc) l c h / 0.12);
-  border: 1px solid oklch(from var(--acc) l c h / 0.35);
-  padding: 8px 18px;
-  border-radius: 6px;
+  bottom: calc(var(--safe-bot) + 44px);
+  right: var(--right);
+  font-size: var(--sz-brand);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--fg-2);
+  opacity: 0.3;
   z-index: 5;
 }
 
-/* ─── KEYWORD ───────────────────────────────────────────────────── */
-.keyword {
+/* ================================================================
+   VIGNETTE
+   ----------------------------------------------------------------
+   Directional, not radial. Darker at right and at top/bottom edges.
+   Left side stays open — that is where the type lives.
+   Grain and halation belong in the Python post-processing layer,
+   not here. Removing the SVG feTurbulence grain from HTML removes
+   the primary source of "AI generator" visual noise.
+   ================================================================ */
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  background:
+    linear-gradient(100deg, transparent 35%, oklch(0 0 0 / .22) 100%),
+    linear-gradient(to bottom,
+      oklch(0 0 0 / .4) 0%,
+      transparent 15%,
+      transparent 78%,
+      oklch(0 0 0 / .55) 100%);
+}
+
+/* ================================================================
+   MOTION LANGUAGE
+   ----------------------------------------------------------------
+
+   EASING: cubic-bezier(0.16, 1, 0.3, 1)
+   ─ Expo-out. Fast exit, long slow arrival.
+   ─ Standard in premium product UI (Linear, Arc, Apple HIG).
+   ─ Reads as physical weight, not algorithmic spring.
+
+   DIRECTION: always translateY(upward). Never scale. Never rotate.
+   ─ All content enters from below. The eye reads it as arriving,
+     not popping. Consistent direction = coherent space.
+
+   DELAY LADDER: content reveals have 80–120ms between layers.
+   ─ Label first (sets context, fastest).
+   ─ Keyword second (the argument, largest, most delay).
+   ─ Divider third (breath, very fast draw).
+   ─ Body last (explanation, slowest fade).
+   ─ The audience reads each before the next interrupts.
+
+   STILLNESS: decorative elements do NOT animate.
+   ─ Background is static.
+   ─ Vignette is static.
+   ─ Rule is static.
+   ─ Brand is static.
+   Only the content sequence moves — and only once, forward.
+
+   DURATION: longer than you expect.
+   ─ 600–900ms for headline. 400–600ms for body.
+   ─ Short animations read as nervousness. Slow reads as confidence.
+   ================================================================ */
+
+/* Label: slides in from the left — lateral, not vertical */
+@keyframes labelReveal {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Headline: comes from below, decelerates to rest */
+@keyframes titleReveal {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Body: gentler lift — smaller displacement, longer duration */
+@keyframes bodyReveal {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Divider: draws left-to-right */
+@keyframes ruleReveal {
+  from { transform: scaleX(0); transform-origin: left center; }
+  to   { transform: scaleX(1); transform-origin: left center; }
+}
+
+/* Scene settle: barely-perceptible camera arriving at rest.
+   Applied only on hook. 8px drift over 1.8s — feel it, not see it. */
+@keyframes cameraSettle {
+  from { transform: translateY(8px); }
+  to   { transform: translateY(0);   }
+}
+
+/* ================================================================
+   TYPOGRAPHY DEFAULTS
+   ================================================================ */
+.headline {
+  font-size: var(--sz-hero);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.90;
+  color: var(--fg);
+  text-transform: uppercase;
+  /* No text-shadow. Shadow on text is almost always a mistake. */
+}
+
+.subheadline {
+  font-size: var(--sz-stat);
   font-weight: 700;
   letter-spacing: -0.04em;
   line-height: 0.92;
   color: var(--fg);
   text-transform: uppercase;
-  text-shadow: 0 4px 0 oklch(0 0 0 / .4);
 }
 
-.keyword-underline {
-  height: 5px;
-  border-radius: 3px;
-  background: var(--acc);
-  margin-top: 12px;
-}
-
-/* ─── BODY TEXT ─────────────────────────────────────────────────── */
-.body-text {
+.body-copy {
   font-size: var(--sz-body);
-  font-weight: 500;
-  line-height: 1.18;
+  font-weight: 400;
+  line-height: 1.28;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-  text-shadow: 0 2px 0 oklch(0 0 0 / .3);
 }
 
-/* ─── BRAND ─────────────────────────────────────────────────────── */
-.brand {
-  position: absolute;
-  bottom: calc(var(--safe-bot) + 50px);
-  right: 72px;
-  font-size: var(--sz-brand);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+/* Accent coloured first word — pulls eye to the start of body */
+.body-copy .accent-word {
   color: var(--acc);
-  opacity: 0.45;
-  z-index: 5;
+  font-weight: 600;
 }
 
-/* ─── SHARED KEYFRAMES ──────────────────────────────────────────── */
-@keyframes bloomPulse {
-  0%, 100% { transform: scale(1);    opacity: 0.12; }
-  50%      { transform: scale(1.15); opacity: 0.18; }
+/* Thin rule between headline and body */
+.h-rule {
+  display: block;
+  height: 1px;
+  background: var(--fg-3);
+  transform: scaleX(0);
+  transform-origin: left center;
 }
-@keyframes wordIn {
-  from { transform: translateY(24px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+.h-rule.accent {
+  background: var(--acc);
+  height: 2px;
 }
-@keyframes wordPunch {
-  0%   { transform: scale(0.72); opacity: 0; letter-spacing: 0.04em; }
-  65%  { transform: scale(1.04); opacity: 1; letter-spacing: -0.06em; }
-  100% { transform: scale(1);    opacity: 1; letter-spacing: -0.04em; }
-}
-@keyframes lineIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes kenBurns {
-  from { transform: scale(1.0) translate(0, 0); }
-  to   { transform: scale(1.06) translate(-1.5%, -1%); }
-}
-@keyframes parallaxSlow {
-  from { transform: translate(0, 0); }
-  to   { transform: translate(-3%, 1%); }
-}
-@keyframes glitchIn {
-  0%   { clip-path: inset(40% 0 40% 0); opacity: 0; }
-  33%  { clip-path: inset(0 30% 0 0);   opacity: 1; }
-  66%  { clip-path: inset(0 0 0 20%); }
-  100% { clip-path: inset(0 0 0 0);     opacity: 1; }
-}
-@keyframes glitchR {
-  0%, 100% { transform: translateX(2px); }
-  92%      { transform: translateX(6px); }
-  96%      { transform: translateX(8px); }
-}
-@keyframes glitchB {
-  0%, 100% { transform: translateX(-2px); }
-  92%      { transform: translateX(-6px); }
-  96%      { transform: translateX(-8px); }
-}
-@keyframes gridDrift {
-  from { background-position: 0 0, 0 0; }
-  to   { background-position: 56px 56px, 56px 56px; }
-}
+
 </style>
 
-<!-- Fonts loaded once in base; cached for all scenes in same session -->
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 </head>
 <body>
-<!-- Scene HTML is injected here by the renderer -->
 {{SCENE_CONTENT}}
 </body>
 </html>

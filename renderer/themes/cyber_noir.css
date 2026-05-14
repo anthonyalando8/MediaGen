@@ -1,7 +1,8 @@
-/* themes/cyber_noir.css */
+/* cyber_noir  —  purple accent on deeper black
+   --bg darkened further. Accent is purple.
+   Spike is acid green — maximum tension for climax beat. */
 :root {
-  --acc:   oklch(0.72 0.22 290);   /* electric purple */
-  --spike: oklch(0.78 0.20 140);   /* acid green */
-  --bg:    oklch(0.07 0.01 250);   /* near-pure black */
-  --fg:    oklch(0.96 0.006 250);
+  --bg:    #060608;   /* deeper black */
+  --acc:   #a870f0;   /* electric purple */
+  --spike: #70f0a0;   /* acid green — used once, climax only */
 }

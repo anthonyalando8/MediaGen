@@ -1,0 +1,7 @@
+/* warm_amber  —  amber accent on near-black
+   Warmer, more human feeling than blue.
+   Spike is a cooler contrast — keeps the climax beat distinct. */
+:root {
+  --acc:   #f0a84a;   /* amber */
+  --spike: #70c8f0;   /* sky blue contrast */
+}

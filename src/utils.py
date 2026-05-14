@@ -28,14 +28,22 @@ def make_run_dir(workspace: str) -> tuple[str, pathlib.Path]:
 def load_topics(path: pathlib.Path) -> list[str]:
     """Read topics.txt — one topic per non-blank line, skip # comments."""
     if not path.exists():
+        print(f"[utils] topics file not found: {path.resolve()}")
         return []
     lines = path.read_text(encoding="utf-8").splitlines()
-    return [l.strip() for l in lines if l.strip() and not l.startswith("#")]
+    topics = [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+    print(f"[utils] Loaded {len(topics)} topics from {path.resolve()}")
+    return topics
 
 
 def random_topic(topics_path: pathlib.Path) -> str | None:
     topics = load_topics(topics_path)
-    return random.choice(topics) if topics else None
+    if not topics:
+        print(f"[utils] No topics found in {topics_path}")
+        return None
+    topic = random.choice(topics)
+    print(f"[utils] Random pick ({len(topics)} topics available): {topic}")
+    return topic
 
 
 # ─────────────────────────────────────────────────────────────────────────────

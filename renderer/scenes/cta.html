@@ -1,136 +1,126 @@
 <!-- scenes/cta.html -->
-<!-- Injected: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
+
+<!--
+  CTA SCENE DESIGN RATIONALE
+  ─────────────────────────────────
+  Beat 4. The close. The viewer has watched everything — now direct them.
+
+  What the previous design got wrong:
+  ─ The white card (background: var(--fg)) with box-shadow was a mobile
+    UI component — it looked like a settings panel or a notification.
+    On a dark editorial slide it broke the visual language completely.
+  ─ The play button icon (▶) and arrow (↗) added decorative symbols
+    that don't function — they're not tappable, they're fake UI chrome.
+  ─ Two radial gradients on the background.
+
+  New approach:
+  ─ The keyword is still the headline — it completes the narrative arc.
+  ─ Body text delivers the call to action directly.
+  ─ Below the body: a bottom bar. Not a card. Just two lines:
+    an eyebrow in the accent colour + the brand name large.
+    This is the follow prompt. Editorial — like a magazine colophon.
+  ─ The bottom bar is separated from the body by space alone. No borders,
+    no shadows, no rounded rectangles.
+
+  Motion sequence:
+  0.00s — label
+  0.28s — keyword
+  0.80s — rule
+  0.95s — body
+  1.30s — follow prompt lifts in
+-->
 
 <style>
-.cta-bg {
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(55% 45% at 18% 72%, oklch(from var(--acc) 0.3 0.12 h / .4), transparent 65%),
-    radial-gradient(40% 35% at 80% 25%, oklch(from var(--acc) 0.22 0.08 h / .25), transparent 65%),
-    var(--bg);
-}
-
 .cta-content {
   position: absolute;
-  top: calc(var(--safe-top) + 90px);
-  left: var(--left-mg);
-  right: 72px;
+  top: calc(var(--safe-top) + 64px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 60px);
   z-index: 4;
 }
 
-.cta-keyword {
+.cta-kw {
   font-size: var(--sz-stat);
   font-weight: 700;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.045em;
   line-height: 0.92;
   color: var(--fg);
   text-transform: uppercase;
-  text-shadow: 0 4px 0 oklch(0 0 0 / .45);
+
   opacity: 0;
-  animation: wordIn 0.65s cubic-bezier(.2,.9,.25,1.08) 0.1s forwards;
+  animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.28s forwards;
 }
 
-.cta-underline {
-  width: 0px;
-  height: 5px;
-  border-radius: 3px;
+.cta-rule {
+  display: block;
+  margin-top: 32px;
+  width: 48px;
+  height: 2px;
   background: var(--acc);
-  margin-top: 14px;
-  animation: underlineGrow 0.45s ease-out 0.6s forwards;
-}
-@keyframes underlineGrow {
-  from { width: 0px; }
-  to   { width: 200px; }
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.35s cubic-bezier(0.16,1,0.3,1) 0.80s forwards;
 }
 
 .cta-body {
-  margin-top: 36px;
+  margin-top: 28px;
   font-size: var(--sz-body);
-  font-weight: 500;
-  line-height: 1.22;
+  font-weight: 400;
+  line-height: 1.32;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-  text-shadow: 0 2px 0 oklch(0 0 0 / .3);
+
   opacity: 0;
-  animation: fadeUp 0.5s ease-out 0.75s forwards;
+  animation: bodyReveal 0.65s cubic-bezier(0.16,1,0.3,1) 0.95s forwards;
 }
 
-/* CTA band — inside safe zone, bottom anchor */
-.cta-band {
+/* ── Follow prompt — editorial colophon style ─────────────────── */
+.cta-follow {
   position: absolute;
-  bottom: calc(var(--safe-bot) + 40px);
-  left: var(--left-mg);
-  right: 72px;
-  background: var(--fg);
-  border-radius: 18px;
-  padding: 22px 24px;
-  display: grid;
-  grid-template-columns: 52px 1fr auto;
-  align-items: center;
-  gap: 16px;
-  box-shadow:
-    0 16px 48px -12px oklch(from var(--acc) l c h / .55),
-    0 4px 16px -4px oklch(0 0 0 / .5);
+  bottom: calc(var(--safe-bot) + 100px);
+  left: calc(var(--left) + 20px);
+  right: var(--right);
+  z-index: 4;
+  border-top: 1px solid var(--fg-3);
+  padding-top: 28px;
+
   opacity: 0;
-  animation: fadeUp 0.6s ease-out 1.1s forwards;
-  z-index: 5;
+  animation: bodyReveal 0.60s cubic-bezier(0.16,1,0.3,1) 1.30s forwards;
 }
 
-.cta-icon {
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: var(--bg);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
-  color: var(--acc);
-  flex-shrink: 0;
-}
-
-/* .cta-copy {
-
-} */
-.cta-line-top {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 14px;
-  letter-spacing: 0.14em;
-  color: oklch(0.4 0.02 250);
+.cta-follow-eyebrow {
+  font-size: var(--sz-label);
+  font-weight: 400;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.cta-line-main {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: oklch(0.12 0.018 250);
+  color: var(--acc);
+  margin-bottom: 10px;
 }
 
-.cta-arrow {
-  font-size: 32px;
-  color: var(--acc);
+.cta-follow-brand {
+  font-size: 56px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--fg);
 }
 </style>
 
 <div class="scene">
-  <div class="cta-bg"></div>
-
-  <div class="hud-tag">{{HUD_TAG}}</div>
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
 
   <div class="cta-content">
-    <div class="cta-keyword">{{KEYWORD}}</div>
-    <div class="cta-underline"></div>
+    <div class="cta-kw">{{KEYWORD}}</div>
+    <span class="cta-rule"></span>
     <div class="cta-body">{{BODY}}</div>
   </div>
 
-  <div class="cta-band">
-    <div class="cta-icon">▶</div>
-    <div class="cta-copy">
-      <div class="cta-line-top">FOLLOW FOR DAILY</div>
-      <div class="cta-line-main">{{BRAND}}.</div>
-    </div>
-    <div class="cta-arrow">↗</div>
+  <div class="cta-follow">
+    <div class="cta-follow-eyebrow">Follow for more</div>
+    <div class="cta-follow-brand">{{BRAND}}</div>
   </div>
 
   <div class="brand">{{BRAND}}</div>
-  <div class="grain"></div>
   <div class="vignette"></div>
 </div>
