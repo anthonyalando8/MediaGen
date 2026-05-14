@@ -1,0 +1,48 @@
+You are writing a 45-second, high-retention vertical video script on the topic: "{topic}".
+
+Output ONLY valid JSON. No markdown. No code fences. No explanation before or after.
+
+{{
+  "title": "short punchy title, max 6 words",
+  "keyword": "1-3 word thumbnail power phrase",
+  "beats": [
+    {{
+      "id": 1,
+      "keyword": "2-3 word visual headline",
+      "text": "1-2 punchy sentences spoken aloud. Direct, second-person. No greeting.",
+      "hook": true
+    }},
+    {{
+      "id": 2,
+      "keyword": "2-3 word visual headline",
+      "text": "1-2 sentences. A new surprising insight.",
+      "hook": false
+    }},
+    {{
+      "id": 3,
+      "keyword": "2-3 word visual headline",
+      "text": "1-2 sentences. Go deeper — the mechanism or proof.",
+      "hook": false
+    }},
+    {{
+      "id": 4,
+      "keyword": "2-3 word visual headline",
+      "text": "1-2 sentences. The twist, contrarian take, or uncomfortable truth.",
+      "hook": false
+    }},
+    {{
+      "id": 5,
+      "keyword": "2-3 word visual headline",
+      "text": "1-2 sentences. End with a direct challenge or call to action. No hashtags.",
+      "hook": false
+    }}
+  ]
+}}
+
+Hard rules:
+- Total spoken words across ALL beats: 90-130
+- Tone: direct, punchy, second-person ("you", "your")
+- Beat 1 must hook instantly — no greetings, no "have you ever"
+- Each beat must feel like a standalone insight, not a continuation
+- Style: choose whichever fits best — tech / discipline / builder / contrarian
+- keyword per beat: the BIG TEXT shown on screen while that beat plays

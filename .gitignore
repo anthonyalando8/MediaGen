@@ -1,0 +1,45 @@
+# Environment variables
+.env
+
+# Virtual environments
+venv/
+
+# Project workspace outputs
+workspace/
+
+# Large model files
+voices-v1.0.bin
+kokoro-v1.0.onnx
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,20 @@
+pydub
+openai
+#faster-whisper
+
+# ── core ──────────────────────────────────────────────────────────────────────
+pyyaml
+pillow
+numpy
+soundfile
+
+# ── TTS (replaces piper) ──────────────────────────────────────────────────────
+kokoro-onnx
+
+# ── captions (word-level timestamps) ─────────────────────────────────────────
+# installs whisper + adds per-word timing on top
+whisper-timestamped
+
+# openai-whisper is pulled in by whisper-timestamped, but pin it explicitly
+# in case you need to manage the version
+openai-whisper

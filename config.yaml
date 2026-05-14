@@ -1,0 +1,49 @@
+llm:
+  model: "llama3:8b"          
+
+tts:
+  voice: "af_heart"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
+  speed: 1.05                  # slightly faster reads punchier on tiktok
+  sample_rate: 24000
+
+subs:
+  whisper_model: "base"        # tiny | base | small — base is the sweet spot
+  language: "en"
+  font_size: 58
+  font_size_active: 64         # active (highlighted) word is slightly bigger
+  primary_color: "&H00FFFFFF&" # white base text  (ASS AABBGGRR)
+  highlight_color: "&H0000FFFF&" # yellow on active word
+  outline_color: "&H00000000&" # black outline
+  back_color: "&H60000000&"    # semi-transparent shadow box
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  crf: 22
+  preset: "veryfast"
+  bgm_volume: 0.10             # BGM at 10% — audible but not fighting voice
+
+slides:
+  bg_color: [14, 15, 20]
+  # 2-hue lock per video -- accent used on all beats, spike used once at beat 3
+  accent_colors:
+    - [50, 170, 255]           # electric blue -- the video's signature hue
+  spike_color: [255, 120, 60]  # coral spike -- climax beat only
+  font_keyword_size: 200       # hero size (auto-shrinks to fit)
+  font_body_size: 64
+  font_label_size: 22
+  padding: 72
+ 
+brand:
+  name: "TechBytes"
+  accent_color: [255, 200, 50]
+ 
+paths:
+  workspace: "workspace/runs"
+  fonts: "assets/fonts/Space_Grotest"
+  font_file: "SpaceGrotesk-VariableFont_wght.ttf"
+  bgm: "assets/bgm"
+  prompts: "prompts"
+  topics: "data/topics.txt"
+ 

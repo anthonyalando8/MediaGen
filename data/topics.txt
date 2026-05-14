@@ -1,0 +1,14 @@
+# data/topics.txt
+# One topic per line. Blank lines and lines starting with # are ignored.
+# Use with: python src/main.py --batch   or   python src/main.py --random
+
+why most developers quit too early
+the dark side of social media algorithms
+why linux beats windows for developers
+stop using these 5 bad coding habits
+the real reason your side projects fail
+why AI won't replace programmers yet
+the productivity trap no one talks about
+why open source is eating the software world
+how to think like a senior engineer
+the one habit that separates good devs from great ones
