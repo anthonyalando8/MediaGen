@@ -73,10 +73,14 @@ def qa_check(video_path: pathlib.Path, cfg: dict) -> dict:
     streams = probe.get("streams", [])
 
     # duration
+    # Target: 35-50s. Under 18s = script was too short (word count gate failed).
+    # Over 90s = too long for TikTok hook retention.
     dur = float(fmt.get("duration", 0))
     report["duration_s"] = round(dur, 1)
-    if dur < 25:
-        _warn(report, f"Video only {dur:.1f}s — expected ~45s")
+    if dur < 18:
+        _warn(report, f"Video only {dur:.1f}s — script word count was too low")
+    elif dur < 30:
+        print(f"[qa] ⚠  Short video ({dur:.1f}s) — acceptable if content is punchy")
     elif dur > 90:
         _warn(report, f"Video {dur:.1f}s — may be too long for TikTok hook")
 

@@ -92,6 +92,23 @@ function injectVariables(html, beat, palette, brand) {
   for (const [token, value] of Object.entries(replacements)) {
     html = html.replaceAll(token, value);
   }
+
+  // Fix common UTF-8 mojibake from Ollama output being misread as Latin-1.
+  // These appear in body text when the model outputs typographic characters.
+  const mojibake = [
+    [/â€"/g,  '—'],   // em-dash
+    [/â€˜/g,  '‘'], // left single quote
+    [/â€™/g,  '’'], // right single quote / apostrophe
+    [/â€œ/g,  '“'], // left double quote
+    [/â€/g,   '”'], // right double quote
+    [/â€¦/g,  '…'],   // ellipsis
+    [/Ã©/g,   'é'],
+    [/Ã /g,   'à'],
+  ];
+  for (const [bad, good] of mojibake) {
+    html = html.replace(bad, good);
+  }
+
   return html;
 }
 
@@ -159,8 +176,15 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
 
   console.log(`[capture] Beat ${beatIdx} "${beat.keyword}" — ${frame_count} frames @ ${fps}fps`);
 
+  // Seek frame 0 to 80ms (not 0ms) so CSS animations have already begun.
+  // At t=0 all elements are at opacity:0 (their animation start state),
+  // producing black frames until the first delay passes.
+  // 80ms puts us past the label reveal delay so at least one element
+  // is visible on the very first captured frame.
+  const TIME_OFFSET_MS = 80;
+
   for (let f = 0; f < frame_count; f++) {
-    const t_ms = f * frame_ms;
+    const t_ms = (f * frame_ms) + TIME_OFFSET_MS;
     await seekAnimations(page, t_ms);
 
     const framePath = join(beatOutDir, `frame_${String(f).padStart(5, '0')}.png`);
@@ -176,13 +200,14 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
 }
 
 async function main() {
-  const browser = await chromium.launch({
+  let browser = await chromium.launch({
+    // --use-gl=egl is Linux-only and crashes Chromium on Windows.
+    // --disable-gpu is the safe headless default for Windows.
+    // Screenshots work correctly without GPU acceleration.
     args: [
-      '--enable-gpu',
-      '--enable-accelerated-2d-canvas',
-      '--use-gl=egl',
-      '--disable-software-rasterizer',
-      '--no-sandbox',              // needed in Docker
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--no-sandbox',
       '--disable-setuid-sandbox',
     ],
   });
@@ -192,7 +217,34 @@ async function main() {
 
   for (let i = 0; i < beats.length; i++) {
     if (beatFilter && !beatFilter.includes(i)) continue;
-    const result = await renderBeat(browser, beats[i], i, palette, brand);
+
+    // Retry up to 2 times per beat. On Windows, Chromium can fail with
+    // "Unable to capture screenshot" after resource exhaustion or a GPU
+    // process crash. Closing and relaunching the browser clears the state.
+    let result = null;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        result = await renderBeat(browser, beats[i], i, palette, brand);
+        break;  // success
+      } catch (err) {
+        lastErr = err;
+        console.error(`[capture] Beat ${i} attempt ${attempt} failed: ${err.message}`);
+        if (attempt < 2) {
+          console.log('[capture] Restarting browser...');
+          try { await browser.close(); } catch (_) {}
+          browser = await chromium.launch({
+            args: [
+              '--disable-gpu',
+              '--disable-dev-shm-usage',
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+            ],
+          });
+        }
+      }
+    }
+    if (!result) throw lastErr;
     results.push(result);
   }
 

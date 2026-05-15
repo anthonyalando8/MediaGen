@@ -1,48 +1,140 @@
-You are writing a 45-second, high-retention vertical video script on the topic: "{topic}".
+You are writing a SHORT-FORM HIGH-RETENTION vertical video script for TikTok/Reels/Shorts.
 
-Output ONLY valid JSON. No markdown. No code fences. No explanation before or after.
+TOPIC:
+"{topic}"
+
+Your job is NOT to explain the topic.
+
+Your job is to create:
+- tension
+- curiosity
+- emotional movement
+- surprise
+- payoff
+- rewatchability
+
+The script must feel HUMAN-WRITTEN, not AI-generated.
+
+OUTPUT:
+Return ONLY valid JSON. No markdown. No explanation. No code fences.
 
 {{
-  "title": "short punchy title, max 6 words",
-  "keyword": "1-3 word thumbnail power phrase",
+  "title": "short creator-style title, max 5 words",
+  "thumbnail": "2-4 word emotionally charged thumbnail phrase",
+  "style": "builder | contrarian | intense | cinematic | calm | analytical",
   "beats": [
     {{
-      "id": 1,
-      "keyword": "2-3 word visual headline",
-      "text": "1-2 punchy sentences spoken aloud. Direct, second-person. No greeting.",
-      "hook": true
-    }},
-    {{
-      "id": 2,
-      "keyword": "2-3 word visual headline",
-      "text": "1-2 sentences. A new surprising insight.",
-      "hook": false
-    }},
-    {{
-      "id": 3,
-      "keyword": "2-3 word visual headline",
-      "text": "1-2 sentences. Go deeper — the mechanism or proof.",
-      "hook": false
-    }},
-    {{
-      "id": 4,
-      "keyword": "2-3 word visual headline",
-      "text": "1-2 sentences. The twist, contrarian take, or uncomfortable truth.",
-      "hook": false
-    }},
-    {{
-      "id": 5,
-      "keyword": "2-3 word visual headline",
-      "text": "1-2 sentences. End with a direct challenge or call to action. No hashtags.",
-      "hook": false
+      "type": "hook | insight | tension | truth | flip | climax | breath | payoff | cta",
+      "keyword": "1-4 word visual phrase",
+      "text": "spoken line — minimum 10 words, maximum 30 words",
+      "energy": "low | mid | high"
     }}
   ]
 }}
 
-Hard rules:
-- Total spoken words across ALL beats: 90-130
-- Tone: direct, punchy, second-person ("you", "your")
-- Beat 1 must hook instantly — no greetings, no "have you ever"
-- Each beat must feel like a standalone insight, not a continuation
-- Style: choose whichever fits best — tech / discipline / builder / contrarian
-- keyword per beat: the BIG TEXT shown on screen while that beat plays
+DURATION TARGET:
+The finished video must be 35-50 seconds of spoken audio.
+At normal speaking pace (130 words per minute), this means:
+- Minimum total spoken words across ALL beats: 100 words
+- Maximum total spoken words across ALL beats: 150 words
+- Count your words before outputting. If below 100, expand the beats.
+
+BEAT LENGTH RULES:
+- Every beat "text" field must be at least 10 words.
+- Most beats should be 15-25 words.
+- Only ONE beat per script may be extremely short (8-10 words) for dramatic effect.
+- A beat like "Most teams forget this one thing." is TOO SHORT. It is incomplete.
+  Expand it: "Most teams forget this one thing — and it quietly destroys every project they ship."
+
+SCRIPT RULES:
+
+1. DO NOT use a fixed structure.
+The number of beats MUST vary between 4 and 8 depending on what the topic needs.
+Do NOT always use 5.
+
+2. Every beat must introduce NEW emotional movement.
+Never repeat the same point differently.
+
+3. Avoid generic educational phrasing.
+
+BANNED PHRASES:
+- "here's the thing"
+- "the truth is"
+- "most people"
+- "consistency is key"
+- "in today's world"
+- "have you ever"
+- "let's talk about"
+- motivational LinkedIn language
+- corporate tone
+- summary-style explanations
+- "follow for more"
+- hashtags
+
+4. The script must sound like:
+- a creator revealing something real
+- a realization hitting mid-sentence
+- a dangerous insight
+- an uncomfortable truth
+- a shift in perspective
+- a lived experience
+
+NOT:
+- a blog post
+- a lecture
+- a productivity thread
+- AI summarization
+
+5. Use CONTRAST constantly.
+Examples: calm then intense. Short beat then long beat. Statement then silence. Expectation then reversal.
+
+6. The hook must create IMMEDIATE TENSION in the first sentence.
+The audience should feel: curiosity, surprise, confusion, emotional recognition, or contradiction.
+The hook text must be at least 15 words.
+
+7. One beat CAN be short for dramatic effect — but only one.
+Example: {{"type": "truth", "keyword": "WRONG", "text": "That's exactly why you keep failing.", "energy": "high"}}
+Every other beat must be 15+ words.
+
+8. Use conversational rhythm. Spoken, not written.
+
+9. Add at least ONE of: contradiction, uncomfortable truth, pattern interrupt, perspective flip, unexpected comparison, emotional escalation.
+
+10. End with: a challenge, a lingering thought, a tension loop, a sharp question, or a sharp conclusion.
+The final beat must be at least 15 words.
+Do NOT end with a CTA asking to follow or like.
+
+11. WORD COUNT CHECK — do this before outputting:
+Count the total words across all "text" fields.
+If the total is below 100 words: REWRITE and expand until it reaches 100-150 words.
+
+12. VISUAL KEYWORDS:
+The "keyword" field shows as LARGE on-screen text.
+Must be: emotionally loaded, visually punchy, extremely short, scroll-stopping.
+Bad: "CONSISTENCY" Good: "NO ONE CARES"
+
+13. PACING:
+Beats should NOT all feel equal.
+Some should: hit instantly, pause, escalate, explode, breathe.
+Vary the energy field: low / mid / high.
+
+14. TYPE VALUES FOR BEATS:
+- hook: the opening — creates immediate tension
+- insight: a new piece of information or framing
+- tension: builds pressure or discomfort
+- truth: an uncomfortable or surprising fact
+- flip: a perspective reversal
+- climax: the peak emotional or argumentative moment
+- breath: a short pause or reframe before the close
+- payoff: the resolution or earned statement
+- cta: the close — a challenge, question, or lingering thought
+
+15. The script must feel authored by a real creator with taste and a specific point of view.
+If it feels generic, inspirational, corporate, educational, or AI-generated: REWRITE IT before outputting JSON.
+
+FINAL CHECK before outputting:
+- Did you count total words? Must be 100-150.
+- Is every beat at least 10 words (except one allowed short beat)?
+- Does the hook create immediate tension?
+- Does the ending leave something unresolved or challenging?
+If any answer is no: fix it first.

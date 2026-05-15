@@ -21,18 +21,58 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 # HTML renderer bridge
 # ---------------------------------------------------------------------------
 
+def _beat_scene(beat: dict, i: int, total: int) -> str:
+    """
+    Map beat type + position to HTML scene template.
+
+    Rules:
+      - beat["type"] == "hook"   -> always "hook" scene
+      - beat["type"] == "cta"    -> always "cta" scene
+      - Last beat                -> "cta" regardless of type
+      - First beat               -> "hook" regardless of type (fallback)
+      - Highest-energy beat in middle -> "climax" (type=="climax" or energy=="high")
+      - Everything else          -> "insight"
+    """
+    t = beat.get("type", "insight").lower()
+    if i == 0:
+        return "hook"
+    if i == total - 1:
+        return "cta"
+    if t == "climax" or (t != "hook" and beat.get("energy", "") == "high" and i == total - 2):
+        return "climax"
+    if t == "cta":
+        return "cta"
+    return "insight"
+
+
+def _beat_hud(beat: dict, i: int, total: int) -> str:
+    """Derive HUD label from beat type, not position."""
+    t = beat.get("type", "insight").lower()
+    mapping = {
+        "hook":    "// HOOK",
+        "insight": "// INSIGHT",
+        "climax":  "// KEY",
+        "tension": "// TENSION",
+        "truth":   "// TRUTH",
+        "flip":    "// FLIP",
+        "cta":     "// ACTION",
+        "breath":  "// —",
+        "payoff":  "// PAYOFF",
+    }
+    return mapping.get(t, "// —")
+
+
 def _build_beat_contracts(beats: list, beat_durations_ms: list = None) -> list:
-    scene_map = {0: "hook", 1: "insight", 2: "insight", 3: "climax", 4: "cta"}
-    hud_tags  = {0: "// HOOK", 1: "// PROBLEM", 2: "// TRUTH", 3: "// KEY", 4: "// ACTION"}
+    total = len(beats)
     return [
         {
             "id":      i,
-            "scene":   scene_map.get(i, "insight"),
-            "hud_tag": hud_tags.get(i, "// INSIGHT"),
+            "scene":   _beat_scene(beat, i, total),
+            "hud_tag": _beat_hud(beat, i, total),
             "keyword": beat["keyword"],
             "body":    beat["text"],
             "duration_ms": beat_durations_ms[i] if beat_durations_ms else 5000,
-            "accent_override": "spike" if i == 3 else None,
+            "accent_override": "spike" if beat.get("type", "") == "climax" else None,
         }
         for i, beat in enumerate(beats)
     ]
@@ -258,13 +298,13 @@ def _render_slides_pillow(script, out_dir, cfg):
         _draw_bg(draw, acc)
         _draw_hud_tag(draw, _HUD_TAGS[i], acc, fonts["hud"])
 
-        if i == 0:   # hook
+        if i == 0:   # first beat is always hook
             bb = draw.textbbox((0, 0), beat["keyword"].upper(), font=fonts["hero"])
             th = bb[3]-bb[1]
             y  = SAFE_TOP + (SAFE_H//2) - th//2 - 60
-            _draw_keyword(draw, beat["keyword"], y, acc, fonts["hero"], is_hook=True)
+            _draw_keyword(draw, beat["keyword"], y, acc, fonts["hero"], is_hook=True)  # hook
             _draw_body(draw, beat["text"], y+th+80, fonts["body"], 5)
-        elif i == len(beats)-1:   # cta
+        elif i == len(beats)-1:   # last beat is always cta
             kw_bot = _draw_keyword(draw, beat["keyword"], SAFE_TOP+int(SAFE_H*0.20), acc, fonts["stat"])
             r, g, b = acc
             dy = kw_bot + 44

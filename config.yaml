@@ -1,5 +1,5 @@
 llm:
-  model: "llama3:8b"          
+  model: "gemma4:31b-cloud"     # llama3:8b or qwen3.5:cloud (Qwen3.5 is much better for prompts, but llama3 is free)     
 tts:
   voice: "af_heart"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
   speed: 1.05                  # slightly faster reads punchier on tiktok

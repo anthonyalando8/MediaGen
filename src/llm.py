@@ -132,11 +132,58 @@ def _fix_duplicate_word_fragments(text: str) -> str:
     return text
 
 
+def _fix_mojibake(text: str) -> str:
+    """Fix UTF-8 characters that were misread as Latin-1 by Ollama output handling."""
+    replacements = [
+        ("â€“", "—"),  # â€" -> em-dash
+        ("â€˜", "‘"),  # â€˜ -> left single quote
+        ("â€™", "’"),  # â€™ -> right single quote
+        ("â€œ", "“"),  # â€œ -> left double quote
+        ("â€",       "”"),  # â€  -> right double quote
+        ("â€¦", "…"),  # â€¦ -> ellipsis
+    ]
+    for bad, good in replacements:
+        text = text.replace(bad, good)
+    return text
+
+
 def _clean_beat_texts(data: dict) -> dict:
-    """Apply _fix_duplicate_word_fragments to all beat text fields."""
+    """Fix encoding artifacts and duplicate word fragments in all beat text fields."""
     for beat in data.get("beats", []):
         if "text" in beat:
+            beat["text"] = _fix_mojibake(beat["text"])
             beat["text"] = _fix_duplicate_word_fragments(beat["text"])
+    return data
+
+
+def _normalise_schema(data: dict) -> dict:
+    """
+    Normalise old schema (id, hook: bool) to new schema (type, energy).
+    Makes the pipeline robust regardless of which format the model returns.
+
+    Old: { id, keyword, text, hook: bool }
+    New: { type, keyword, text, energy }
+    """
+    beats = data.get("beats", [])
+    total = len(beats)
+    for i, beat in enumerate(beats):
+        # derive "type" from hook bool or position if not already set
+        if "type" not in beat:
+            if beat.get("hook") is True or i == 0:
+                beat["type"] = "hook"
+            elif i == total - 1:
+                beat["type"] = "cta"
+            else:
+                beat["type"] = "insight"
+        # default energy from hook flag or position
+        if "energy" not in beat:
+            beat["energy"] = "high" if (beat.get("hook") or i == 0) else "mid"
+        # clean up old fields
+        beat.pop("id",   None)
+        beat.pop("hook", None)
+    # optional top-level fields
+    data.setdefault("thumbnail", data.get("keyword", ""))
+    data.setdefault("style", "analytical")
     return data
 
 
@@ -165,9 +212,11 @@ def _parse_json(raw: str) -> dict:
     # 4. sanitize remaining control characters inside string values
     blob = _sanitize_json_strings(blob)
 
-    # 5. parse, then fix duplicate word fragments in beat texts
+    # 5. parse, fix artifacts, normalise schema
     data = json.loads(blob)
-    return _clean_beat_texts(data)
+    data = _clean_beat_texts(data)
+    data = _normalise_schema(data)
+    return data
 
 
 def _sanitize_json_strings(s: str) -> str:
@@ -204,15 +253,32 @@ def _sanitize_json_strings(s: str) -> str:
 
     return "".join(result)
 def _validate(data: dict) -> None:
-    for key in ("title", "keyword", "beats"):
-        if key not in data:
-            raise KeyError(f"Missing key: '{key}'")
+    """Accept both old (5-beat, hook bool) and new (4-8 beat, type field) schemas."""
+    if "beats" not in data:
+        raise KeyError("Missing key: 'beats'")
+    if "title" not in data:
+        raise KeyError("Missing key: 'title'")
     beats = data["beats"]
-    if not isinstance(beats, list) or len(beats) != 5:
-        raise ValueError(f"Expected 5 beats, got {len(beats) if isinstance(beats, list) else type(beats)}")
-    for beat in beats:
-        for k in ("id", "keyword", "text"):
+    if not isinstance(beats, list):
+        raise ValueError("beats must be a list")
+    if not (4 <= len(beats) <= 8):
+        raise ValueError(f"Expected 4-8 beats, got {len(beats)}")
+    for i, beat in enumerate(beats):
+        for k in ("keyword", "text"):
             if k not in beat:
-                raise KeyError(f"Beat missing key: '{k}'")
+                raise KeyError(f"Beat {i} missing key: '{k}'")
         if not beat["text"].strip():
-            raise ValueError(f"Beat {beat.get('id','?')} has empty text")
+            raise ValueError(f"Beat {i} has empty text")
+
+    # Word count gate: forces a retry if the model generates stub-length beats.
+    # 80 words minimum = ~37s at 130wpm. Below this, video will be < 35s.
+    total_words = sum(len(b["text"].split()) for b in beats)
+    if total_words < 80:
+        raise ValueError(
+            f"Script too short: {total_words} words across {len(beats)} beats "
+            f"(minimum 80, target 100-150). Beats are too short — model must expand them."
+        )
+    if total_words > 200:
+        raise ValueError(
+            f"Script too long: {total_words} words (maximum 200)."
+        )

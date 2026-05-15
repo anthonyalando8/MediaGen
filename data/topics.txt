@@ -2,6 +2,7 @@
 # One topic per line. Blank lines and lines starting with # are ignored.
 # Use with: python src/main.py --batch   or   python src/main.py --random
 
+# ── TECH / CODING ─────────────────────────────────────────────────────────────
 why most developers quit too early
 the dark side of social media algorithms
 why linux beats windows for developers
@@ -12,3 +13,84 @@ the productivity trap no one talks about
 why open source is eating the software world
 how to think like a senior engineer
 the one habit that separates good devs from great ones
+why your code reviews are making your team worse
+the silent skill that makes developers irreplaceable
+why you keep building things nobody uses
+what nobody tells you before your first tech job
+the moment a codebase becomes impossible to maintain
+why smart developers stay at bad companies
+the truth about 10x engineers
+why documentation is the most underrated skill in tech
+what separates a good API from a great one
+the real cost of technical debt nobody talks about
+
+# ── MINDSET / PSYCHOLOGY ──────────────────────────────────────────────────────
+the productivity myth that's keeping you busy but broke
+why discipline is overrated and systems are everything
+the one cognitive bias destroying your decisions every day
+why you keep starting over instead of finishing
+what overthinking is actually doing to your brain
+the difference between confidence and arrogance nobody explains
+why smart people stay stuck longer than average people
+what success looks like from the inside
+the moment ambition becomes self-destruction
+why your comfort zone is not the problem
+the hidden cost of always being available
+why you do your best thinking at the wrong time
+
+# ── MONEY / FINANCE ───────────────────────────────────────────────────────────
+why your salary will never make you rich
+the financial advice everyone gets wrong in their 20s
+what the wealthy understand about time that you don't
+why most people stay broke despite earning more
+the investment nobody talks about that beats the stock market
+why budgeting fails and what actually works
+the real reason you can't save money
+what compound interest actually looks like in real life
+
+# ── CAREER / WORK ─────────────────────────────────────────────────────────────
+why the smartest person in the room rarely gets promoted
+the career move that looks like a step back but isn't
+why working harder is making you less valuable
+what nobody tells you about quitting your job
+the soft skill that gets people promoted faster than anything
+why your network is worth more than your degree
+the difference between a job and a career nobody explains
+what burnout actually is and why rest won't fix it
+
+# ── CREATIVITY / BUILDING ─────────────────────────────────────────────────────
+why your best ideas come when you stop trying
+the creative block that isn't actually a creative block
+why most people never ship what they start
+what separates creators who last from those who disappear
+the reason your first version should embarrass you
+why constraints produce better work than freedom
+what prolific creators understand about failure
+the moment a hobby becomes something more
+
+# ── RELATIONSHIPS / SOCIAL ────────────────────────────────────────────────────
+the conversation skill that changes every relationship
+why you attract the same type of person repeatedly
+what people remember about you has nothing to do with words
+the social trap that makes everyone lonelier
+why being likeable and being respected are different things
+the friendship that's slowly making you smaller
+what listening actually means and why most people can't do it
+
+# ── HEALTH / PERFORMANCE ──────────────────────────────────────────────────────
+why sleep is the performance hack everyone ignores
+the diet advice that's making you worse not better
+why exercise doesn't work the way you think it does
+what stress is actually doing to your decision-making
+the health habit with the highest return almost nobody does
+why your mornings are setting the wrong tone for the day
+
+# ── CULTURE / SOCIETY ─────────────────────────────────────────────────────────
+why attention is the most valuable resource in history
+the generation gap nobody is being honest about
+what social media is doing to ambition
+why everyone feels behind and what that's actually about
+the thing modern culture mistakes for success
+why boredom might be the most important feeling you're suppressing
+what the rise of AI means for creative work
+why cities are getting more expensive and nobody can stop it

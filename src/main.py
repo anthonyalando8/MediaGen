@@ -87,9 +87,8 @@ def run_one(topic: str, cfg: dict) -> dict:
 
     # ── 4. Slides ─────────────────────────────────────────────────────────
     _step(4, "Slide rendering  (Pillow)")
-    # Convert beat durations from seconds to milliseconds for the HTML renderer.
-    # The frame count per beat is ceil(duration_ms / 1000 * fps), so this
-    # directly controls how long each animated scene plays — matching the voice.
+    # Pass beat durations in ms so the HTML renderer captures the correct
+    # number of frames per beat — video duration matches narration exactly.
     durations_ms = [int(d * 1000) for d in durations]
     slide_paths = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)
 
@@ -164,11 +163,16 @@ def _step(n: int, label: str) -> None:
 
 
 def _print_script(script: dict) -> None:
-    print(f"  Title:   {script['title']}")
-    print(f"  Keyword: {script['keyword']}")
-    for b in script["beats"]:
-        hook = " [HOOK]" if b.get("hook") else ""
-        print(f"  Beat {b['id']}{hook}: [{b['keyword']}]  {b['text'][:72]}…")
+    print(f"  Title:    {script['title']}")
+    thumb = script.get('thumbnail', '')
+    if thumb: print(f"  Thumb:    {thumb}")
+    style = script.get('style', '')
+    if style: print(f"  Style:    {style}")
+    for i, b in enumerate(script["beats"]):
+        btype  = b.get("type", "beat").upper()
+        energy = b.get("energy", "")
+        tag    = f" [{energy}]" if energy else ""
+        print(f"  {i+1}. {btype}{tag}: [{b['keyword']}]  {b['text'][:72]}…")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
