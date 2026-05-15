@@ -1,0 +1,168 @@
+12. asset style
+
+cinematic_realism
+anime
+3d_render
+flat_design
+cyberpunk
+documentary
+minimal
+comic
+analog
+retro
+futuristic
+photoreal
+
+This becomes important when switching image engines later.
+
+
+15. text animation styles
+
+Currently mixed into motion.
+
+Should probably be separate later.
+
+pop_in
+slide_up
+fade_in
+bounce
+scale_reveal
+word_by_word
+glitch_in
+blur_reveal
+tracking_expand
+mask_reveal
+
+This is HUGE for retention.
+
+16. composition.layout
+
+You mentioned composition but no enums.
+
+center_focus
+split_screen
+stacked
+single_subject
+collage
+grid
+text_left
+text_right
+top_bottom
+fullscreen_text
+
+17. composition.depth
+flat
+layered
+deep_parallax
+foreground_focus
+background_focus
+
+Very useful later.
+
+18. intensity
+
+You should standardize this.
+
+Instead of:
+
+0.83
+
+Use:
+
+low
+mid
+high
+extreme
+
+22. beat type expansion
+
+Current set is good but slightly missing.
+
+Add:
+
+setup
+question
+warning
+memory
+comparison
+realization
+
+These help script variety later.
+
+23. asset motion
+
+Currently reused from global motion.
+
+But asset motion often differs.
+
+none
+float
+drift
+rotate
+pulse
+parallax
+shake
+follow_camera
+hover
+zoom_in
+zoom_out
+
+25. scene rhythm
+
+This becomes useful for editing cadence.
+
+steady
+escalating
+chaotic
+syncopated
+breathing
+
+VERY powerful later.
+
+28. beat sync mode
+
+VERY useful later.
+
+off
+soft
+normal
+hard
+word_level
+
+
+29. image framing
+
+CRITICAL for AI-generated visuals.
+
+close_up
+medium_shot
+wide_shot
+silhouette
+overhead
+profile
+macro
+
+Huge future value.
+
+30. stock footage behavior
+
+You’ll want this later.
+
+literal
+symbolic
+abstract
+b_roll
+reaction
+environmental
+
+
+7. background
+gradient_dark
+city_night
+abstract_lines
+particles_red
+minimal_white
+terminal
+neon
+documentary_dark
+

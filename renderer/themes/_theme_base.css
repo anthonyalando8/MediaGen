@@ -1,0 +1,21 @@
+/* _theme_base.css  --  Variables every theme must define
+   ================================================================
+   This file documents the contract. Each theme CSS overrides
+   the variables listed here. _base.html loads the theme CSS
+   after its own :root block, so theme values win.
+
+   DO NOT add rules here — only documentation comments.
+   ================================================================
+
+   Required per-theme variables:
+     --acc     Accent colour.  Used for rules, highlights, glow sources.
+               Should be readable on --bg (WCAG AA at large text size).
+     --spike   Climax beat override colour. Used once per video.
+               Should contrast with --acc for visual rhythm.
+
+   Optional per-theme variables (fall back to _base.html defaults):
+     --bg      Background colour.  Default: #09090b
+     --fg      Primary text.       Default: #efefed
+     --fg-2    Secondary text.     Default: #868682
+     --fg-3    Subtle border/line. Default: #2a2a28
+*/

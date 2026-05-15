@@ -6,30 +6,34 @@
 
 /* ================================================================
    DESIGN TOKENS
-   ----------------------------------------------------------------
-   2-value palette: --bg (near-black) + --acc (single accent hue).
-   Everything else is neutral greys. No secondary accents.
-   No gradients. No decorative colour.
    ================================================================ */
 :root {
   --bg:    #09090b;
   --fg:    #efefed;
   --fg-2:  #868682;
   --fg-3:  #2a2a28;
-  --acc:   #efefed;   /* overridden per-theme to a single hue */
+  --acc:   #efefed;   /* overridden per-theme */
+  --spike: #e8804a;   /* climax override */
 
-  /* Fixed type scale — rendered at fixed 1080px */
-  --sz-hero:    168px;
-  --sz-stat:    104px;
-  --sz-body:     50px;
-  --sz-label:    20px;
-  --sz-brand:    22px;
+  --sz-hero:  168px;
+  --sz-stat:  104px;
+  --sz-body:   50px;
+  --sz-label:  20px;
+  --sz-brand:  22px;
 
-  /* Layout constants */
-  --left:        80px;
-  --right:       80px;
-  --safe-top:   260px;   /* TikTok UI obstruction — top */
-  --safe-bot:   500px;   /* TikTok UI obstruction — from bottom */
+  --left:      80px;
+  --right:     80px;
+  --safe-top: 260px;
+  --safe-bot: 500px;
+}
+
+/* Local font — no network request, works offline */
+@font-face {
+  font-family: "Space Grotesk";
+  src: local("Space Grotesk"),
+       url("../../assets/fonts/Space_Grotest/SpaceGrotesk-VariableFont_wght.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,7 +44,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--fg);
-  font-family: "Space Grotesk", "Helvetica Neue", ui-sans-serif, sans-serif;
+  font-family: "Space Grotesk", "Segoe UI", "Helvetica Neue", ui-sans-serif, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
@@ -54,23 +58,67 @@ html, body {
 }
 
 /* ================================================================
-   STRUCTURAL CHROME  —  NEVER ANIMATES
+   LAYOUT VARIANT SYSTEM
    ----------------------------------------------------------------
-   One hairline rule on the left edge. That is the only persistent
-   visual element. It replaces the 5px coloured bar (too decorative)
-   and the particles, grids, ghost words.
+   The scene-level HTML sets a data-layout attribute.
+   CSS uses that to shift composition without changing structure.
+
+   Variants:
+     left     — default. Left-anchored editorial. Rule on left.
+     center   — centered type. No rule. Used for calm/analytical.
+     right    — right-anchored. Tension from reversed expectation.
+     full     — type fills full width with no margins. Intense only.
+   ================================================================ */
+
+/* LEFT (default) — editorial, left anchor */
+.scene[data-layout="left"] .rule-left { display: block; }
+.scene[data-layout="left"] .scene-label { left: calc(var(--left) + 18px); }
+
+/* CENTER — no rule, symmetric */
+.scene[data-layout="center"] .rule-left { display: none; }
+.scene[data-layout="center"] { text-align: center; }
+.scene[data-layout="center"] .scene-label {
+  left: 0; right: 0;
+  text-align: center;
+}
+.scene[data-layout="center"] .h-rule,
+.scene[data-layout="center"] .insight-rule,
+.scene[data-layout="center"] .cta-rule {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* RIGHT — flipped anchor */
+.scene[data-layout="right"] .rule-left {
+  left: auto;
+  right: var(--right);
+}
+.scene[data-layout="right"] .rule-left::after { left: 0; }
+.scene[data-layout="right"] .scene-label {
+  left: auto;
+  right: calc(var(--right) + 18px);
+}
+.scene[data-layout="right"] .brand {
+  right: auto;
+  left: var(--left);
+}
+
+/* FULL — bleed, no margins, type at maximum scale */
+.scene[data-layout="full"] .rule-left { display: none; }
+.scene[data-layout="full"] .scene-label { left: 40px; }
+.scene[data-layout="full"] { --left: 40px; --right: 40px; }
+
+/* ================================================================
+   STRUCTURAL CHROME
    ================================================================ */
 .rule-left {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 0; bottom: 0;
   left: var(--left);
   width: 1px;
   background: var(--fg-3);
   z-index: 3;
 }
-
-/* Short accent segment at the top of the rule, within the safe zone */
 .rule-left::after {
   content: "";
   position: absolute;
@@ -80,7 +128,6 @@ html, body {
   background: var(--acc);
 }
 
-/* Scene category label — top-left, always monospace, always small */
 .scene-label {
   position: absolute;
   top: calc(var(--safe-top) + 16px);
@@ -95,7 +142,6 @@ html, body {
   animation: labelReveal 0.55s cubic-bezier(0.16,1,0.3,1) 0.08s forwards;
 }
 
-/* Brand — bottom right, very dim */
 .brand {
   position: absolute;
   bottom: calc(var(--safe-bot) + 44px);
@@ -109,145 +155,87 @@ html, body {
 }
 
 /* ================================================================
-   VIGNETTE
-   ----------------------------------------------------------------
-   Directional, not radial. Darker at right and at top/bottom edges.
-   Left side stays open — that is where the type lives.
-   Grain and halation belong in the Python post-processing layer,
-   not here. Removing the SVG feTurbulence grain from HTML removes
-   the primary source of "AI generator" visual noise.
+   VIGNETTE — directional, not radial
    ================================================================ */
 .vignette {
-  position: absolute;
-  inset: 0;
+  position: absolute; inset: 0;
   pointer-events: none;
   z-index: 9;
+}
+/* Left layout: darker right, open left */
+.scene[data-layout="left"] .vignette,
+.scene:not([data-layout]) .vignette {
   background:
     linear-gradient(100deg, transparent 35%, oklch(0 0 0 / .22) 100%),
-    linear-gradient(to bottom,
-      oklch(0 0 0 / .4) 0%,
-      transparent 15%,
-      transparent 78%,
-      oklch(0 0 0 / .55) 100%);
+    linear-gradient(to bottom, oklch(0 0 0 / .4) 0%, transparent 15%, transparent 78%, oklch(0 0 0 / .55) 100%);
+}
+/* Center layout: symmetric fade top/bottom */
+.scene[data-layout="center"] .vignette {
+  background:
+    linear-gradient(to bottom, oklch(0 0 0 / .45) 0%, transparent 20%, transparent 75%, oklch(0 0 0 / .6) 100%);
+}
+/* Right layout: darker left */
+.scene[data-layout="right"] .vignette {
+  background:
+    linear-gradient(280deg, transparent 35%, oklch(0 0 0 / .22) 100%),
+    linear-gradient(to bottom, oklch(0 0 0 / .4) 0%, transparent 15%, transparent 78%, oklch(0 0 0 / .55) 100%);
+}
+/* Full layout: heavier top/bottom only */
+.scene[data-layout="full"] .vignette {
+  background:
+    linear-gradient(to bottom, oklch(0 0 0 / .55) 0%, transparent 18%, transparent 72%, oklch(0 0 0 / .7) 100%);
 }
 
 /* ================================================================
-   MOTION LANGUAGE
+   MOTION SYSTEM
    ----------------------------------------------------------------
+   Style variants also shift animation direction:
+     left   → titles come from below (default)
+     center → titles come from below, slightly further
+     right  → titles come from right
+     full   → titles come from below, larger displacement
 
-   EASING: cubic-bezier(0.16, 1, 0.3, 1)
-   ─ Expo-out. Fast exit, long slow arrival.
-   ─ Standard in premium product UI (Linear, Arc, Apple HIG).
-   ─ Reads as physical weight, not algorithmic spring.
-
-   DIRECTION: always translateY(upward). Never scale. Never rotate.
-   ─ All content enters from below. The eye reads it as arriving,
-     not popping. Consistent direction = coherent space.
-
-   DELAY LADDER: content reveals have 80–120ms between layers.
-   ─ Label first (sets context, fastest).
-   ─ Keyword second (the argument, largest, most delay).
-   ─ Divider third (breath, very fast draw).
-   ─ Body last (explanation, slowest fade).
-   ─ The audience reads each before the next interrupts.
-
-   STILLNESS: decorative elements do NOT animate.
-   ─ Background is static.
-   ─ Vignette is static.
-   ─ Rule is static.
-   ─ Brand is static.
-   Only the content sequence moves — and only once, forward.
-
-   DURATION: longer than you expect.
-   ─ 600–900ms for headline. 400–600ms for body.
-   ─ Short animations read as nervousness. Slow reads as confidence.
+   One easing throughout: cubic-bezier(0.16, 1, 0.3, 1)
    ================================================================ */
 
-/* Label: slides in from the left — lateral, not vertical */
 @keyframes labelReveal {
   from { opacity: 0; transform: translateX(-10px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-
-/* Headline: comes from below, decelerates to rest */
 @keyframes titleReveal {
   from { opacity: 0; transform: translateY(28px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
-/* Body: gentler lift — smaller displacement, longer duration */
+@keyframes titleRevealRight {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes titleRevealFull {
+  from { opacity: 0; transform: translateY(48px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 @keyframes bodyReveal {
   from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
-/* Divider: draws left-to-right */
 @keyframes ruleReveal {
   from { transform: scaleX(0); transform-origin: left center; }
   to   { transform: scaleX(1); transform-origin: left center; }
 }
-
-/* Scene settle: barely-perceptible camera arriving at rest.
-   Applied only on hook. 8px drift over 1.8s — feel it, not see it. */
+@keyframes ruleRevealCenter {
+  from { transform: scaleX(0); transform-origin: center center; }
+  to   { transform: scaleX(1); transform-origin: center center; }
+}
 @keyframes cameraSettle {
   from { transform: translateY(8px); }
-  to   { transform: translateY(0);   }
-}
-
-/* ================================================================
-   TYPOGRAPHY DEFAULTS
-   ================================================================ */
-.headline {
-  font-size: var(--sz-hero);
-  font-weight: 700;
-  letter-spacing: -0.05em;
-  line-height: 0.90;
-  color: var(--fg);
-  text-transform: uppercase;
-  /* No text-shadow. Shadow on text is almost always a mistake. */
-}
-
-.subheadline {
-  font-size: var(--sz-stat);
-  font-weight: 700;
-  letter-spacing: -0.04em;
-  line-height: 0.92;
-  color: var(--fg);
-  text-transform: uppercase;
-}
-
-.body-copy {
-  font-size: var(--sz-body);
-  font-weight: 400;
-  line-height: 1.28;
-  letter-spacing: -0.01em;
-  color: var(--fg-2);
-}
-
-/* Accent coloured first word — pulls eye to the start of body */
-.body-copy .accent-word {
-  color: var(--acc);
-  font-weight: 600;
-}
-
-/* Thin rule between headline and body */
-.h-rule {
-  display: block;
-  height: 1px;
-  background: var(--fg-3);
-  transform: scaleX(0);
-  transform-origin: left center;
-}
-.h-rule.accent {
-  background: var(--acc);
-  height: 2px;
+  to   { transform: translateY(0); }
 }
 
 </style>
-
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="../motion/camera.css">
+<link rel="stylesheet" href="../motion/entries.css">
+<link rel="stylesheet" href="../motion/overlays.css">
+<script src="../lib/inject.js"></script>
 </head>
 <body>
 {{SCENE_CONTENT}}

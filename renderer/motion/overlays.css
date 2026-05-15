@@ -1,0 +1,182 @@
+/* ================================================================
+   overlays.css  --  Background variant, grain, emotion tints
+   ================================================================
+   Classes added dynamically by inject.js to .scene.
+   All use ::before / ::after or child elements with pointer-events:none
+   so they never interfere with text selection or layout.
+   ================================================================ */
+
+/* ── BACKGROUND VARIANTS ─────────────────────────────────────────
+   Applied as .bg-{variant} on .scene */
+
+/* SOLID — clean dark background, default */
+.bg-solid { /* no extra styling beyond --bg */ }
+
+/* GRADIENT — subtle diagonal atmospheric gradient */
+.bg-gradient::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(135deg,
+      oklch(from var(--acc) 0.14 0.04 h / .06) 0%,
+      transparent 55%,
+      oklch(from var(--acc) 0.08 0.02 h / .04) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* NOISE — light film grain overlay */
+.bg-noise::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: overlay;
+}
+
+/* GRID — subtle coordinate grid, data/tech feel */
+.bg-grid::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(oklch(from var(--acc) 0.5 0.08 h / .04) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(from var(--acc) 0.5 0.08 h / .04) 1px, transparent 1px);
+  background-size: 80px 80px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* GLOW — hot accent glow from left edge (climax energy) */
+.bg-glow::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(
+    ellipse 65% 50% at 12% 52%,
+    oklch(from var(--acc) 0.32 0.10 h / .11) 0%,
+    transparent 65%
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: glowPulse 3.5s ease-in-out infinite alternate;
+}
+@keyframes glowPulse {
+  from { opacity: 0.7; }
+  to   { opacity: 1.0; }
+}
+
+/* LINES — horizontal scan lines, cinematic reference */
+.bg-lines::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 3px,
+    oklch(from var(--fg) 0.05 0 0 / .025) 3px,
+    oklch(from var(--fg) 0.05 0 0 / .025) 4px
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ABSTRACT — floating geometric blur shapes */
+.bg-abstract::before {
+  content: '';
+  position: absolute;
+  width: 420px; height: 420px;
+  top: 15%; left: -10%;
+  border-radius: 50%;
+  background: oklch(from var(--acc) 0.26 0.07 h / .07);
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: 1;
+  animation: abstractFloat 7s ease-in-out infinite alternate;
+}
+.bg-abstract::after {
+  content: '';
+  position: absolute;
+  width: 300px; height: 300px;
+  bottom: 20%; right: -8%;
+  border-radius: 50%;
+  background: oklch(from var(--acc) 0.18 0.04 h / .05);
+  filter: blur(70px);
+  pointer-events: none;
+  z-index: 1;
+  animation: abstractFloat 9s ease-in-out infinite alternate-reverse;
+}
+@keyframes abstractFloat {
+  from { transform: translate(0px, 0px) scale(1.0); }
+  to   { transform: translate(20px, 30px) scale(1.08); }
+}
+
+/* ── EMOTION TINTS ───────────────────────────────────────────────
+   Very subtle hue overlays. The accent colour already carries hue —
+   these add directional bias to the scene's ambient light.
+   Max opacity: 0.04 so text is never affected. */
+
+.tint-urgent::after,
+.tint-angry::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, oklch(0.55 0.2 25 / .055), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.tint-tense::after,
+.tint-anxious::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 100%, oklch(0.30 0.10 270 / .05), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.tint-hopeful::after,
+.tint-confident::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 0%, oklch(0.65 0.12 200 / .04), transparent 65%);
+  pointer-events: none; z-index: 0;
+}
+.tint-melancholic::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 60%, oklch(0.25 0.05 250 / .06), transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.tint-cold::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 100% 50%, oklch(0.35 0.08 230 / .05), transparent 65%);
+  pointer-events: none; z-index: 0;
+}
+.tint-serious::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, oklch(0 0 0 / .04) 0%, transparent 30%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── FILM GRAIN ──────────────────────────────────────────────────
+   Always-on subtle grain. Injected via grain.html component.
+   The .grain element must be present in the scene. */
+.grain {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 8;
+  opacity: 0.038;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
+  background-size: 512px 512px;
+  mix-blend-mode: screen;
+  animation: grainShift 0.18s steps(1) infinite;
+}
+@keyframes grainShift {
+  0%   { background-position:   0px   0px; }
+  14%  { background-position: -88px  44px; }
+  28%  { background-position:  62px -28px; }
+  42%  { background-position: -34px  72px; }
+  57%  { background-position:  96px -54px; }
+  71%  { background-position: -52px  18px; }
+  85%  { background-position:  28px -80px; }
+  100% { background-position:   0px   0px; }
+}

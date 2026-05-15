@@ -21,13 +21,100 @@ Return ONLY valid JSON. No markdown. No explanation. No code fences.
 {{
   "title": "short creator-style title, max 5 words",
   "thumbnail": "2-4 word emotionally charged thumbnail phrase",
-  "style": "builder | contrarian | intense | cinematic | calm | analytical",
+  "style": "cinematic",
+
+  "global_motion": {{
+    "theme": "dark_kinetic |luxury_minimal |tech_hud |cinematic_grain |retro_vhs |neon_cyberpunk |clean_modern |documentary_gritty",
+    "caption_style": "bold_reels",
+    "transition_style": "fast_cuts",
+    "camera_style": "dynamic",
+  }},
+
+  "audio": {{
+    "music_mood": "tense |cinematic |ambient |dark |uplifting |emotional |aggressive |corporate |epic |minimal |suspense",
+    "voice_style": "calm |calm_intense |storyteller |aggressive |whispered |documentary |dramatic |analytical |robotic |emotional",
+    "beat_sync": true | false
+  }},
+
   "beats": [
     {{
+      "id": "beat_01",
       "type": "hook | insight | tension | truth | flip | climax | breath | payoff | cta",
       "keyword": "1-4 word visual phrase",
       "text": "spoken line — minimum 10 words, maximum 30 words",
-      "energy": "low | mid | high"
+      "duration": 4.2,
+      "energy": "low | mid | high",
+      "emotion": "urgent |tense |hopeful |melancholic |angry |inspirational |cold |confident |paranoid |playful |serious |anxious |motivational",
+      "pace": "slow |mid |fast |explosive",
+      "visual_intent": "confrontational | mysterious  |clean |chaotic |cinematic |minimal |corporate |aggressive |dreamlike |documentary",
+      "motion": {{
+        "preset": "impact",
+        "intensity": "high",
+        "easing": "ease_out | ease_in | linear | bounce | elastic",
+        "duration_scale": 1.0
+        }},
+      "camera": "camera": {{
+        "preset": "static | push_in | pull_out | handheld | pan_left | pan_right | snap_zoom | micro_shake | orbit | tilt_up",
+        "speed": "slow | mid | fast",
+        "shake": 0.0,
+        "zoom_strength": 1.0
+        }},
+      "transition": {{
+        "preset":  "cut | slam_cut |blur_wipe |flash |glitch_cut |zoom_transition |fade |whip_pan |dip_black",
+        "duration": 0.2,
+        "intensity": "soft | normal | hard | violent"
+        }},
+      "background": {{
+        "type": "solid  |gradient |particles |video |image |shader |abstract |grid |noise |lines |glow",
+        "style": "dark_red",
+        "motion": "slow | mid | fast",
+        "depth": "flat | layered | deep",
+        "opacity": 0.8
+      }},
+      "assets": [
+        {{
+          "type": "ai_image |stock_video |icon |overlay |shape |particle |text_only |screen_recording |chart",
+          "role": "primary_visual |background |ambient |accent |transition_element |foreground",
+          "prompt": "burned out founder sitting alone in dark office illuminated by laptop glow cinematic lighting",
+          "style": "film_grain | dust |light_leaks |vignette |scanlines |noise |chromatic_aberration |rain |smoke |,
+          "placement": "background |foreground |center |left |right |top |bottom |fullscreen |picture_in_picture |floating",
+          "motion": "impact | drift | float | shake | reveal | parallax | glitch | kinetic_text | zoom_burst | pulse | slow_push",
+          "timing": {{
+                "start": 0.0,
+                "end": 4.2,
+                "fade_in": 0.2,
+                "fade_out": 0.2
+            }},
+
+            "transform": {{
+                "scale": 1.0,
+                "rotation": 0,
+                "parallax": 0.3
+            }}
+        }},
+
+      ],
+
+      "captions": {{
+        "style": "bold_reels | clean_subtitles |word_pop |cinematic_subtitles |typewriter |karaoke |minimal_caps |documentary |center_focus",
+        "highlight_words": [
+          "hard work",
+          "nobody",
+          "notices"
+        ],
+        "timing": {{
+            "sync": "word | phrase | sentence"
+        }},
+
+        "animation": {{
+            "entry": "pop_in | fade | slide_up",
+            "emphasis": "scale | color | shake"
+        }}
+      }},
+
+      "sfx": [
+        "boom"  | "whoosh" |"tick" |"bass_hit" |"glitch" |"camera_click" |"riser" |"heartbeat"
+      ]
     }}
   ]
 }}

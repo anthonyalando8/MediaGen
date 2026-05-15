@@ -78,6 +78,12 @@ def run_one(topic: str, cfg: dict) -> dict:
         speed=cfg["tts"]["speed"],
         sample_rate=cfg["tts"]["sample_rate"],
     )
+    # Guard against TTS silently skipping a beat
+    n_beats = len(script["beats"])
+    if len(beat_wavs) != n_beats:
+        raise RuntimeError(
+            f"[main] TTS returned {len(beat_wavs)} WAV files for {n_beats} beats — mismatch."
+        )
     durations = beat_durations(beat_wavs)
     print(f"         Beat durations: {[f'{d:.1f}s' for d in durations]}")
 
@@ -86,8 +92,8 @@ def run_one(topic: str, cfg: dict) -> dict:
     ass_path = generate_captions(voice_path, run_dir, cfg)
 
     # ── 4. Slides ─────────────────────────────────────────────────────────
-    _step(4, "Slide rendering  (Pillow)")
-    # Pass beat durations in ms so the HTML renderer captures the correct
+    _step(4, "Slide rendering  (HTML/Playwright)")
+    # Pass beat durations in ms so the renderer captures the correct
     # number of frames per beat — video duration matches narration exactly.
     durations_ms = [int(d * 1000) for d in durations]
     slide_paths = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)

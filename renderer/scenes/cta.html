@@ -1,45 +1,87 @@
 <!-- scenes/cta.html -->
-<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
-
-<!--
-  CTA SCENE DESIGN RATIONALE
-  ─────────────────────────────────
-  Beat 4. The close. The viewer has watched everything — now direct them.
-
-  What the previous design got wrong:
-  ─ The white card (background: var(--fg)) with box-shadow was a mobile
-    UI component — it looked like a settings panel or a notification.
-    On a dark editorial slide it broke the visual language completely.
-  ─ The play button icon (▶) and arrow (↗) added decorative symbols
-    that don't function — they're not tappable, they're fake UI chrome.
-  ─ Two radial gradients on the background.
-
-  New approach:
-  ─ The keyword is still the headline — it completes the narrative arc.
-  ─ Body text delivers the call to action directly.
-  ─ Below the body: a bottom bar. Not a card. Just two lines:
-    an eyebrow in the accent colour + the brand name large.
-    This is the follow prompt. Editorial — like a magazine colophon.
-  ─ The bottom bar is separated from the body by space alone. No borders,
-    no shadows, no rounded rectangles.
-
-  Motion sequence:
-  0.00s — label
-  0.28s — keyword
-  0.80s — rule
-  0.95s — body
-  1.30s — follow prompt lifts in
--->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
 
 <style>
-.cta-content {
-  position: absolute;
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .cta-content {
   top: calc(var(--safe-top) + 64px);
   left: calc(var(--left) + 20px);
   right: calc(var(--right) + 60px);
-  z-index: 4;
+}
+.scene[data-layout="left"] .cta-kw {
+  animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.28s forwards;
+}
+.scene[data-layout="left"] .cta-follow {
+  left: calc(var(--left) + 20px);
+  right: var(--right);
 }
 
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .cta-content {
+  top: calc(var(--safe-top) + 180px);
+  left: calc(var(--left) + 40px);
+  right: calc(var(--right) + 40px);
+  text-align: center;
+}
+.scene[data-layout="center"] .cta-kw {
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  animation: titleReveal 1.0s cubic-bezier(0.16,1,0.3,1) 0.35s forwards;
+}
+.scene[data-layout="center"] .cta-rule {
+  margin-left: auto; margin-right: auto;
+  animation: ruleRevealCenter 0.35s cubic-bezier(0.16,1,0.3,1) 0.90s forwards;
+}
+.scene[data-layout="center"] .cta-body { text-align: center; }
+.scene[data-layout="center"] .cta-follow {
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+  border-top: 1px solid var(--fg-3);
+}
+.scene[data-layout="center"] .cta-follow-brand { font-size: 48px; }
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .cta-content {
+  top: calc(var(--safe-top) + 64px);
+  left: calc(var(--left) + 100px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .cta-kw {
+  animation: titleRevealRight 0.75s cubic-bezier(0.16,1,0.3,1) 0.28s forwards;
+}
+.scene[data-layout="right"] .cta-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .cta-body { text-align: right; }
+.scene[data-layout="right"] .cta-follow {
+  left: calc(var(--left) + 100px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .cta-content {
+  top: calc(var(--safe-top) + 30px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
+}
+.scene[data-layout="full"] .cta-kw {
+  font-size: calc(var(--sz-stat) * 1.2);
+  animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.20s forwards;
+}
+.scene[data-layout="full"] .cta-follow {
+  left: var(--left);
+  right: var(--right);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+.cta-content {
+  position: absolute;
+  z-index: 4;
+}
 .cta-kw {
   font-size: var(--sz-stat);
   font-weight: 700;
@@ -47,11 +89,8 @@
   line-height: 0.92;
   color: var(--fg);
   text-transform: uppercase;
-
   opacity: 0;
-  animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.28s forwards;
 }
-
 .cta-rule {
   display: block;
   margin-top: 32px;
@@ -62,7 +101,6 @@
   transform-origin: left center;
   animation: ruleReveal 0.35s cubic-bezier(0.16,1,0.3,1) 0.80s forwards;
 }
-
 .cta-body {
   margin-top: 28px;
   font-size: var(--sz-body);
@@ -70,25 +108,18 @@
   line-height: 1.32;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-
   opacity: 0;
   animation: bodyReveal 0.65s cubic-bezier(0.16,1,0.3,1) 0.95s forwards;
 }
-
-/* ── Follow prompt — editorial colophon style ─────────────────── */
 .cta-follow {
   position: absolute;
   bottom: calc(var(--safe-bot) + 100px);
-  left: calc(var(--left) + 20px);
-  right: var(--right);
   z-index: 4;
   border-top: 1px solid var(--fg-3);
   padding-top: 28px;
-
   opacity: 0;
   animation: bodyReveal 0.60s cubic-bezier(0.16,1,0.3,1) 1.30s forwards;
 }
-
 .cta-follow-eyebrow {
   font-size: var(--sz-label);
   font-weight: 400;
@@ -97,7 +128,6 @@
   color: var(--acc);
   margin-bottom: 10px;
 }
-
 .cta-follow-brand {
   font-size: 56px;
   font-weight: 700;
@@ -106,21 +136,19 @@
 }
 </style>
 
-<div class="scene">
+<div class="scene" data-layout="{{LAYOUT}}">
   <div class="rule-left"></div>
   <div class="scene-label">{{HUD_TAG}}</div>
-
   <div class="cta-content">
     <div class="cta-kw">{{KEYWORD}}</div>
     <span class="cta-rule"></span>
     <div class="cta-body">{{BODY}}</div>
   </div>
-
   <div class="cta-follow">
-    <div class="cta-follow-eyebrow">Follow for more</div>
+    <div class="cta-follow-eyebrow">More on</div>
     <div class="cta-follow-brand">{{BRAND}}</div>
   </div>
-
   <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

@@ -67,46 +67,63 @@ function loadTemplate(sceneName) {
   return base.replace('{{SCENE_CONTENT}}', scene);
 }
 
-function injectVariables(html, beat, palette, brand) {
-  // inject CSS palette overrides into <head>
-  const cssVars = `
-<style id="palette-inject">
-:root {
-  --acc:   ${palette.accent};
-  --spike: ${palette.spike};
-  --bg:    ${palette.bg};
-  --fg:    ${palette.fg};
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
-</style>`;
 
-  // inject theme CSS after <head> opens
-  html = html.replace('<link rel="preconnect"', cssVars + '\n<link rel="preconnect"');
+function injectVariables(html, beat, palette, brand) {
+  const layout = beat.layout || sceneJson.layout || 'left';
 
-  // inject beat-specific content
+  // CSS vars block — injected before </head>
+  const cssVars = [
+    '<style id="palette-inject">',
+    ':root {',
+    '  --acc:      ' + palette.accent + ';',
+    '  --spike:    ' + palette.spike + ';',
+    '  --bg:       ' + palette.bg + ';',
+    '  --fg:       ' + palette.fg + ';',
+    '  --beat-dur: ' + beat.duration_ms + 'ms;',
+    '}',
+    '</style>',
+  ].join('\n');
+
+  // Beat data for inject.js — must escape </script> inside JSON
+  const beatJson = JSON.stringify(beat).replace(/<\/script>/gi, '<\\/script>');
+  const beatScript = '<script id="beat-data">window.__BEAT__ = ' + beatJson + ';</scri' + 'pt>';
+
+  // Anchor injection before </head> — works whether or not preconnect exists
+  html = html.replace('</head>', cssVars + '\n' + beatScript + '\n</head>');
+
+  // Text content replacements
   const replacements = {
-    '{{KEYWORD}}': beat.keyword,
-    '{{BODY}}':    beat.body,
-    '{{HUD_TAG}}': beat.hud_tag,
-    '{{BRAND}}':   brand,
+    '{{KEYWORD}}': escapeHtml(beat.keyword),
+    '{{BODY}}':    escapeHtml(beat.body),
+    '{{HUD_TAG}}': escapeHtml(beat.hud_tag),
+    '{{BRAND}}':   escapeHtml(brand),
+    '{{LAYOUT}}':  layout,
   };
   for (const [token, value] of Object.entries(replacements)) {
     html = html.replaceAll(token, value);
   }
 
-  // Fix common UTF-8 mojibake from Ollama output being misread as Latin-1.
-  // These appear in body text when the model outputs typographic characters.
+  // Fix UTF-8 mojibake from Ollama output
   const mojibake = [
-    [/â€"/g,  '—'],   // em-dash
-    [/â€˜/g,  '‘'], // left single quote
-    [/â€™/g,  '’'], // right single quote / apostrophe
-    [/â€œ/g,  '“'], // left double quote
-    [/â€/g,   '”'], // right double quote
-    [/â€¦/g,  '…'],   // ellipsis
-    [/Ã©/g,   'é'],
-    [/Ã /g,   'à'],
+    ['\u00e2\u0080\u0093', '\u2014'],
+    ['\u00e2\u0080\u0098', '\u2018'],
+    ['\u00e2\u0080\u0099', '\u2019'],
+    ['\u00e2\u0080\u009c', '\u201c'],
+    ['\u00e2\u0080\u009d', '\u201d'],
+    ['\u00e2\u0080\u00a6', '\u2026'],
+    ['\u00c3\u00a9', '\u00e9'],
+    ['\u00c3\u00a0', '\u00e0'],
   ];
   for (const [bad, good] of mojibake) {
-    html = html.replace(bad, good);
+    html = html.split(bad).join(good);
   }
 
   return html;
@@ -160,10 +177,12 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
   await context.addInitScript(PAUSE_SCRIPT);
 
   const page = await context.newPage();
-  await page.goto(`file://${tmpHtml}`, { waitUntil: 'networkidle' });
+  // domcontentloaded is instant for local file:// pages.
+  // networkidle was waiting 500ms+ for Google Fonts to timeout (or load) — removed.
+  await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded' });
 
-  // Extra wait for fonts
-  await page.waitForTimeout(200);
+  // Brief wait for @font-face to apply from local file
+  await page.waitForTimeout(80);
 
   // Add a 380ms silence gap at the end of every beat except the last,
   // matching the gap_s=0.38 in assemble.py's build_slide_video_from_frames.

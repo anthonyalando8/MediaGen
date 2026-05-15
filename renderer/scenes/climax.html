@@ -1,76 +1,109 @@
 <!-- scenes/climax.html -->
-<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
-
-<!--
-  CLIMAX SCENE DESIGN RATIONALE
-  ─────────────────────────────────
-  Beat 3. The pivot. The uncomfortable truth or the key insight.
-  This scene should feel different from the others — but not louder.
-  Different in pace, not in decoration.
-
-  What the previous design got wrong:
-  ─ glitchIn (clip-path steps) — this is a 2016 cyberpunk UI pattern.
-    It immediately reads as "template from a motion graphics pack".
-  ─ chromatic aberration pseudo-elements — same problem, overused.
-  ─ bloomPulse on the background — the pulsing background competes
-    with the text. The background should be still. The text is the event.
-  ─ depth-far and depth-mid (ghost blurred keyword layers) — the multiple
-    depth copies create visual noise. Delete them.
-
-  New approach:
-  ─ The spike colour (--spike, set to var(--acc) override below) gives
-    the scene its differentiation. Colour alone is enough.
-  ─ The keyword enters with a longer delay than other scenes — 0.6s.
-    The pause before it lands IS the dramatic effect.
-  ─ A larger type size creates the "wow" — size, not glow.
-  ─ The background has a very faint horizontal light band positioned
-    just behind the keyword — like a practical light source.
-    Pure atmosphere, no animation.
-
-  Motion sequence:
-  0.00s — label
-  0.60s — keyword (delayed — the pause creates tension)
-  1.20s — rule
-  1.35s — body
-
-  The 0.6s delay on the keyword is the entire cinematic effect.
-  If you cut the delay to 0.3s it becomes just another scene.
--->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
 
 <style>
-/* Switch to spike hue for this entire scene */
-.scene.climax-scene {
-  --acc: var(--spike, #e8804a);   /* fallback to warm orange if --spike not set */
+/* Spike hue override for entire scene */
+.scene.climax-scene { --acc: var(--spike, #e8804a); }
+.scene.climax-scene .rule-left::after { background: var(--acc); }
+
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .climax-light {
+  background: radial-gradient(ellipse 70% 50% at 20% 50%, oklch(from var(--acc) 0.28 0.06 h / .09), transparent 65%);
 }
-.scene.climax-scene .rule-left::after {
-  background: var(--acc);
+.scene[data-layout="left"] .climax-content {
+  top: calc(var(--safe-top) + 50px);
+  left: calc(var(--left) + 20px);
+  right: 0;
+}
+.scene[data-layout="left"] .climax-kw {
+  animation: titleReveal 0.90s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
+}
+.scene[data-layout="left"] .climax-body {
+  top: calc(var(--safe-top) + 680px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 100px);
 }
 
-/* Faint practical light — static, no animation */
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .climax-light {
+  background: radial-gradient(ellipse 70% 55% at 50% 45%, oklch(from var(--acc) 0.28 0.07 h / .11), transparent 65%);
+}
+.scene[data-layout="center"] .climax-content {
+  top: calc(var(--safe-top) + 160px);
+  left: var(--left);
+  right: var(--right);
+  text-align: center;
+}
+.scene[data-layout="center"] .climax-kw {
+  font-weight: 700;
+  letter-spacing: -0.02em;   /* less compressed — more gravitas */
+  animation: titleReveal 1.1s cubic-bezier(0.16,1,0.3,1) 0.70s forwards;
+}
+.scene[data-layout="center"] .climax-rule {
+  margin-left: auto; margin-right: auto;
+  animation: ruleRevealCenter 0.40s cubic-bezier(0.16,1,0.3,1) 1.45s forwards;
+}
+.scene[data-layout="center"] .climax-body {
+  top: calc(var(--safe-top) + 660px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .climax-light {
+  background: radial-gradient(ellipse 70% 50% at 80% 50%, oklch(from var(--acc) 0.28 0.06 h / .09), transparent 65%);
+}
+.scene[data-layout="right"] .climax-content {
+  top: calc(var(--safe-top) + 50px);
+  left: 0;
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .climax-kw {
+  animation: titleRevealRight 0.90s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
+}
+.scene[data-layout="right"] .climax-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .climax-body {
+  top: calc(var(--safe-top) + 680px);
+  left: calc(var(--left) + 80px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .climax-light {
+  background: radial-gradient(ellipse 90% 60% at 50% 40%, oklch(from var(--acc) 0.30 0.08 h / .13), transparent 65%);
+}
+.scene[data-layout="full"] .climax-content {
+  top: calc(var(--safe-top) + 20px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .climax-kw {
+  font-size: calc(var(--sz-hero) * 1.3);
+  animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.50s forwards;
+}
+.scene[data-layout="full"] .climax-body {
+  top: calc(var(--safe-top) + 900px);
+  left: var(--left);
+  right: calc(var(--right) + 60px);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
 .climax-light {
   position: absolute;
-  top: 28%;
-  left: -8%;
-  right: -8%;
-  height: 38%;
-  background: radial-gradient(
-    ellipse 70% 50% at 28% 50%,
-    oklch(from var(--acc) 0.28 0.06 h / .09),
-    transparent 65%
-  );
+  top: 20%; left: -8%; right: -8%; height: 45%;
   pointer-events: none;
   z-index: 1;
 }
-
 .climax-content {
   position: absolute;
-  top: calc(var(--safe-top) + 50px);
-  left: calc(var(--left) + 20px);
-  right: 0;   /* bleeds right — same as hook, signals elevated intensity */
   z-index: 4;
 }
-
-/* Keyword: larger than insight, hero-scale */
 .climax-kw {
   font-size: var(--sz-hero);
   font-weight: 700;
@@ -79,13 +112,8 @@
   color: var(--fg);
   text-transform: uppercase;
   word-break: break-word;
-
-  /* NO text-shadow, NO glow. The colour does the work. */
   opacity: 0;
-  animation: titleReveal 0.90s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
 }
-
-/* The accent-coloured rule under the keyword is wider here — more emphatic */
 .climax-rule {
   display: block;
   margin-top: 22px;
@@ -96,38 +124,29 @@
   transform-origin: left center;
   animation: ruleReveal 0.40s cubic-bezier(0.16,1,0.3,1) 1.20s forwards;
 }
-
 .climax-body {
   position: absolute;
-  top: calc(var(--safe-top) + 680px);
-  left: calc(var(--left) + 20px);
-  right: calc(var(--right) + 100px);
   z-index: 4;
-
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.30;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-
   opacity: 0;
   animation: bodyReveal 0.70s cubic-bezier(0.16,1,0.3,1) 1.35s forwards;
 }
 </style>
 
-<div class="scene climax-scene">
+<div class="scene climax-scene" data-layout="{{LAYOUT}}">
   <div class="climax-light"></div>
-
   <div class="rule-left"></div>
   <div class="scene-label">{{HUD_TAG}}</div>
-
   <div class="climax-content">
     <div class="climax-kw">{{KEYWORD}}</div>
     <span class="climax-rule"></span>
   </div>
-
   <div class="climax-body">{{BODY}}</div>
-
   <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

@@ -178,8 +178,10 @@ def _normalise_schema(data: dict) -> dict:
         # default energy from hook flag or position
         if "energy" not in beat:
             beat["energy"] = "high" if (beat.get("hook") or i == 0) else "mid"
-        # clean up old fields
-        beat.pop("id",   None)
+        # clean up old fields — only remove integer 'id' (old schema);
+        # preserve string beat ids like "beat_01" from the new schema.
+        if isinstance(beat.get("id"), int):
+            beat.pop("id")
         beat.pop("hook", None)
     # optional top-level fields
     data.setdefault("thumbnail", data.get("keyword", ""))
@@ -269,14 +271,21 @@ def _validate(data: dict) -> None:
                 raise KeyError(f"Beat {i} missing key: '{k}'")
         if not beat["text"].strip():
             raise ValueError(f"Beat {i} has empty text")
+        # Per-beat word count: prompt requires 15-25 words per beat
+        beat_words = len(beat["text"].split())
+        if not (15 <= beat_words <= 30):
+            raise ValueError(
+                f"Beat {i} has {beat_words} words — must be 15-25 words per beat."
+            )
 
-    # Word count gate: forces a retry if the model generates stub-length beats.
-    # 80 words minimum = ~37s at 130wpm. Below this, video will be < 35s.
+    # Total word count gate: scales with beat count (15 words/beat minimum).
+    # Target 90-130 words total to match the prompt spec.
     total_words = sum(len(b["text"].split()) for b in beats)
-    if total_words < 80:
+    min_words   = len(beats) * 15
+    if total_words < min_words:
         raise ValueError(
             f"Script too short: {total_words} words across {len(beats)} beats "
-            f"(minimum 80, target 100-150). Beats are too short — model must expand them."
+            f"(minimum {min_words} at 15 words/beat). Beats are too short — model must expand them."
         )
     if total_words > 200:
         raise ValueError(

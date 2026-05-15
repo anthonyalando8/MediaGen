@@ -1,45 +1,69 @@
 <!-- scenes/insight.html -->
-<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}} -->
-
-<!--
-  INSIGHT SCENE DESIGN RATIONALE
-  ─────────────────────────────────
-  Beats 1 and 2. These are the argument and evidence.
-  The viewer has been hooked — now they need information fast.
-
-  What the previous design got wrong:
-  ─ "depth-ghost" (blurred oversized keyword in background) — this is
-    a stock motion design template move. Audiences recognise it and tune out.
-  ─ insight-divider with gradient (linear-gradient(90deg, var(--acc), transparent))
-    — the fade-to-nothing trick is visually weak. Use a solid rule instead.
-  ─ Every element animated simultaneously.
-
-  New composition:
-  ─ Left column contains: label, keyword, rule, body.
-    These are vertically stacked with generous space between them.
-  ─ Right side: empty. The negative space frames the content.
-  ─ No background decoration. The background is the BG colour.
-    The type carries the visual weight.
-
-  Motion sequence — staggered, each delayed enough to breathe:
-  0.00s — label arrives (8px left)
-  0.30s — keyword lifts in (28px up) — 0.75s duration
-  0.90s — rule draws (0.4s)
-  1.10s — body lifts in (14px up) — 0.65s duration
-
-  Total reveal: ~1.8s. Long. Feels editorial, not commercial.
--->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
 
 <style>
-.insight-content {
-  position: absolute;
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .insight-content {
   top: calc(var(--safe-top) + 64px);
   left: calc(var(--left) + 20px);
   right: calc(var(--right) + 160px);
-  z-index: 4;
+}
+.scene[data-layout="left"] .insight-kw {
+  animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
 }
 
-/* Keyword — the statement */
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .insight-content {
+  top: calc(var(--safe-top) + 160px);
+  left: calc(var(--left) + 40px);
+  right: calc(var(--right) + 40px);
+  text-align: center;
+}
+.scene[data-layout="center"] .insight-kw {
+  font-size: calc(var(--sz-stat) * 0.92);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  animation: titleReveal 1.0s cubic-bezier(0.16,1,0.3,1) 0.40s forwards;
+}
+.scene[data-layout="center"] .insight-rule {
+  margin: 36px auto 0;
+  animation: ruleRevealCenter 0.35s cubic-bezier(0.16,1,0.3,1) 1.0s forwards;
+}
+.scene[data-layout="center"] .insight-body {
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .insight-content {
+  top: calc(var(--safe-top) + 64px);
+  left: calc(var(--left) + 100px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .insight-kw {
+  animation: titleRevealRight 0.75s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
+}
+.scene[data-layout="right"] .insight-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .insight-content {
+  top: calc(var(--safe-top) + 30px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .insight-kw {
+  font-size: calc(var(--sz-stat) * 1.2);
+  animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.20s forwards;
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+.insight-content {
+  position: absolute;
+  z-index: 4;
+}
 .insight-kw {
   font-size: var(--sz-stat);
   font-weight: 700;
@@ -47,19 +71,8 @@
   line-height: 0.92;
   color: var(--fg);
   text-transform: uppercase;
-
-  /* Accent-coloured first line — a typographic trick, not a CSS effect.
-     We split the keyword at the first space in the template if possible.
-     For simplicity here, the whole keyword is one colour. */
-
   opacity: 0;
-  animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
 }
-
-/* Accent word: the template can wrap specific words in .aw spans */
-.insight-kw .aw { color: var(--acc); }
-
-/* Horizontal rule — 2px, accent colour, short (not full-width) */
 .insight-rule {
   display: block;
   margin-top: 32px;
@@ -70,8 +83,6 @@
   transform-origin: left center;
   animation: ruleReveal 0.35s cubic-bezier(0.16,1,0.3,1) 0.90s forwards;
 }
-
-/* Body copy */
 .insight-body {
   margin-top: 28px;
   font-size: var(--sz-body);
@@ -79,35 +90,20 @@
   line-height: 1.32;
   letter-spacing: -0.01em;
   color: var(--fg-2);
-
   opacity: 0;
   animation: bodyReveal 0.65s cubic-bezier(0.16,1,0.3,1) 1.10s forwards;
 }
-
-/* ── Optional stat/number treatment ──────────────────────────────
-   If the keyword contains a number (e.g. "5 HABITS") and we want
-   to give the number distinct weight, it can use this class.
-   Not required — adds presence when used. */
-.stat-num {
-  display: block;
-  font-size: calc(var(--sz-stat) * 1.4);
-  font-weight: 700;
-  letter-spacing: -0.06em;
-  line-height: 0.82;
-  color: var(--acc);
-}
 </style>
 
-<div class="scene">
+<div class="scene" data-layout="{{LAYOUT}}">
   <div class="rule-left"></div>
   <div class="scene-label">{{HUD_TAG}}</div>
-
   <div class="insight-content">
     <div class="insight-kw">{{KEYWORD}}</div>
     <span class="insight-rule"></span>
     <div class="insight-body">{{BODY}}</div>
   </div>
-
   <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

@@ -1,10 +1,11 @@
 llm:
-  model: "gemma4:31b-cloud"     # llama3:8b or qwen3.5:cloud (Qwen3.5 is much better for prompts, but llama3 is free)     
+  model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b
+
 tts:
   voice: "af_heart"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
   speed: 1.05                  # slightly faster reads punchier on tiktok
   sample_rate: 24000
- 
+
 subs:
   whisper_model: "base"        # tiny | base | small — base is the sweet spot
   language: "en"
@@ -14,7 +15,7 @@ subs:
   highlight_color: "&H0000FFFF&" # yellow on active word
   outline_color: "&H00000000&" # black outline
   back_color: "&H60000000&"    # semi-transparent shadow box
- 
+
 video:
   width: 1080
   height: 1920
@@ -22,43 +23,22 @@ video:
   crf: 22
   preset: "veryfast"
   bgm_volume: 0.10             # BGM at 10% — audible but not fighting voice
- 
-slides:
-  bg_color: [14, 15, 20]
-  # 2-hue lock per video -- accent used on all beats, spike used once at beat 3
-  accent_colors:
-    - [50, 170, 255]           # electric blue -- the video's signature hue
-  spike_color: [255, 120, 60]  # coral spike -- climax beat only
-  font_keyword_size: 200       # hero size (auto-shrinks to fit)
-  font_body_size: 64
-  font_label_size: 22
-  padding: 72
- 
+
 brand:
   name: "SeaBytes"
   accent_color: [255, 200, 50]
- 
+
 paths:
   workspace: "workspace/runs"
-  fonts: "assets/fonts/Space_Grotest"
-  font_file: "SpaceGrotesk-VariableFont_wght.ttf"
   bgm: "assets/bgm"
   prompts: "prompts"
   topics: "data/topics.txt"
- 
-# Renderer selection
-# false = Pillow static PNGs (current, working)
-# true  = Node/Playwright HTML renderer (cinematic, animated)
-#         requires: cd renderer && npm install && npx playwright install chromium
-use_html_renderer: true
- 
+
 # Palette in CSS oklch for HTML renderer
-# (Pillow renderer uses slides.accent_colors + slides.spike_color above)
 palette:
   accent: "oklch(0.78 0.19 230)"   # electric blue
   spike:  "oklch(0.78 0.19 30)"    # coral spike
   bg:     "oklch(0.12 0.02 250)"
   fg:     "oklch(0.97 0.005 250)"
- 
+
 theme: "tech_blue"   # maps to renderer/themes/tech_blue.css
- 

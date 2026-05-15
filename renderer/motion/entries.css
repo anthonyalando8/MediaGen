@@ -1,0 +1,151 @@
+/* ================================================================
+   entries.css  --  Element entry animations
+   ================================================================
+   These are the "punch motion" animations. Every text element
+   enters with intention — not just a fade.
+
+   Design rules:
+   - Keywords: ALWAYS translate + fade. Never just fade.
+   - Body text: softer, slower, arrives after keyword settles.
+   - Rules/lines: scale from 0, fast, after keyword lands.
+   - Labels: slide in from their anchor direction.
+   - Explosive pace: larger displacement, harder easing.
+   - Slow pace:  smaller displacement, longer ease.
+
+   Pace scaling is handled at runtime by inject.js.
+   The keyframes here are calibrated for pace=mid.
+   ================================================================ */
+
+/* ── KEYWORD ENTRIES ─────────────────────────────────────────────
+   Used by hook-kw, insight-kw, climax-kw, cta-kw.
+   Each layout variant has its own direction in the scene files,
+   but here we define EXTRA punch variants that can be swapped in. */
+
+/* Standard upward punch (used for left/center layouts) */
+@keyframes kwPunchUp {
+  0%   { opacity: 0; transform: translateY(44px) scaleY(0.92); }
+  55%  { opacity: 1; transform: translateY(-5px)  scaleY(1.01); }
+  75%  { opacity: 1; transform: translateY(2px)   scaleY(0.99); }
+  100% { opacity: 1; transform: translateY(0px)   scaleY(1.00); }
+}
+
+/* Right-entry punch (right layout) */
+@keyframes kwPunchRight {
+  0%   { opacity: 0; transform: translateX(52px) scaleX(0.94); }
+  55%  { opacity: 1; transform: translateX(-6px)  scaleX(1.01); }
+  75%  { opacity: 1; transform: translateX(2px)   scaleX(0.99); }
+  100% { opacity: 1; transform: translateX(0px)   scaleX(1.00); }
+}
+
+/* Full-bleed slam (full layout, explosive pace) */
+@keyframes kwSlam {
+  0%   { opacity: 0; transform: translateY(72px) scale(0.88); }
+  35%  { opacity: 1; transform: translateY(-10px) scale(1.02); }
+  55%  { opacity: 1; transform: translateY(3px)   scale(0.99); }
+  100% { opacity: 1; transform: translateY(0px)   scale(1.00); }
+}
+
+/* Slow reveal (calm/analytical center layout) */
+@keyframes kwDrift {
+  0%   { opacity: 0; transform: translateY(20px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0px);  filter: blur(0px); }
+}
+
+/* ── BODY TEXT ENTRIES ───────────────────────────────────────────*/
+
+/* Standard — arrives softer after keyword */
+@keyframes bodySlide {
+  0%   { opacity: 0; transform: translateY(18px); }
+  100% { opacity: 1; transform: translateY(0px);  }
+}
+
+/* Center/calm — almost pure fade with tiny lift */
+@keyframes bodyFade {
+  0%   { opacity: 0; transform: translateY(8px);  }
+  100% { opacity: 1; transform: translateY(0px);  }
+}
+
+/* ── RULE / LINE ENTRIES ─────────────────────────────────────────*/
+
+/* Left-anchored rule expands rightward */
+@keyframes ruleExpand {
+  from { transform: scaleX(0); transform-origin: left center; }
+  to   { transform: scaleX(1); transform-origin: left center; }
+}
+
+/* Center rule expands from middle */
+@keyframes ruleExpandCenter {
+  from { transform: scaleX(0); transform-origin: center center; }
+  to   { transform: scaleX(1); transform-origin: center center; }
+}
+
+/* Right-anchored rule — expands leftward */
+@keyframes ruleExpandRight {
+  from { transform: scaleX(0); transform-origin: right center; }
+  to   { transform: scaleX(1); transform-origin: right center; }
+}
+
+/* ── LABEL ENTRIES ───────────────────────────────────────────────*/
+
+@keyframes labelSlideLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes labelSlideRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes labelFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── ACCENT LINE (vertical rule-left pulse) ──────────────────────*/
+@keyframes accentLinePulse {
+  0%,100% { opacity: 1;    height: 40px; }
+  50%     { opacity: 0.55; height: 44px; }
+}
+.rule-left::after {
+  animation: accentLinePulse 2.2s ease-in-out infinite;
+}
+
+/* ── STAGGER UTILITIES ───────────────────────────────────────────
+   Add .stagger-N class to a container for child stagger.
+   Children must have animation-fill-mode: both. */
+.stagger-2 > *:nth-child(1) { animation-delay-extra: 0ms;   }
+.stagger-2 > *:nth-child(2) { animation-delay-extra: 120ms; }
+.stagger-3 > *:nth-child(1) { animation-delay-extra: 0ms;   }
+.stagger-3 > *:nth-child(2) { animation-delay-extra: 100ms; }
+.stagger-3 > *:nth-child(3) { animation-delay-extra: 200ms; }
+
+/* ── TRANSITION FLASH OVERLAY ─────────────────────────────────── */
+/* Applied at beat start for slam_cut / flash transitions. */
+@keyframes transFlash {
+  0%   { opacity: 1; }
+  12%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+.trans-flash::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: white;
+  pointer-events: none;
+  z-index: 999;
+  animation: transFlash 0.22s ease-out forwards;
+}
+
+@keyframes transDipBlack {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+.trans-dip-black::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: black;
+  pointer-events: none;
+  z-index: 999;
+  animation: transDipBlack 0.35s ease-in forwards;
+  animation-delay: calc(var(--beat-dur, 4000ms) - 350ms);
+}

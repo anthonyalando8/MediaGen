@@ -1,0 +1,103 @@
+/* ================================================================
+   camera.css  --  Camera movement system
+   ================================================================
+   Each class animates the .scene element itself.
+   All use transform only (no layout reflow).
+   Capture.js pauses these immediately and seeks frame-by-frame,
+   so the durations here control the speed of the movement arc —
+   longer duration = slower camera movement per frame.
+
+   The camera keyframes are ADDITIVE on top of any existing scene
+   animation (cameraSettle in _base.html for hook/left).
+   ================================================================ */
+
+/* ── STATIC  ──────────────────────────────────────────────────────
+   No movement. Default. Adds a micro-breathing ease for life. */
+.cam-static {
+  animation: camBreath 6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+@keyframes camBreath {
+  from { transform: scale(1.000) translateY(0px); }
+  to   { transform: scale(1.004) translateY(-3px); }
+}
+
+/* ── PUSH IN  ─────────────────────────────────────────────────────
+   Slow creep toward the subject. Authority. */
+.cam-push-in {
+  animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+}
+@keyframes camPushIn {
+  from { transform: scale(1.00) translateY(0px); }
+  to   { transform: scale(1.07) translateY(-18px); }
+}
+
+/* ── PULL OUT  ────────────────────────────────────────────────────
+   Reveal. Starts tight, opens up. Used for truth/flip beats. */
+.cam-pull-out {
+  animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+}
+@keyframes camPullOut {
+  from { transform: scale(1.07) translateY(-14px); }
+  to   { transform: scale(1.00) translateY(0px); }
+}
+
+/* ── HANDHELD  ────────────────────────────────────────────────────
+   Documentary rawness. Irregular micro-wobble, never repeating.
+   Achieved with a multi-point irregular keyframe. */
+.cam-handheld {
+  animation: camHandheld var(--cam-dur, 5s) linear infinite;
+}
+@keyframes camHandheld {
+  0%   { transform: translate(0px,  0px) rotate(0.00deg); }
+  8%   { transform: translate(2px, -3px) rotate(0.08deg); }
+  19%  { transform: translate(-3px, 1px) rotate(-0.10deg); }
+  31%  { transform: translate(1px,  4px) rotate(0.06deg); }
+  44%  { transform: translate(-2px,-2px) rotate(-0.07deg); }
+  57%  { transform: translate(3px, -1px) rotate(0.09deg); }
+  68%  { transform: translate(-1px, 3px) rotate(-0.05deg); }
+  79%  { transform: translate(2px,  1px) rotate(0.07deg); }
+  91%  { transform: translate(-2px,-3px) rotate(-0.08deg); }
+  100% { transform: translate(0px,  0px) rotate(0.00deg); }
+}
+
+/* ── SNAP ZOOM  ───────────────────────────────────────────────────
+   Rapid punch-in on the keyword reveal. Overshoot + settle. */
+.cam-snap-zoom {
+  animation: camSnapZoom var(--cam-dur, 3.5s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes camSnapZoom {
+  0%   { transform: scale(1.00); }
+  14%  { transform: scale(1.12); }  /* punch */
+  28%  { transform: scale(1.055); } /* overshoot */
+  55%  { transform: scale(1.07); }  /* settle */
+  100% { transform: scale(1.07); }
+}
+
+/* ── MICRO SHAKE  ────────────────────────────────────────────────
+   Controlled aggression. Used for high-impact statements. */
+.cam-micro-shake {
+  animation: camMicroShake var(--cam-dur, 5s) steps(1) infinite,
+             camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+}
+@keyframes camMicroShake {
+  0%,100% { margin-left: 0;    }
+  10%     { margin-left: -3px; }
+  20%     { margin-left:  2px; }
+  30%     { margin-left: -2px; }
+  40%     { margin-left:  3px; }
+  50%     { margin-left: -1px; }
+  60%     { margin-left:  2px; }
+  70%     { margin-left: -3px; }
+  80%     { margin-left:  1px; }
+  90%     { margin-left: -2px; }
+}
+
+/* ── TILT UP  ────────────────────────────────────────────────────
+   Camera rises slowly — reveals content as if uncovering truth. */
+.cam-tilt-up {
+  animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) forwards;
+}
+@keyframes camTiltUp {
+  from { transform: translateY(28px) scale(1.03); }
+  to   { transform: translateY(0px)  scale(1.00); }
+}
