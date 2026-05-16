@@ -1,0 +1,246 @@
+<!-- scenes/flip.html -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
+<!--
+  Flip: the beat that reframes everything the viewer thought they knew.
+  Visual language: a "before" label struck through at the top creates
+  the setup, then the keyword arrives below as the reframe. The diagonal
+  strikethrough is pure CSS — no extra content tokens needed.
+  The body text below seals the reframe.
+
+  The struck label reads "NOT THIS" — always constant, a visual shorthand
+  the viewer understands instantly. The KEYWORD is the "but this".
+
+  left   → flip block upper-left, body lower
+  center → flip block centered, symmetric
+  right  → right-anchored flip
+  full   → maximum scale, strikethrough at hero size
+-->
+
+<style>
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .flip-before-wrap {
+  top: calc(var(--safe-top) + 40px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 80px);
+}
+.scene[data-layout="left"] .flip-kw-wrap {
+  top: calc(var(--safe-top) + 280px);
+  left: calc(var(--left) + 20px);
+  right: 0;
+}
+.scene[data-layout="left"] .flip-kw {
+  animation: flipReveal 0.80s cubic-bezier(0.16,1,0.3,1) 0.80s forwards;
+}
+.scene[data-layout="left"] .flip-body {
+  top: calc(var(--safe-top) + 760px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 80px);
+}
+
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .flip-before-wrap {
+  top: calc(var(--safe-top) + 80px);
+  left: var(--left);
+  right: var(--right);
+  text-align: center;
+}
+.scene[data-layout="center"] .flip-kw-wrap {
+  top: calc(var(--safe-top) + 360px);
+  left: var(--left);
+  right: var(--right);
+  text-align: center;
+}
+.scene[data-layout="center"] .flip-before-label {
+  text-align: center;
+}
+.scene[data-layout="center"] .flip-kw {
+  letter-spacing: -0.02em;
+  animation: flipReveal 0.90s cubic-bezier(0.16,1,0.3,1) 0.88s forwards;
+}
+.scene[data-layout="center"] .flip-rule {
+  margin-left: auto; margin-right: auto;
+  animation: ruleRevealCenter 0.35s cubic-bezier(0.16,1,0.3,1) 1.60s forwards;
+}
+.scene[data-layout="center"] .flip-body {
+  top: calc(var(--safe-top) + 840px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .flip-before-wrap {
+  top: calc(var(--safe-top) + 40px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .flip-kw-wrap {
+  top: calc(var(--safe-top) + 280px);
+  left: 0;
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .flip-kw {
+  animation: flipRevealRight 0.80s cubic-bezier(0.16,1,0.3,1) 0.80s forwards;
+}
+.scene[data-layout="right"] .flip-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .flip-body {
+  top: calc(var(--safe-top) + 760px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .flip-before-wrap {
+  top: calc(var(--safe-top) + 20px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .flip-before-label {
+  font-size: calc(var(--sz-stat) * 0.7);
+}
+.scene[data-layout="full"] .flip-kw-wrap {
+  top: calc(var(--safe-top) + 300px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .flip-kw {
+  font-size: calc(var(--sz-stat) * 1.10);
+  line-height: 0.90;
+  animation: flipRevealFull 0.70s cubic-bezier(0.16,1,0.3,1) 0.70s forwards;
+}
+.scene[data-layout="full"] .flip-body {
+  top: calc(var(--safe-top) + 940px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
+  font-size: calc(var(--sz-body) * 1.05);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+
+/* The "before" block — what gets rejected */
+.flip-before-wrap {
+  position: absolute;
+  z-index: 4;
+}
+.flip-before-label {
+  font-size: var(--sz-stat);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+  color: var(--fg-3);              /* muted — this is the wrong answer */
+  text-transform: uppercase;
+  word-break: break-word;
+  position: relative;
+  opacity: 0;
+  animation: beforeReveal 0.50s cubic-bezier(0.16,1,0.3,1) 0.12s forwards;
+}
+/* Strikethrough rendered as an absolutely positioned bar.
+   Grows left-to-right after the label appears. */
+.flip-before-label::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0; right: 0;
+  height: 3px;
+  background: oklch(from var(--acc) 0.55 0.12 h / .60);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.38s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+}
+/* Small arrow bridge between "before" and keyword */
+.flip-arrow {
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: var(--acc);
+  text-transform: uppercase;
+  margin-top: 18px;
+  opacity: 0;
+  animation: labelReveal 0.40s cubic-bezier(0.16,1,0.3,1) 0.62s forwards;
+}
+
+@keyframes beforeReveal {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0px);  }
+}
+
+/* The "after" keyword — the reframe, arrives with punch */
+.flip-kw-wrap {
+  position: absolute;
+  z-index: 4;
+}
+.flip-kw {
+  font-size: var(--sz-hero);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.88;
+  color: var(--fg);
+  text-transform: uppercase;
+  word-break: break-word;
+  opacity: 0;
+}
+/* Upward punch with colour flash — the reframe hits hard */
+@keyframes flipReveal {
+  0%   { opacity: 0; transform: translateY(40px) scaleY(0.92); }
+  45%  { opacity: 1; transform: translateY(-7px)  scaleY(1.02); }
+  68%  { opacity: 1; transform: translateY(2px)   scaleY(0.99); }
+  100% { opacity: 1; transform: translateY(0px)   scaleY(1.00); }
+}
+@keyframes flipRevealRight {
+  0%   { opacity: 0; transform: translateX(44px); }
+  50%  { opacity: 1; transform: translateX(-6px);  }
+  100% { opacity: 1; transform: translateX(0px);   }
+}
+@keyframes flipRevealFull {
+  0%   { opacity: 0; transform: translateY(64px) scale(0.90); }
+  40%  { opacity: 1; transform: translateY(-10px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0px)   scale(1.00); }
+}
+
+/* Accent bar under the keyword — shorter, punchy */
+.flip-rule {
+  display: block;
+  margin-top: 22px;
+  width: 64px;
+  height: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.32s cubic-bezier(0.16,1,0.3,1) 1.50s forwards;
+}
+
+.flip-body {
+  position: absolute;
+  z-index: 4;
+  font-size: var(--sz-body);
+  font-weight: 400;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+  color: var(--fg-2);
+  opacity: 0;
+  animation: bodyReveal 0.65s cubic-bezier(0.16,1,0.3,1) 1.55s forwards;
+}
+</style>
+
+<div class="scene flip-scene" data-layout="{{LAYOUT}}">
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
+  <div class="flip-before-wrap">
+    <div class="flip-before-label">NOT THIS</div>
+    <div class="flip-arrow">↓ actually</div>
+  </div>
+  <div class="flip-kw-wrap">
+    <div class="flip-kw">{{KEYWORD}}</div>
+    <span class="flip-rule"></span>
+  </div>
+  <div class="flip-body">{{BODY}}</div>
+  <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette"></div>
+</div>

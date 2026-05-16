@@ -1,0 +1,222 @@
+<!-- scenes/payoff.html -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
+<!--
+  Payoff: the earned resolution beat. The tension broke, the truth landed —
+  now everything breathes.
+  Visual language: keyword is set at a medium size with generous vertical
+  whitespace above and below. A long fading rule precedes it like a breath.
+  No glow pressure from below. The ambient light is softer, emanating from
+  the top — a sense of opening up.
+  Body text sits lower, unhurried.
+
+  left   → left-anchored with open right whitespace, slow drift in
+  center → perfectly centered — closure, resolution
+  right  → right-anchored, space opens to the left
+  full   → full-width but with generous line-height and letter-spacing
+-->
+
+<style>
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .payoff-light {
+  background: radial-gradient(
+    ellipse 75% 55% at 20% 8%,
+    oklch(from var(--acc) 0.24 0.05 h / .07), transparent 60%
+  );
+}
+.scene[data-layout="left"] .payoff-content {
+  top: calc(var(--safe-top) + 200px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 200px);  /* deliberately open right side */
+}
+.scene[data-layout="left"] .payoff-kw {
+  animation: payoffDrift 1.10s cubic-bezier(0.16,1,0.3,1) 0.50s forwards;
+}
+.scene[data-layout="left"] .payoff-body {
+  top: calc(var(--safe-top) + 820px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 100px);
+}
+
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .payoff-light {
+  background: radial-gradient(
+    ellipse 65% 50% at 50% 6%,
+    oklch(from var(--acc) 0.22 0.04 h / .07), transparent 60%
+  );
+}
+.scene[data-layout="center"] .payoff-content {
+  top: calc(var(--safe-top) + 240px);
+  left: calc(var(--left) + 40px);
+  right: calc(var(--right) + 40px);
+  text-align: center;
+}
+.scene[data-layout="center"] .payoff-pre-rule {
+  margin-left: auto; margin-right: auto;
+}
+.scene[data-layout="center"] .payoff-kw {
+  font-weight: 500;            /* lighter weight — relief, not declaration */
+  letter-spacing: -0.02em;
+  animation: payoffDrift 1.20s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+}
+.scene[data-layout="center"] .payoff-rule {
+  margin-left: auto; margin-right: auto;
+  animation: ruleRevealCenter 0.40s cubic-bezier(0.16,1,0.3,1) 1.60s forwards;
+}
+.scene[data-layout="center"] .payoff-body {
+  top: calc(var(--safe-top) + 880px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .payoff-light {
+  background: radial-gradient(
+    ellipse 70% 50% at 82% 8%,
+    oklch(from var(--acc) 0.22 0.04 h / .07), transparent 60%
+  );
+}
+.scene[data-layout="right"] .payoff-content {
+  top: calc(var(--safe-top) + 200px);
+  left: calc(var(--left) + 200px);   /* open left side */
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .payoff-pre-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .payoff-kw {
+  animation: payoffDriftRight 1.10s cubic-bezier(0.16,1,0.3,1) 0.50s forwards;
+}
+.scene[data-layout="right"] .payoff-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .payoff-body {
+  top: calc(var(--safe-top) + 820px);
+  left: calc(var(--left) + 100px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .payoff-light {
+  background: radial-gradient(
+    ellipse 90% 55% at 50% 5%,
+    oklch(from var(--acc) 0.24 0.05 h / .08), transparent 60%
+  );
+}
+.scene[data-layout="full"] .payoff-content {
+  top: calc(var(--safe-top) + 160px);
+  left: var(--left);
+  right: calc(var(--right) + 20px);
+}
+.scene[data-layout="full"] .payoff-kw {
+  font-size: calc(var(--sz-stat) * 1.10);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  animation: payoffDrift 1.0s cubic-bezier(0.16,1,0.3,1) 0.40s forwards;
+}
+.scene[data-layout="full"] .payoff-body {
+  top: calc(var(--safe-top) + 900px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
+  font-size: calc(var(--sz-body) * 1.05);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+.payoff-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  animation: payoffLightIn 2.5s ease-out 0.10s forwards;
+}
+@keyframes payoffLightIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.payoff-content {
+  position: absolute;
+  z-index: 4;
+}
+
+/* Short pre-rule — breath before the keyword */
+.payoff-pre-rule {
+  display: block;
+  margin-bottom: 32px;
+  width: 36px;
+  height: 1px;
+  background: oklch(from var(--acc) 0.7 0.06 h / .45);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.45s cubic-bezier(0.16,1,0.3,1) 0.18s forwards;
+}
+
+.payoff-kw {
+  font-size: var(--sz-hero);
+  font-weight: 700;
+  letter-spacing: -0.048em;
+  line-height: 0.90;
+  color: var(--fg);
+  text-transform: uppercase;
+  word-break: break-word;
+  opacity: 0;
+}
+/* Soft drift up — no bounce, no scale. Earned arrival. */
+@keyframes payoffDrift {
+  0%   { opacity: 0; transform: translateY(22px); filter: blur(3px); }
+  100% { opacity: 1; transform: translateY(0px);  filter: blur(0px); }
+}
+@keyframes payoffDriftRight {
+  0%   { opacity: 0; transform: translateX(-22px); filter: blur(3px); }
+  100% { opacity: 1; transform: translateX(0px);   filter: blur(0px); }
+}
+
+/* Longer rule post-keyword — wider than insight, tapers to transparent */
+.payoff-rule {
+  display: block;
+  margin-top: 28px;
+  width: min(520px, calc(1080px - var(--left) * 2));
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    oklch(from var(--acc) 0.7 0.08 h / .55),
+    oklch(from var(--acc) 0.5 0.04 h / .15) 55%,
+    transparent
+  );
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.55s cubic-bezier(0.16,1,0.3,1) 1.50s forwards;
+}
+
+.payoff-body {
+  position: absolute;
+  z-index: 4;
+  font-size: var(--sz-body);
+  font-weight: 400;
+  line-height: 1.38;              /* slightly more open than insight */
+  letter-spacing: -0.005em;
+  color: var(--fg-2);
+  opacity: 0;
+  animation: bodyReveal 0.75s cubic-bezier(0.16,1,0.3,1) 1.65s forwards;
+}
+</style>
+
+<div class="scene payoff-scene" data-layout="{{LAYOUT}}">
+  <div class="payoff-light"></div>
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
+  <div class="payoff-content">
+    <span class="payoff-pre-rule"></span>
+    <div class="payoff-kw">{{KEYWORD}}</div>
+    <span class="payoff-rule"></span>
+  </div>
+  <div class="payoff-body">{{BODY}}</div>
+  <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette"></div>
+</div>

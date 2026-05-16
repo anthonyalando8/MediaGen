@@ -1,0 +1,32 @@
+/* documentary_gritty  —  raw investigative, newsprint realism
+   ================================================================
+   Used for: exposés, investigative takes, whistleblower energy,
+   behind-the-scenes reality, anything that feels "leaked" or
+   uncovered rather than packaged.
+   Feel: Vice News, leaked footage, grainy CCTV still, redacted doc.
+
+   --acc is a dirty warm white — like newsprint under fluorescent
+        light. Not elegant. Not aspirational. Just the truth under
+        harsh light. It reads as "this is what it actually looks like".
+   --spike is a warning amber — a redaction marker, a sticky note,
+        something taped over the original.
+   --bg is a very cold near-black — the grey of a concrete wall.
+        Not warm. Institutional.
+   --fg is almost pure white — overexposed, not styled.
+   --fg-2 is a flat mid-grey — no warmth, no digital cool.
+        Newspaper ink on cheap stock.
+
+   Pairs with: music_mood=dark | tense | suspense
+               camera_style=handheld
+               voice_style=documentary | aggressive
+               visual_intent=documentary | confrontational | chaotic
+   ================================================================ */
+
+:root {
+  --bg:    #080808;           /* cold institutional black */
+  --fg:    #f4f2ef;           /* overexposed near-white */
+  --fg-2:  #787878;           /* flat mid-grey — newspaper ink */
+  --fg-3:  #202020;           /* cold structural */
+  --acc:   #d8d0c0;           /* dirty warm white — newsprint */
+  --spike: #e8a020;           /* warning amber — redaction marker */
+}

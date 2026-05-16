@@ -1,0 +1,220 @@
+<!-- scenes/tension.html -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
+<!--
+  Tension: the beat that creates unease before the truth lands.
+  Visual language: compressed keyword, bottom-loaded body, dark glow
+  rising from below, slow deliberate entry. Everything feels tight.
+
+  left   → keyword low on page, body crowded beneath it
+  center → keyword centered, heavier weight, symmetric bottom glow
+  right  → keyword right-heavy, glow from right edge
+  full   → keyword massive and low, almost clipping bottom safe zone
+-->
+
+<style>
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .tension-glow {
+  background: radial-gradient(
+    ellipse 90% 55% at 15% 85%,
+    oklch(from var(--acc) 0.20 0.06 h / .10), transparent 65%
+  );
+}
+.scene[data-layout="left"] .tension-content {
+  top: calc(var(--safe-top) + 380px);   /* pushed lower than insight */
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 80px);
+}
+.scene[data-layout="left"] .tension-kw {
+  animation: tensionReveal 1.10s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+}
+.scene[data-layout="left"] .tension-body {
+  top: calc(var(--safe-top) + 980px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 60px);
+}
+
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .tension-glow {
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 90%,
+    oklch(from var(--acc) 0.20 0.06 h / .12), transparent 60%
+  );
+}
+.scene[data-layout="center"] .tension-content {
+  top: calc(var(--safe-top) + 420px);
+  left: calc(var(--left) + 40px);
+  right: calc(var(--right) + 40px);
+  text-align: center;
+}
+.scene[data-layout="center"] .tension-kw {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  animation: tensionReveal 1.20s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
+}
+.scene[data-layout="center"] .tension-rule {
+  margin-left: auto; margin-right: auto;
+  animation: ruleRevealCenter 0.40s cubic-bezier(0.16,1,0.3,1) 1.55s forwards;
+}
+.scene[data-layout="center"] .tension-body {
+  top: calc(var(--safe-top) + 1020px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .tension-glow {
+  background: radial-gradient(
+    ellipse 75% 55% at 88% 80%,
+    oklch(from var(--acc) 0.20 0.06 h / .10), transparent 65%
+  );
+}
+.scene[data-layout="right"] .tension-content {
+  top: calc(var(--safe-top) + 380px);
+  left: calc(var(--left) + 80px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .tension-kw {
+  animation: tensionRevealRight 1.10s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+}
+.scene[data-layout="right"] .tension-rule {
+  margin-left: auto;
+  transform-origin: right center;
+}
+.scene[data-layout="right"] .tension-body {
+  top: calc(var(--safe-top) + 980px);
+  left: calc(var(--left) + 80px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .tension-glow {
+  background: radial-gradient(
+    ellipse 100% 60% at 50% 95%,
+    oklch(from var(--acc) 0.22 0.07 h / .14), transparent 60%
+  );
+}
+.scene[data-layout="full"] .tension-content {
+  top: calc(var(--safe-top) + 500px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .tension-kw {
+  font-size: calc(var(--sz-stat) * 1.05);
+  line-height: 0.86;
+  animation: tensionRevealFull 0.90s cubic-bezier(0.16,1,0.3,1) 0.45s forwards;
+}
+.scene[data-layout="full"] .tension-body {
+  top: calc(var(--safe-top) + 1080px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
+  font-size: calc(var(--sz-body) * 1.05);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+.tension-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  /* slow, deliberate fade in — the dread builds */
+  opacity: 0;
+  animation: tensionGlowIn 2.0s ease-out 0.20s forwards;
+}
+@keyframes tensionGlowIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.tension-content {
+  position: absolute;
+  z-index: 4;
+}
+.tension-kw {
+  font-size: var(--sz-stat);
+  font-weight: 700;
+  letter-spacing: -0.055em;   /* extra compressed — tighter than insight */
+  line-height: 0.88;
+  color: var(--fg);
+  text-transform: uppercase;
+  word-break: break-word;
+  opacity: 0;
+}
+/* Tension keyword creeps up from below, slower than insight */
+@keyframes tensionReveal {
+  0%   { opacity: 0; transform: translateY(36px) scaleY(0.94); }
+  60%  { opacity: 1; transform: translateY(-4px)  scaleY(1.01); }
+  80%  { opacity: 1; transform: translateY(1px)   scaleY(0.99); }
+  100% { opacity: 1; transform: translateY(0px)   scaleY(1.00); }
+}
+@keyframes tensionRevealRight {
+  0%   { opacity: 0; transform: translateX(38px) scaleX(0.94); }
+  60%  { opacity: 1; transform: translateX(-4px)  scaleX(1.01); }
+  100% { opacity: 1; transform: translateX(0px)   scaleX(1.00); }
+}
+@keyframes tensionRevealFull {
+  0%   { opacity: 0; transform: translateY(52px) scale(0.92); }
+  55%  { opacity: 1; transform: translateY(-6px)  scale(1.01); }
+  100% { opacity: 1; transform: translateY(0px)   scale(1.00); }
+}
+
+.tension-rule {
+  display: block;
+  margin-top: 26px;
+  width: 40px;            /* shorter than insight — terse, clipped */
+  height: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.30s cubic-bezier(0.16,1,0.3,1) 1.40s forwards;
+}
+
+.tension-body {
+  position: absolute;
+  z-index: 4;
+  font-size: var(--sz-body);
+  font-weight: 400;
+  line-height: 1.30;
+  letter-spacing: -0.01em;
+  color: var(--fg-2);
+  opacity: 0;
+  animation: bodyReveal 0.65s cubic-bezier(0.16,1,0.3,1) 1.50s forwards;
+}
+
+/* Thin horizontal stress line across top of safe zone */
+.tension-stress {
+  position: absolute;
+  top: var(--safe-top);
+  left: var(--left);
+  right: var(--right);
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    oklch(from var(--acc) 0.6 0.08 h / .18) 30%,
+    oklch(from var(--acc) 0.6 0.08 h / .18) 70%,
+    transparent
+  );
+  z-index: 3;
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.80s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
+}
+</style>
+
+<div class="scene tension-scene" data-layout="{{LAYOUT}}">
+  <div class="tension-glow"></div>
+  <div class="tension-stress"></div>
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
+  <div class="tension-content">
+    <div class="tension-kw">{{KEYWORD}}</div>
+    <span class="tension-rule"></span>
+  </div>
+  <div class="tension-body">{{BODY}}</div>
+  <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette"></div>
+</div>

@@ -1,0 +1,200 @@
+<!-- scenes/truth.html -->
+<!-- Variables: {{KEYWORD}}, {{BODY}}, {{HUD_TAG}}, {{BRAND}}, {{LAYOUT}} -->
+<!--
+  Truth: the beat that names the thing plainly.
+  Visual language: eyebrow label above keyword, long rule underneath,
+  body positioned at upper-third. Everything is high on the page —
+  the truth arrives fast, not revealed slowly.
+  No ambient glow. Clean, cold, high contrast.
+
+  left   → eyebrow + keyword upper-left, body below rule
+  center → eyebrow centered, keyword wide, body centered
+  right  → right-anchored, rule expands leftward
+  full   → maximum size, eyebrow drops to small label above bleed keyword
+-->
+
+<style>
+/* ── LEFT ─────────────────────────────────────────────── */
+.scene[data-layout="left"] .truth-content {
+  top: calc(var(--safe-top) + 40px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 60px);
+}
+.scene[data-layout="left"] .truth-kw {
+  animation: truthSlam 0.65s cubic-bezier(0.16,1,0.3,1) 0.42s forwards;
+}
+.scene[data-layout="left"] .truth-rule {
+  width: min(560px, calc(1080px - var(--left) * 2 - 80px));
+}
+.scene[data-layout="left"] .truth-body {
+  top: calc(var(--safe-top) + 640px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 80px);
+}
+
+/* ── CENTER ───────────────────────────────────────────── */
+.scene[data-layout="center"] .truth-content {
+  top: calc(var(--safe-top) + 120px);
+  left: var(--left);
+  right: var(--right);
+  text-align: center;
+}
+.scene[data-layout="center"] .truth-eyebrow {
+  text-align: center;
+}
+.scene[data-layout="center"] .truth-kw {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  animation: truthSlam 0.70s cubic-bezier(0.16,1,0.3,1) 0.45s forwards;
+}
+.scene[data-layout="center"] .truth-rule {
+  margin-left: auto; margin-right: auto;
+  width: min(480px, 80%);
+  animation: ruleRevealCenter 0.38s cubic-bezier(0.16,1,0.3,1) 1.05s forwards;
+}
+.scene[data-layout="center"] .truth-body {
+  top: calc(var(--safe-top) + 680px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 60px);
+  text-align: center;
+}
+
+/* ── RIGHT ────────────────────────────────────────────── */
+.scene[data-layout="right"] .truth-content {
+  top: calc(var(--safe-top) + 40px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+.scene[data-layout="right"] .truth-eyebrow {
+  text-align: right;
+}
+.scene[data-layout="right"] .truth-kw {
+  animation: truthSlamRight 0.65s cubic-bezier(0.16,1,0.3,1) 0.42s forwards;
+}
+.scene[data-layout="right"] .truth-rule {
+  margin-left: auto;
+  width: min(560px, calc(1080px - var(--right) * 2 - 80px));
+  transform-origin: right center;
+  animation: ruleReveal 0.38s cubic-bezier(0.16,1,0.3,1) 1.05s forwards;
+}
+.scene[data-layout="right"] .truth-body {
+  top: calc(var(--safe-top) + 640px);
+  left: calc(var(--left) + 60px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
+
+/* ── FULL ─────────────────────────────────────────────── */
+.scene[data-layout="full"] .truth-content {
+  top: calc(var(--safe-top) + 20px);
+  left: var(--left);
+  right: 0;
+}
+.scene[data-layout="full"] .truth-eyebrow {
+  font-size: calc(var(--sz-label) * 0.9);
+  letter-spacing: 0.22em;
+}
+.scene[data-layout="full"] .truth-kw {
+  font-size: calc(var(--sz-stat) * 1.10);
+  line-height: 0.82;
+  animation: truthSlamFull 0.58s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
+}
+.scene[data-layout="full"] .truth-rule {
+  width: min(700px, 90%);
+  height: 3px;
+}
+.scene[data-layout="full"] .truth-body {
+  top: calc(var(--safe-top) + 900px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
+  font-size: calc(var(--sz-body) * 1.05);
+}
+
+/* ── SHARED ───────────────────────────────────────────── */
+.truth-content {
+  position: absolute;
+  z-index: 4;
+}
+
+/* Eyebrow — the label that names what follows */
+.truth-eyebrow {
+  font-size: var(--sz-label);
+  font-weight: 500;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--acc);
+  margin-bottom: 18px;
+  opacity: 0;
+  animation: labelReveal 0.45s cubic-bezier(0.16,1,0.3,1) 0.10s forwards;
+}
+
+/* Keyword — arrives fast, no warmth */
+.truth-kw {
+  font-size: var(--sz-hero);
+  font-weight: 700;
+  letter-spacing: -0.055em;
+  line-height: 0.88;
+  color: var(--fg);
+  text-transform: uppercase;
+  word-break: break-word;
+  opacity: 0;
+}
+/* Hard cut upward — no scaleY softening, this is a statement */
+@keyframes truthSlam {
+  0%   { opacity: 0; transform: translateY(32px); }
+  100% { opacity: 1; transform: translateY(0px);  }
+}
+@keyframes truthSlamRight {
+  0%   { opacity: 0; transform: translateX(36px); }
+  100% { opacity: 1; transform: translateX(0px);  }
+}
+@keyframes truthSlamFull {
+  0%   { opacity: 0; transform: translateY(56px) scale(0.96); }
+  65%  { opacity: 1; transform: translateY(-6px)  scale(1.01); }
+  100% { opacity: 1; transform: translateY(0px)   scale(1.00); }
+}
+
+/* Long rule — authority, not decoration */
+.truth-rule {
+  display: block;
+  margin-top: 24px;
+  width: min(560px, calc(1080px - var(--left) * 2));
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    var(--acc),
+    oklch(from var(--acc) 0.5 0.04 h / .30) 70%,
+    transparent
+  );
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: ruleReveal 0.38s cubic-bezier(0.16,1,0.3,1) 1.00s forwards;
+}
+
+.truth-body {
+  position: absolute;
+  z-index: 4;
+  font-size: var(--sz-body);
+  font-weight: 400;
+  line-height: 1.32;
+  letter-spacing: -0.01em;
+  color: var(--fg-2);
+  opacity: 0;
+  animation: bodyReveal 0.60s cubic-bezier(0.16,1,0.3,1) 1.15s forwards;
+}
+</style>
+
+<div class="scene truth-scene" data-layout="{{LAYOUT}}">
+  <div class="rule-left"></div>
+  <div class="scene-label">{{HUD_TAG}}</div>
+  <div class="truth-content">
+    <div class="truth-eyebrow">{{HUD_TAG}}</div>
+    <div class="truth-kw">{{KEYWORD}}</div>
+    <span class="truth-rule"></span>
+  </div>
+  <div class="truth-body">{{BODY}}</div>
+  <div class="brand">{{BRAND}}</div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette"></div>
+</div>

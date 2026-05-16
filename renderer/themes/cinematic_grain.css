@@ -1,0 +1,31 @@
+/* cinematic_grain  —  filmic, desaturated, old stock
+   ================================================================
+   Used for: storytelling, cultural critique, nostalgia, human
+   interest, anything that needs cinematic weight over tech polish.
+   Feel: 35mm projection, Criterion Collection, Mubi.
+
+   --acc is a desaturated sienna — warm but aged, not vivid.
+        The colour of a title card on old stock. Not amber
+        (too energetic), not gold (too wealthy). Specifically
+        the warmth of celluloid.
+   --spike is a faded teal — the complementary of sienna.
+        Low saturation. The climax doesn't erupt — it settles.
+   --bg has a very faint warm grey instead of pure black,
+        simulating the base density of developed film.
+   --fg is warm and slightly off-white — like a subtitled frame.
+   --fg-2 is warm stone — recedes without feeling digital.
+
+   Pairs with: music_mood=cinematic | emotional | ambient
+               camera_style=handheld | static
+               voice_style=storyteller | documentary
+               visual_intent=cinematic | documentary | mysterious
+   ================================================================ */
+
+:root {
+  --bg:    #0b0a08;           /* near-black, slight warm base density */
+  --fg:    #ece8e0;           /* warm off-white — subtitled frame */
+  --fg-2:  #807870;           /* warm stone secondary */
+  --fg-3:  #282420;           /* warm structural — aged paper edge */
+  --acc:   #b88850;           /* desaturated sienna — celluloid warmth */
+  --spike: #507880;           /* faded teal — quiet climax complement */
+}

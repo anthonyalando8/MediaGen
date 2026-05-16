@@ -1,0 +1,26 @@
+/* tech_hud  —  digital HUD, data systems, analytical precision
+   ================================================================
+   Used for: finance, data, systems, tech infrastructure, AI, science.
+   Feel: Bloomberg terminal, satellite telemetry, neural net dashboard.
+
+   --acc is a cool cyan — sterile, precise, machine-readable.
+        Not the same blue as tech_blue. Cyan reads as "data" not
+        "startup". Cooler temperature. Higher perceived precision.
+   --spike is a sharp yellow-green — alert state, anomaly detected.
+        Used once: makes the climax feel like a system alarm.
+   --bg has a blue undertone — the blackness of a monitor off-state.
+   --fg-2 pulled cyan-ward to match the terminal aesthetic.
+
+   Pairs with: music_mood=tense | suspense | minimal
+               camera_style=static
+               visual_intent=clean | minimal | documentary
+   ================================================================ */
+
+:root {
+  --bg:    #050709;           /* blue-black — monitor off-state */
+  --fg:    #e8f0f4;           /* cool white — high-contrast on blue-black */
+  --fg-2:  #6a8090;           /* muted cyan-grey secondary */
+  --fg-3:  #182028;           /* dark cyan structural lines */
+  --acc:   #28d4e8;           /* cool cyan — data terminal */
+  --spike: #b8f040;           /* yellow-green alert — anomaly/climax */
+}

@@ -1,0 +1,25 @@
+/* dark_kinetic  —  aggressive motion energy
+   ================================================================
+   Used for: intense psychology, dark truths, shocking facts,
+   high-stakes confrontation.
+   Feel: nightclub at 2am, fight or flight, adrenaline.
+
+   --acc is a hot red-orange — confrontational, not just warm.
+   --spike flips to near-white for the climax: an overexposure hit.
+   --bg is the deepest black in the system.
+   --fg-2 pulled cooler than default to keep body text readable
+         against the warm accent without competing.
+
+   Pairs with: music_mood=aggressive | dark | tense
+               camera_style=dynamic
+               visual_intent=confrontational | chaotic | aggressive
+   ================================================================ */
+
+:root {
+  --bg:    #030304;           /* near-total black — maximum contrast */
+  --fg:    #f2f0ee;           /* slightly warm white — not clinical */
+  --fg-2:  #7a7876;           /* cooler secondary — recedes from acc */
+  --fg-3:  #1e1c1c;           /* structural lines, barely visible */
+  --acc:   #f03a2e;           /* hot red-orange — confrontational */
+  --spike: #f5f0e8;           /* near-white overexposure for climax */
+}

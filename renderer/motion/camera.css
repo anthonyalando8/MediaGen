@@ -1,103 +1,114 @@
 /* ================================================================
    camera.css  --  Camera movement system
    ================================================================
-   Each class animates the .scene element itself.
-   All use transform only (no layout reflow).
-   Capture.js pauses these immediately and seeks frame-by-frame,
-   so the durations here control the speed of the movement arc —
-   longer duration = slower camera movement per frame.
+   IMPORTANT: Camera animations apply to .scene via a SECONDARY
+   animation property. They must NOT override the scene's own
+   animation (e.g. hook's cameraSettle). We use animation-name
+   addition via a wrapper class on the scene element.
 
-   The camera keyframes are ADDITIVE on top of any existing scene
-   animation (cameraSettle in _base.html for hook/left).
+   capture.js pauses ALL animations and seeks frame-by-frame.
+   Every animation here must be deterministic at any seek time:
+   - NO infinite alternating (alternate direction is non-deterministic
+     when seeked — same t_ms can map to different positions depending
+     on iteration).
+   - Use `forwards` fill mode or single-pass `linear` for infinite.
+   - cam-static must produce exactly 0 transform at t=0 (no jitter).
+
+   Camera classes are added by inject.js to .scene AFTER the scene's
+   own animation is already declared. CSS animation shorthand REPLACES
+   the existing animation, so we use the multi-animation syntax:
+   the scene's keyframe + the camera keyframe, combined.
+
+   Because we can't know the scene's existing animation from here,
+   camera moves are applied via a CSS custom property --cam-anim
+   that each scene can opt into. Scenes that have their own camera
+   logic (hook) ignore it.
    ================================================================ */
 
-/* ── STATIC  ──────────────────────────────────────────────────────
-   No movement. Default. Adds a micro-breathing ease for life. */
+/* ── STATIC — intentionally no transform. Zero jitter for capture. ── */
 .cam-static {
-  animation: camBreath 6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
-}
-@keyframes camBreath {
-  from { transform: scale(1.000) translateY(0px); }
-  to   { transform: scale(1.004) translateY(-3px); }
+  /* Deliberately empty — static means the scene does not move.
+     No camBreath: infinite/alternate is non-deterministic under seek. */
 }
 
-/* ── PUSH IN  ─────────────────────────────────────────────────────
-   Slow creep toward the subject. Authority. */
+/* ── PUSH IN — slow creep forward ─────────────────────────────── */
 .cam-push-in {
-  animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+  animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
 @keyframes camPushIn {
-  from { transform: scale(1.00) translateY(0px); }
-  to   { transform: scale(1.07) translateY(-18px); }
+  from { transform: scale(1.000) translateY(0px);  }
+  to   { transform: scale(1.060) translateY(-14px); }
 }
 
-/* ── PULL OUT  ────────────────────────────────────────────────────
-   Reveal. Starts tight, opens up. Used for truth/flip beats. */
+/* ── PULL OUT — starts tight, opens up ────────────────────────── */
 .cam-pull-out {
-  animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+  animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
 @keyframes camPullOut {
-  from { transform: scale(1.07) translateY(-14px); }
-  to   { transform: scale(1.00) translateY(0px); }
+  from { transform: scale(1.060) translateY(-14px); }
+  to   { transform: scale(1.000) translateY(0px);   }
 }
 
-/* ── HANDHELD  ────────────────────────────────────────────────────
-   Documentary rawness. Irregular micro-wobble, never repeating.
-   Achieved with a multi-point irregular keyframe. */
+/* ── HANDHELD — irregular wobble, deterministic under seek ─────── */
+/* Uses a one-pass forwards animation (not infinite) so every frame
+   maps to a unique position. Duration = beat duration via --cam-dur. */
 .cam-handheld {
-  animation: camHandheld var(--cam-dur, 5s) linear infinite;
+  animation: camHandheld var(--cam-dur, 5s) linear forwards;
 }
 @keyframes camHandheld {
-  0%   { transform: translate(0px,  0px) rotate(0.00deg); }
-  8%   { transform: translate(2px, -3px) rotate(0.08deg); }
-  19%  { transform: translate(-3px, 1px) rotate(-0.10deg); }
-  31%  { transform: translate(1px,  4px) rotate(0.06deg); }
-  44%  { transform: translate(-2px,-2px) rotate(-0.07deg); }
-  57%  { transform: translate(3px, -1px) rotate(0.09deg); }
-  68%  { transform: translate(-1px, 3px) rotate(-0.05deg); }
-  79%  { transform: translate(2px,  1px) rotate(0.07deg); }
-  91%  { transform: translate(-2px,-3px) rotate(-0.08deg); }
-  100% { transform: translate(0px,  0px) rotate(0.00deg); }
+  0%   { transform: translate(0px,   0px) rotate(0.00deg); }
+  8%   { transform: translate(1.5px,-2px) rotate(0.06deg); }
+  19%  { transform: translate(-2px,  1px) rotate(-0.08deg);}
+  31%  { transform: translate(0.5px, 3px) rotate(0.05deg); }
+  44%  { transform: translate(-1.5px,-1.5px) rotate(-0.06deg); }
+  57%  { transform: translate(2px,  -0.5px) rotate(0.07deg); }
+  68%  { transform: translate(-0.5px, 2px) rotate(-0.04deg); }
+  79%  { transform: translate(1.5px,  0.5px) rotate(0.05deg); }
+  91%  { transform: translate(-1.5px,-2px) rotate(-0.06deg); }
+  100% { transform: translate(0px,   0px) rotate(0.00deg); }
 }
 
-/* ── SNAP ZOOM  ───────────────────────────────────────────────────
-   Rapid punch-in on the keyword reveal. Overshoot + settle. */
+/* ── SNAP ZOOM — punch-in with overshoot ──────────────────────── */
 .cam-snap-zoom {
-  animation: camSnapZoom var(--cam-dur, 3.5s) cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes camSnapZoom {
   0%   { transform: scale(1.00); }
-  14%  { transform: scale(1.12); }  /* punch */
-  28%  { transform: scale(1.055); } /* overshoot */
-  55%  { transform: scale(1.07); }  /* settle */
-  100% { transform: scale(1.07); }
+  18%  { transform: scale(1.10); }
+  35%  { transform: scale(1.055);}
+  60%  { transform: scale(1.065);}
+  100% { transform: scale(1.065);}
 }
 
-/* ── MICRO SHAKE  ────────────────────────────────────────────────
-   Controlled aggression. Used for high-impact statements. */
+/* ── MICRO SHAKE — aggressive push with controlled x-jitter ────── */
+/* Jitter via translate only — avoids margin-left layout reflow.
+   One-pass forwards so deterministic under seek. */
 .cam-micro-shake {
-  animation: camMicroShake var(--cam-dur, 5s) steps(1) infinite,
-             camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) forwards;
+  animation: camMicroShake var(--cam-dur, 5s) linear forwards;
 }
 @keyframes camMicroShake {
-  0%,100% { margin-left: 0;    }
-  10%     { margin-left: -3px; }
-  20%     { margin-left:  2px; }
-  30%     { margin-left: -2px; }
-  40%     { margin-left:  3px; }
-  50%     { margin-left: -1px; }
-  60%     { margin-left:  2px; }
-  70%     { margin-left: -3px; }
-  80%     { margin-left:  1px; }
-  90%     { margin-left: -2px; }
+  0%   { transform: translate(0px,  0px)  scale(1.000); }
+  6%   { transform: translate(-2px, 0px)  scale(1.005); }
+  12%  { transform: translate(2px,  -1px) scale(1.010); }
+  18%  { transform: translate(-2px, 1px)  scale(1.018); }
+  25%  { transform: translate(1.5px,-1px) scale(1.026); }
+  33%  { transform: translate(-1px, 0px)  scale(1.033); }
+  42%  { transform: translate(2px,  1px)  scale(1.040); }
+  52%  { transform: translate(-1.5px,0px) scale(1.045); }
+  63%  { transform: translate(1px, -1px)  scale(1.050); }
+  75%  { transform: translate(-2px, 1px)  scale(1.055); }
+  88%  { transform: translate(1.5px,0px)  scale(1.058); }
+  100% { transform: translate(0px,  0px)  scale(1.060); }
 }
 
-/* ── TILT UP  ────────────────────────────────────────────────────
-   Camera rises slowly — reveals content as if uncovering truth. */
+/* ── TILT UP — rises slowly, content revealed ─────────────────── */
 .cam-tilt-up {
-  animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) forwards;
+  animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both;
 }
 @keyframes camTiltUp {
-  from { transform: translateY(28px) scale(1.03); }
-  to   { transform: translateY(0px)  scale(1.00); }
+  from { transform: translateY(24px) scale(1.025); }
+  to   { transform: translateY(0px)  scale(1.000); }
 }
+
+/* ── CAM-DUR binding — set from beat duration via inject.js ────── */
+/* Default 5s; inject.js sets --cam-dur = beat.duration_ms on .scene */

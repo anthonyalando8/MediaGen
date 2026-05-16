@@ -18,24 +18,43 @@ import os
 # Beat contract helpers
 # ---------------------------------------------------------------------------
 
+# Scene files that exist on disk. Any beat type NOT in this set
+# falls back to "insight" so a missing template never crashes the renderer.
+_KNOWN_SCENES = {
+    "hook", "insight", "climax", "cta",   # original four
+    "tension", "truth", "flip", "payoff",  # added scenes
+}
+
 def _beat_scene(beat: dict, i: int, total: int) -> str:
     """
-    Map beat type + position to HTML scene template.
+    Map beat type + position to the correct HTML scene template.
 
-      - type == "hook"  or first beat  -> "hook"
-      - type == "cta"   or last beat   -> "cta"
-      - type == "climax" or high-energy second-to-last -> "climax"
-      - everything else                -> "insight"
+    Priority order:
+      1. Position locks: first beat → hook, last beat → cta.
+         These are structural — position always wins over type.
+      2. Direct type match: if the type has a dedicated scene file,
+         use it (tension, truth, flip, payoff, climax, insight).
+      3. Energy-based climax promotion: a high-energy beat at
+         position total-2 that has no dedicated scene → climax.
+      4. Fallback: any unknown/future type → insight.
     """
     t = beat.get("type", "insight").lower()
+
+    # 1. Position locks — non-negotiable
     if i == 0:
         return "hook"
     if i == total - 1:
         return "cta"
-    if t == "climax" or (t != "hook" and beat.get("energy", "") == "high" and i == total - 2):
+
+    # 2. Direct type → scene (only if the scene file exists)
+    if t in _KNOWN_SCENES:
+        return t
+
+    # 3. Energy-based climax promotion for unknown types
+    if beat.get("energy", "") == "high" and i == total - 2:
         return "climax"
-    if t == "cta":
-        return "cta"
+
+    # 4. Fallback
     return "insight"
 
 
@@ -76,23 +95,45 @@ def _style_to_layout(style: str) -> str:
 
 
 def _style_to_theme(style: str) -> str:
-    """Map script style to CSS theme file."""
-    mapping = {
+    """
+    Map script global.style → CSS theme filename (without .css).
+    Also accepts global.theme values directly — so if the LLM returns
+    the theme name itself (e.g. "dark_kinetic") it passes through.
+    """
+    # style → theme (script style names from prompt)
+    style_map = {
         "contrarian": "tech_blue",
         "builder":    "tech_blue",
-        "calm":       "editorial_white",
-        "analytical": "editorial_white",
-        "cinematic":  "warm_amber",
-        "intense":    "cyber_noir",
+        "calm":       "clean_modern",
+        "analytical": "clean_modern",
+        "cinematic":  "luxury_minimal",
+        "intense":    "dark_kinetic",
     }
-    return mapping.get(style.lower() if style else "", "tech_blue")
+    # direct theme passthrough (global.theme names from prompt)
+    known_themes = {
+        "dark_kinetic", "luxury_minimal", "tech_hud",
+        "cinematic_grain", "documentary_gritty", "clean_modern",
+        "tech_blue", "editorial_white", "warm_amber", "cyber_noir",
+    }
+    s = (style or "").lower().strip()
+    if s in known_themes:
+        return s
+    return style_map.get(s, "tech_blue")
 
 
 _THEME_PALETTES = {
-    "tech_blue":       {"accent": "#4ab0f5", "spike": "#f0884a", "bg": "#09090b", "fg": "#efefed"},
-    "editorial_white": {"accent": "#e8e0d0", "spike": "#c8a882", "bg": "#09090b", "fg": "#efefed"},
-    "warm_amber":      {"accent": "#f0a84a", "spike": "#70c8f0", "bg": "#09090b", "fg": "#efefed"},
-    "cyber_noir":      {"accent": "#a870f0", "spike": "#70f0a0", "bg": "#060608", "fg": "#efefed"},
+    # ── existing themes ──────────────────────────────────────────────
+    "tech_blue":          {"accent": "#4ab0f5", "spike": "#f0884a", "bg": "#09090b", "fg": "#efefed"},
+    "editorial_white":    {"accent": "#e8e0d0", "spike": "#c8a882", "bg": "#09090b", "fg": "#efefed"},
+    "warm_amber":         {"accent": "#f0a84a", "spike": "#70c8f0", "bg": "#09090b", "fg": "#efefed"},
+    "cyber_noir":         {"accent": "#a870f0", "spike": "#70f0a0", "bg": "#060608", "fg": "#efefed"},
+    # ── new themes ───────────────────────────────────────────────────
+    "dark_kinetic":       {"accent": "#f03a2e", "spike": "#f5f0e8", "bg": "#030304", "fg": "#f2f0ee"},
+    "luxury_minimal":     {"accent": "#c8a96e", "spike": "#d8d0c0", "bg": "#08080a", "fg": "#f0ece4"},
+    "tech_hud":           {"accent": "#28d4e8", "spike": "#b8f040", "bg": "#050709", "fg": "#e8f0f4"},
+    "cinematic_grain":    {"accent": "#b88850", "spike": "#507880", "bg": "#0b0a08", "fg": "#ece8e0"},
+    "documentary_gritty": {"accent": "#d8d0c0", "spike": "#e8a020", "bg": "#080808", "fg": "#f4f2ef"},
+    "clean_modern":       {"accent": "#f2f2f0", "spike": "#ede8dc", "bg": "#09090b", "fg": "#f2f2f0"},
 }
 
 
@@ -146,7 +187,9 @@ def render_slides(
 
     script_style = script.get("style", "contrarian")
     layout       = _style_to_layout(script_style)
-    theme        = _style_to_theme(script_style)
+    # global.theme (e.g. "dark_kinetic") takes precedence over style mapping
+    global_theme = script.get("global", {}).get("theme", "")
+    theme        = _style_to_theme(global_theme or script_style)
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])
 
     beats_contracts = _build_beat_contracts(script["beats"], beat_durations_ms)

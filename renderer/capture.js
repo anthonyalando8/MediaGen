@@ -96,8 +96,13 @@ function injectVariables(html, beat, palette, brand) {
   const beatJson = JSON.stringify(beat).replace(/<\/script>/gi, '<\\/script>');
   const beatScript = '<script id="beat-data">window.__BEAT__ = ' + beatJson + ';</scri' + 'pt>';
 
-  // Anchor injection before </head> — works whether or not preconnect exists
-  html = html.replace('</head>', cssVars + '\n' + beatScript + '\n</head>');
+  // Theme CSS link — loaded from themes/ directory relative to scenes/
+  // Must come BEFORE the palette-inject style so CSS vars from the theme
+  // are available as the base, and the inline :root block overrides them.
+  const themeLink = '<link rel="stylesheet" href="../themes/' + sceneJson.theme + '.css">';
+
+  // Anchor injection before </head>
+  html = html.replace('</head>', themeLink + '\n' + cssVars + '\n' + beatScript + '\n</head>');
 
   // Text content replacements
   const replacements = {

@@ -1,0 +1,26 @@
+/* luxury_minimal  —  premium restraint, cinematic ambition
+   ================================================================
+   Used for: money, wealth, ambition, culture, status, success.
+   Feel: The Row store, A24 title card, Bloomberg Businessweek cover.
+
+   --acc is pale champagne gold — wealth signals without shouting.
+        Not yellow. Not orange. The exact hue of aged paper under
+        low light. Feels expensive because it barely tries.
+   --spike is a cooler platinum shift for the climax — keeps
+        the beat distinct without breaking the palette.
+   --fg is slightly warmer than pure white — matches the gold register.
+   --fg-2 and --fg-3 pulled slightly warm throughout.
+
+   Pairs with: music_mood=cinematic | minimal | emotional
+               camera_style=static | dynamic
+               visual_intent=cinematic | clean | minimal
+   ================================================================ */
+
+:root {
+  --bg:    #08080a;           /* near-black, very slightly warm */
+  --fg:    #f0ece4;           /* warm white — matches gold register */
+  --fg-2:  #7e7a72;           /* warm secondary */
+  --fg-3:  #242220;           /* warm structural */
+  --acc:   #c8a96e;           /* champagne gold — luxury, not garish */
+  --spike: #d8d0c0;           /* platinum — cooler shift for climax */
+}

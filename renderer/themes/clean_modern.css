@@ -1,0 +1,31 @@
+/* clean_modern  —  maximum restraint, analytical clarity
+   ================================================================
+   Used for: health, habits, philosophy, sleep, productivity systems,
+   anything calm and considered. The example in script.txt uses this.
+   Feel: Linear app, Notion, Arc browser. Signal over noise.
+
+   --acc is a pure neutral white — not warm, not cool. The complete
+        absence of colour as a design choice. The accent earns its
+        place purely through contrast and placement, not hue.
+   --spike is a single step warmer — just barely perceptible in the
+        climax beat. The shift is felt, not seen.
+   --bg is the standard near-black — nothing special needed.
+        The restraint comes from the palette, not the darkness.
+   --fg-2 is slightly cooler and lighter than default — the
+        secondary text should feel airy and readable, not
+        recessive like the warmer themes.
+
+   Pairs with: music_mood=minimal | ambient
+               camera_style=static
+               voice_style=calm_intense | analytical
+               visual_intent=clean | minimal
+   ================================================================ */
+
+:root {
+  --bg:    #09090b;           /* standard near-black */
+  --fg:    #f2f2f0;           /* neutral white — no hue bias */
+  --fg-2:  #909090;           /* clean mid-grey — cooler than default */
+  --fg-3:  #2a2a2a;           /* neutral structural */
+  --acc:   #f2f2f0;           /* pure neutral white — no colour signal */
+  --spike: #ede8dc;           /* barely-warm shift — climax only */
+}
