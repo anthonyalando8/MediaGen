@@ -118,19 +118,19 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
-  /* slow, deliberate fade in — the dread builds */
-  opacity: 0;
-  animation: tensionGlowIn 2.0s ease-out 0.20s forwards;
+  z-index: var(--z-bg);
+  /* Visible from frame 0 — dread is already present. */
+  opacity: 0.70;
+  animation: tensionGlowPulse 4.5s ease-in-out infinite alternate;
 }
-@keyframes tensionGlowIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes tensionGlowPulse {
+  from { opacity: 0.55; }
+  to   { opacity: 0.90; }
 }
 
 .tension-content {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 .tension-kw {
   font-size: var(--sz-stat);
@@ -173,7 +173,7 @@
 
 .tension-body {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.30;
@@ -197,10 +197,41 @@
     oklch(from var(--acc) 0.6 0.08 h / .18) 70%,
     transparent
   );
-  z-index: 3;
+  z-index: var(--z-chrome);
   transform: scaleX(0);
   transform-origin: left center;
   animation: ruleReveal 0.80s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
+}
+
+/* ── AMBIENT GLOW ─────────────────────────────────────────────── */
+/* Tension: pressure rises from the bottom edge — dread builds.
+   Slightly more intense than hook glow: this scene is claustrophobic.
+   The glow pulsates with a slightly faster period to create unease. */
+.tension-ambient-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-bg);
+  animation: tensionGlowPressure 4.0s ease-in-out infinite alternate;
+}
+.scene[data-layout="left"] .tension-ambient-glow,
+.scene[data-layout="full"] .tension-ambient-glow {
+  background:
+    radial-gradient(ellipse 90% 45% at 15% 100%, oklch(from var(--acc) 0.25 0.07 h / .12), transparent 60%),
+    radial-gradient(ellipse 40% 25% at 0% 50%,  oklch(from var(--acc) 0.18 0.05 h / .06), transparent 70%);
+}
+.scene[data-layout="center"] .tension-ambient-glow {
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 100%, oklch(from var(--acc) 0.25 0.07 h / .13), transparent 60%);
+}
+.scene[data-layout="right"] .tension-ambient-glow {
+  background:
+    radial-gradient(ellipse 85% 45% at 85% 100%, oklch(from var(--acc) 0.25 0.07 h / .12), transparent 60%),
+    radial-gradient(ellipse 35% 25% at 100% 50%, oklch(from var(--acc) 0.18 0.05 h / .06), transparent 70%);
+}
+@keyframes tensionGlowPressure {
+  from { opacity: 0.50; transform: scaleY(0.96) translateY(8px); }
+  to   { opacity: 1.00; transform: scaleY(1.00) translateY(0px); }
 }
 </style>
 
@@ -215,6 +246,7 @@
   </div>
   <div class="tension-body">{{BODY}}</div>
   <div class="brand">{{BRAND}}</div>
+  <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

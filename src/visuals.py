@@ -1,11 +1,5 @@
 """
 visuals.py  --  Visual renderer (HTML/Playwright only)
-
-Calls the Node/Playwright renderer (renderer/capture.js) to produce
-per-beat frame directories used by assemble.py.
-
-Requires:
-  cd renderer && npm install && npx playwright install chromium
 """
 
 import pathlib
@@ -18,48 +12,25 @@ import os
 # Beat contract helpers
 # ---------------------------------------------------------------------------
 
-# Scene files that exist on disk. Any beat type NOT in this set
-# falls back to "insight" so a missing template never crashes the renderer.
 _KNOWN_SCENES = {
-    "hook", "insight", "climax", "cta",   # original four
-    "tension", "truth", "flip", "payoff",  # added scenes
+    "hook", "insight", "climax", "cta",
+    "tension", "truth", "flip", "payoff",
 }
 
 def _beat_scene(beat: dict, i: int, total: int) -> str:
-    """
-    Map beat type + position to the correct HTML scene template.
-
-    Priority order:
-      1. Position locks: first beat → hook, last beat → cta.
-         These are structural — position always wins over type.
-      2. Direct type match: if the type has a dedicated scene file,
-         use it (tension, truth, flip, payoff, climax, insight).
-      3. Energy-based climax promotion: a high-energy beat at
-         position total-2 that has no dedicated scene → climax.
-      4. Fallback: any unknown/future type → insight.
-    """
     t = beat.get("type", "insight").lower()
-
-    # 1. Position locks — non-negotiable
     if i == 0:
         return "hook"
     if i == total - 1:
         return "cta"
-
-    # 2. Direct type → scene (only if the scene file exists)
     if t in _KNOWN_SCENES:
         return t
-
-    # 3. Energy-based climax promotion for unknown types
     if beat.get("energy", "") == "high" and i == total - 2:
         return "climax"
-
-    # 4. Fallback
     return "insight"
 
 
 def _beat_hud(beat: dict, i: int, total: int) -> str:
-    """Derive HUD label from beat type."""
     t = beat.get("type", "insight").lower()
     mapping = {
         "hook":    "// HOOK",
@@ -76,13 +47,6 @@ def _beat_hud(beat: dict, i: int, total: int) -> str:
 
 
 def _style_to_layout(style: str) -> str:
-    """
-    Map script style to composition layout.
-      left    contrarian, builder       (left-anchored editorial)
-      center  calm, analytical          (centered, considered)
-      right   cinematic                 (reversed anchor, cinematic)
-      full    intense                   (full-bleed, no margins)
-    """
     mapping = {
         "contrarian": "left",
         "builder":    "left",
@@ -95,12 +59,6 @@ def _style_to_layout(style: str) -> str:
 
 
 def _style_to_theme(style: str) -> str:
-    """
-    Map script global.style → CSS theme filename (without .css).
-    Also accepts global.theme values directly — so if the LLM returns
-    the theme name itself (e.g. "dark_kinetic") it passes through.
-    """
-    # style → theme (script style names from prompt)
     style_map = {
         "contrarian": "tech_blue",
         "builder":    "tech_blue",
@@ -109,7 +67,6 @@ def _style_to_theme(style: str) -> str:
         "cinematic":  "luxury_minimal",
         "intense":    "dark_kinetic",
     }
-    # direct theme passthrough (global.theme names from prompt)
     known_themes = {
         "dark_kinetic", "luxury_minimal", "tech_hud",
         "cinematic_grain", "documentary_gritty", "clean_modern",
@@ -122,12 +79,10 @@ def _style_to_theme(style: str) -> str:
 
 
 _THEME_PALETTES = {
-    # ── existing themes ──────────────────────────────────────────────
     "tech_blue":          {"accent": "#4ab0f5", "spike": "#f0884a", "bg": "#09090b", "fg": "#efefed"},
     "editorial_white":    {"accent": "#e8e0d0", "spike": "#c8a882", "bg": "#09090b", "fg": "#efefed"},
     "warm_amber":         {"accent": "#f0a84a", "spike": "#70c8f0", "bg": "#09090b", "fg": "#efefed"},
     "cyber_noir":         {"accent": "#a870f0", "spike": "#70f0a0", "bg": "#060608", "fg": "#efefed"},
-    # ── new themes ───────────────────────────────────────────────────
     "dark_kinetic":       {"accent": "#f03a2e", "spike": "#f5f0e8", "bg": "#030304", "fg": "#f2f0ee"},
     "luxury_minimal":     {"accent": "#c8a96e", "spike": "#d8d0c0", "bg": "#08080a", "fg": "#f0ece4"},
     "tech_hud":           {"accent": "#28d4e8", "spike": "#b8f040", "bg": "#050709", "fg": "#e8f0f4"},
@@ -149,7 +104,10 @@ def _build_beat_contracts(beats: list, beat_durations_ms: list = None) -> list:
             "body":            beat["text"],
             "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
             "accent_override": "spike" if beat.get("type", "") == "climax" else None,
-            # Per-beat cinematic fields forwarded to the renderer
+            # Position metadata for beat counter
+            "beat_index":      i + 1,          # 1-based for display
+            "beat_total":      total,
+            # Per-beat cinematic fields
             "emotion":         beat.get("emotion", ""),
             "pace":            beat.get("pace", "mid"),
             "visual_intent":   beat.get("visual_intent", ""),
@@ -171,12 +129,6 @@ def render_slides(
     cfg:               dict,
     beat_durations_ms: list = None,
 ) -> list[pathlib.Path]:
-    """
-    Render all beats via Node/Playwright and return a list of frame directories.
-    Each directory contains frame_00000.png … frame_NNNNN.png for one beat.
-
-    Requires renderer/capture.js to exist (run `npm install` in renderer/).
-    """
     renderer_dir = pathlib.Path(__file__).parent.parent / "renderer"
     capture_js   = renderer_dir / "capture.js"
     if not capture_js.exists():
@@ -187,7 +139,6 @@ def render_slides(
 
     script_style = script.get("style", "contrarian")
     layout       = _style_to_layout(script_style)
-    # global.theme (e.g. "dark_kinetic") takes precedence over style mapping
     global_theme = script.get("global", {}).get("theme", "")
     theme        = _style_to_theme(global_theme or script_style)
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])

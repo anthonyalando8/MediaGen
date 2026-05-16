@@ -25,6 +25,29 @@
   --right:     80px;
   --safe-top: 260px;
   --safe-bot: 500px;
+
+  /* ── Z-DEPTH LAYER SYSTEM ──────────────────────────
+     Every positioned element must use one of these.
+     Never use a bare integer — always var(--z-*).
+     0  ambient:  emotion tints, base atmosphere
+     1  bg:       scene-specific glows, bg variants
+     2  mid:      particles, texture overlays
+     3  chrome:   structural lines (rule-left)
+     4  fg:       all text content
+     5  ui:       scene-label, brand, beat-counter
+     8  grain:    film grain (above content, below vignette)
+     9  vignette: always on top of everything
+    99  flash:    transition flash overlays
+  ────────────────────────────────────────────────── */
+  --z-ambient:  0;
+  --z-bg:       1;
+  --z-mid:      2;
+  --z-chrome:   3;
+  --z-fg:       4;
+  --z-ui:       5;
+  --z-grain:    8;
+  --z-vignette: 9;
+  --z-flash:    99;
 }
 
 /* Local font — no network request, works offline */
@@ -59,18 +82,9 @@ html, body {
 
 /* ================================================================
    LAYOUT VARIANT SYSTEM
-   ----------------------------------------------------------------
-   The scene-level HTML sets a data-layout attribute.
-   CSS uses that to shift composition without changing structure.
-
-   Variants:
-     left     — default. Left-anchored editorial. Rule on left.
-     center   — centered type. No rule. Used for calm/analytical.
-     right    — right-anchored. Tension from reversed expectation.
-     full     — type fills full width with no margins. Intense only.
    ================================================================ */
 
-/* LEFT (default) — editorial, left anchor */
+/* LEFT — editorial, left anchor */
 .scene[data-layout="left"] .rule-left { display: block; }
 .scene[data-layout="left"] .scene-label { left: calc(var(--left) + 18px); }
 
@@ -103,7 +117,7 @@ html, body {
   left: var(--left);
 }
 
-/* FULL — bleed, no margins, type at maximum scale */
+/* FULL — bleed, no margins */
 .scene[data-layout="full"] .rule-left { display: none; }
 .scene[data-layout="full"] .scene-label { left: 40px; }
 .scene[data-layout="full"] { --left: 40px; --right: 40px; }
@@ -117,7 +131,7 @@ html, body {
   left: var(--left);
   width: 1px;
   background: var(--fg-3);
-  z-index: 3;
+  z-index: var(--z-chrome);
 }
 .rule-left::after {
   content: "";
@@ -137,7 +151,7 @@ html, body {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--fg-2);
-  z-index: 5;
+  z-index: var(--z-ui);
   opacity: 0;
   animation: labelReveal 0.55s cubic-bezier(0.16,1,0.3,1) 0.08s forwards;
 }
@@ -151,51 +165,160 @@ html, body {
   letter-spacing: 0.03em;
   color: var(--fg-2);
   opacity: 0.3;
-  z-index: 5;
+  z-index: var(--z-ui);
 }
 
 /* ================================================================
-   VIGNETTE — directional, not radial
+   BEAT COUNTER  —  Phase 3
+   ----------------------------------------------------------------
+   Tiny HUD metadata: "02 / 06"
+   Sits opposite brand. 0.18 opacity — present, not readable copy.
+   Right-layout mirrors to right (brand moves left, counter right).
+   ================================================================ */
+.beat-counter {
+  position: absolute;
+  bottom: calc(var(--safe-bot) + 44px);
+  left: var(--left);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-2);
+  opacity: 0;
+  z-index: var(--z-ui);
+  animation: beatCounterReveal 0.45s ease-out 0.80s forwards;
+}
+.scene[data-layout="right"] .beat-counter {
+  left: auto;
+  right: var(--right);
+}
+.scene[data-layout="full"] .beat-counter {
+  left: var(--left);
+}
+@keyframes beatCounterReveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 0.18; transform: translateY(0); }
+}
+
+/* ================================================================
+   KEYWORD WORD SPANS  —  Phase 3
+   ----------------------------------------------------------------
+   capture.js wraps each word in <span class="kw-word">.
+   Animated underline expands per-word via --word-index stagger
+   and --kw-settle-delay (both set by inject.js).
+   ================================================================ */
+.kw-word {
+  display: inline-block;
+  position: relative;
+  white-space: nowrap;
+}
+.kw-word::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: kwWordUnderline 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(
+    var(--kw-settle-delay, 1.2s) +
+    (var(--word-index, 0) * 0.08s)
+  );
+}
+@keyframes kwWordUnderline {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ================================================================
+   BODY LINE SPANS  —  Phase 3
+   ----------------------------------------------------------------
+   capture.js wraps each sentence in <span class="body-line">.
+   Lines are display:block, enter independently.
+   Delays set by inject.js via --body-line-N-delay.
+   Parent body animation suppressed by inject.js.
+   ================================================================ */
+.body-line {
+  display: block;
+  opacity: 0;
+  animation: bodyLineReveal 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.body-line:nth-child(1) { animation-delay: var(--body-line-1-delay, 1.1s); }
+.body-line:nth-child(2) { animation-delay: var(--body-line-2-delay, 1.2s); }
+.body-line:nth-child(3) { animation-delay: var(--body-line-3-delay, 1.3s); }
+@keyframes bodyLineReveal {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0px);  }
+}
+
+/* ================================================================
+   VIGNETTE — directional, energy-responsive  —  Phase 4
+   ----------------------------------------------------------------
+   --vignette-strength multiplier set by inject.js (default 1.0).
+   All opacity stops scaled via calc() — shape stays constant,
+   only darkness changes with energy/scene type.
+
+   inject.js values:
+     payoff:  0.68  (open, earned)
+     tension: 1.35  (claustrophobic)
+     climax:  1.25  (heavy frame)
+     hook:    1.10  (elevated)
+     energy=high: 1.30 | energy=low: 0.72
    ================================================================ */
 .vignette {
   position: absolute; inset: 0;
   pointer-events: none;
-  z-index: 9;
+  z-index: var(--z-vignette);
 }
-/* Left layout: darker right, open left */
+/* Left: darker right edge, open left */
 .scene[data-layout="left"] .vignette,
 .scene:not([data-layout]) .vignette {
   background:
-    linear-gradient(100deg, transparent 35%, oklch(0 0 0 / .22) 100%),
-    linear-gradient(to bottom, oklch(0 0 0 / .4) 0%, transparent 15%, transparent 78%, oklch(0 0 0 / .55) 100%);
+    linear-gradient(100deg,
+      transparent 35%,
+      oklch(0 0 0 / calc(.22 * var(--vignette-strength, 1))) 100%),
+    linear-gradient(to bottom,
+      oklch(0 0 0 / calc(.40 * var(--vignette-strength, 1))) 0%,
+      transparent 15%,
+      transparent 78%,
+      oklch(0 0 0 / calc(.55 * var(--vignette-strength, 1))) 100%);
 }
-/* Center layout: symmetric fade top/bottom */
+/* Center: symmetric top/bottom */
 .scene[data-layout="center"] .vignette {
   background:
-    linear-gradient(to bottom, oklch(0 0 0 / .45) 0%, transparent 20%, transparent 75%, oklch(0 0 0 / .6) 100%);
+    linear-gradient(to bottom,
+      oklch(0 0 0 / calc(.45 * var(--vignette-strength, 1))) 0%,
+      transparent 20%,
+      transparent 75%,
+      oklch(0 0 0 / calc(.60 * var(--vignette-strength, 1))) 100%);
 }
-/* Right layout: darker left */
+/* Right: darker left edge */
 .scene[data-layout="right"] .vignette {
   background:
-    linear-gradient(280deg, transparent 35%, oklch(0 0 0 / .22) 100%),
-    linear-gradient(to bottom, oklch(0 0 0 / .4) 0%, transparent 15%, transparent 78%, oklch(0 0 0 / .55) 100%);
+    linear-gradient(280deg,
+      transparent 35%,
+      oklch(0 0 0 / calc(.22 * var(--vignette-strength, 1))) 100%),
+    linear-gradient(to bottom,
+      oklch(0 0 0 / calc(.40 * var(--vignette-strength, 1))) 0%,
+      transparent 15%,
+      transparent 78%,
+      oklch(0 0 0 / calc(.55 * var(--vignette-strength, 1))) 100%);
 }
-/* Full layout: heavier top/bottom only */
+/* Full: heavier top/bottom only */
 .scene[data-layout="full"] .vignette {
   background:
-    linear-gradient(to bottom, oklch(0 0 0 / .55) 0%, transparent 18%, transparent 72%, oklch(0 0 0 / .7) 100%);
+    linear-gradient(to bottom,
+      oklch(0 0 0 / calc(.55 * var(--vignette-strength, 1))) 0%,
+      transparent 18%,
+      transparent 72%,
+      oklch(0 0 0 / calc(.70 * var(--vignette-strength, 1))) 100%);
 }
 
 /* ================================================================
    MOTION SYSTEM
-   ----------------------------------------------------------------
-   Style variants also shift animation direction:
-     left   → titles come from below (default)
-     center → titles come from below, slightly further
-     right  → titles come from right
-     full   → titles come from below, larger displacement
-
-   One easing throughout: cubic-bezier(0.16, 1, 0.3, 1)
    ================================================================ */
 
 @keyframes labelReveal {

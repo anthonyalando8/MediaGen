@@ -112,9 +112,12 @@
 }
 
 /* ── SHARED ───────────────────────────────────────────── */
+/* truth-eyebrow shows HUD tag — suppress duplicate from base scene-label */
+.truth-scene .scene-label { display: none; }
+
 .truth-content {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 
 /* Eyebrow — the label that names what follows */
@@ -174,7 +177,7 @@
 
 .truth-body {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.32;
@@ -195,6 +198,7 @@
   </div>
   <div class="truth-body">{{BODY}}</div>
   <div class="brand">{{BRAND}}</div>
+  <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

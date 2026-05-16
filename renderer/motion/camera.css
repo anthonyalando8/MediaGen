@@ -1,37 +1,26 @@
 /* ================================================================
    camera.css  --  Camera movement system
    ================================================================
-   IMPORTANT: Camera animations apply to .scene via a SECONDARY
-   animation property. They must NOT override the scene's own
-   animation (e.g. hook's cameraSettle). We use animation-name
-   addition via a wrapper class on the scene element.
-
-   capture.js pauses ALL animations and seeks frame-by-frame.
+   IMPORTANT: Camera animations apply to .scene element directly.
    Every animation here must be deterministic at any seek time:
-   - NO infinite alternating (alternate direction is non-deterministic
-     when seeked — same t_ms can map to different positions depending
-     on iteration).
-   - Use `forwards` fill mode or single-pass `linear` for infinite.
-   - cam-static must produce exactly 0 transform at t=0 (no jitter).
+   - NO infinite alternating — non-deterministic under seek.
+   - All animations use `both` or `forwards` fill mode.
+   - cam-static produces exactly 0 transform (no movement).
 
-   Camera classes are added by inject.js to .scene AFTER the scene's
-   own animation is already declared. CSS animation shorthand REPLACES
-   the existing animation, so we use the multi-animation syntax:
-   the scene's keyframe + the camera keyframe, combined.
+   --cam-dur is set in capture.js's CSS vars block so it is available
+   from frame 0, before inject.js runs. Default fallback: 5s.
 
-   Because we can't know the scene's existing animation from here,
-   camera moves are applied via a CSS custom property --cam-anim
-   that each scene can opt into. Scenes that have their own camera
-   logic (hook) ignore it.
+   PER-SCENE DEFAULTS: Each scene type has a CSS default camera
+   animation baked in. inject.js adds a cam-* class which overrides
+   it only when beat.camera explicitly differs from the scene default.
    ================================================================ */
 
-/* ── STATIC — intentionally no transform. Zero jitter for capture. ── */
+/* ── STATIC — no transform. Default for inject.js fallback. ────── */
 .cam-static {
-  /* Deliberately empty — static means the scene does not move.
-     No camBreath: infinite/alternate is non-deterministic under seek. */
+  /* Deliberately empty — static = no camera movement. */
 }
 
-/* ── PUSH IN — slow creep forward ─────────────────────────────── */
+/* ── PUSH IN ────────────────────────────────────────────────────── */
 .cam-push-in {
   animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
@@ -40,7 +29,7 @@
   to   { transform: scale(1.060) translateY(-14px); }
 }
 
-/* ── PULL OUT — starts tight, opens up ────────────────────────── */
+/* ── PULL OUT ───────────────────────────────────────────────────── */
 .cam-pull-out {
   animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
@@ -49,59 +38,55 @@
   to   { transform: scale(1.000) translateY(0px);   }
 }
 
-/* ── HANDHELD — irregular wobble, deterministic under seek ─────── */
-/* Uses a one-pass forwards animation (not infinite) so every frame
-   maps to a unique position. Duration = beat duration via --cam-dur. */
+/* ── HANDHELD — deterministic one-pass ─────────────────────────── */
 .cam-handheld {
   animation: camHandheld var(--cam-dur, 5s) linear forwards;
 }
 @keyframes camHandheld {
-  0%   { transform: translate(0px,   0px) rotate(0.00deg); }
-  8%   { transform: translate(1.5px,-2px) rotate(0.06deg); }
-  19%  { transform: translate(-2px,  1px) rotate(-0.08deg);}
-  31%  { transform: translate(0.5px, 3px) rotate(0.05deg); }
-  44%  { transform: translate(-1.5px,-1.5px) rotate(-0.06deg); }
-  57%  { transform: translate(2px,  -0.5px) rotate(0.07deg); }
-  68%  { transform: translate(-0.5px, 2px) rotate(-0.04deg); }
+  0%   { transform: translate(0px,    0px)  rotate(0.00deg);  }
+  8%   { transform: translate(1.5px, -2px)  rotate(0.06deg);  }
+  19%  { transform: translate(-2px,   1px)  rotate(-0.08deg); }
+  31%  { transform: translate(0.5px,  3px)  rotate(0.05deg);  }
+  44%  { transform: translate(-1.5px,-1.5px) rotate(-0.06deg);}
+  57%  { transform: translate(2px,  -0.5px) rotate(0.07deg);  }
+  68%  { transform: translate(-0.5px, 2px)  rotate(-0.04deg); }
   79%  { transform: translate(1.5px,  0.5px) rotate(0.05deg); }
-  91%  { transform: translate(-1.5px,-2px) rotate(-0.06deg); }
-  100% { transform: translate(0px,   0px) rotate(0.00deg); }
+  91%  { transform: translate(-1.5px,-2px)  rotate(-0.06deg); }
+  100% { transform: translate(0px,    0px)  rotate(0.00deg);  }
 }
 
-/* ── SNAP ZOOM — punch-in with overshoot ──────────────────────── */
+/* ── SNAP ZOOM ──────────────────────────────────────────────────── */
 .cam-snap-zoom {
   animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes camSnapZoom {
-  0%   { transform: scale(1.00); }
-  18%  { transform: scale(1.10); }
-  35%  { transform: scale(1.055);}
-  60%  { transform: scale(1.065);}
-  100% { transform: scale(1.065);}
+  0%   { transform: scale(1.000); }
+  18%  { transform: scale(1.100); }
+  35%  { transform: scale(1.055); }
+  60%  { transform: scale(1.065); }
+  100% { transform: scale(1.065); }
 }
 
-/* ── MICRO SHAKE — aggressive push with controlled x-jitter ────── */
-/* Jitter via translate only — avoids margin-left layout reflow.
-   One-pass forwards so deterministic under seek. */
+/* ── MICRO SHAKE ────────────────────────────────────────────────── */
 .cam-micro-shake {
   animation: camMicroShake var(--cam-dur, 5s) linear forwards;
 }
 @keyframes camMicroShake {
-  0%   { transform: translate(0px,  0px)  scale(1.000); }
-  6%   { transform: translate(-2px, 0px)  scale(1.005); }
-  12%  { transform: translate(2px,  -1px) scale(1.010); }
-  18%  { transform: translate(-2px, 1px)  scale(1.018); }
-  25%  { transform: translate(1.5px,-1px) scale(1.026); }
-  33%  { transform: translate(-1px, 0px)  scale(1.033); }
-  42%  { transform: translate(2px,  1px)  scale(1.040); }
-  52%  { transform: translate(-1.5px,0px) scale(1.045); }
-  63%  { transform: translate(1px, -1px)  scale(1.050); }
-  75%  { transform: translate(-2px, 1px)  scale(1.055); }
-  88%  { transform: translate(1.5px,0px)  scale(1.058); }
-  100% { transform: translate(0px,  0px)  scale(1.060); }
+  0%   { transform: translate(0px,   0px)  scale(1.000); }
+  6%   { transform: translate(-2px,  0px)  scale(1.005); }
+  12%  { transform: translate(2px,  -1px)  scale(1.010); }
+  18%  { transform: translate(-2px,  1px)  scale(1.018); }
+  25%  { transform: translate(1.5px,-1px)  scale(1.026); }
+  33%  { transform: translate(-1px,  0px)  scale(1.033); }
+  42%  { transform: translate(2px,   1px)  scale(1.040); }
+  52%  { transform: translate(-1.5px,0px)  scale(1.045); }
+  63%  { transform: translate(1px,  -1px)  scale(1.050); }
+  75%  { transform: translate(-2px,  1px)  scale(1.055); }
+  88%  { transform: translate(1.5px, 0px)  scale(1.058); }
+  100% { transform: translate(0px,   0px)  scale(1.060); }
 }
 
-/* ── TILT UP — rises slowly, content revealed ─────────────────── */
+/* ── TILT UP ────────────────────────────────────────────────────── */
 .cam-tilt-up {
   animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both;
 }
@@ -110,5 +95,44 @@
   to   { transform: translateY(0px)  scale(1.000); }
 }
 
-/* ── CAM-DUR binding — set from beat duration via inject.js ────── */
-/* Default 5s; inject.js sets --cam-dur = beat.duration_ms on .scene */
+/* ================================================================
+   PER-SCENE CAMERA DEFAULTS
+   ----------------------------------------------------------------
+   These fire automatically based on scene type, without inject.js
+   needing to add a class. inject.js adds .cam-* classes that can
+   override these when beat.camera explicitly differs.
+
+   hook-scene:    push_in  — authority, moves toward the viewer
+   climax-scene:  snap_zoom — explosive punch on the most intense beat
+   payoff-scene:  pull_out  — earned reveal, opens space
+   tension-scene: tilt_up   — slow reveal from below, dread building
+   ================================================================ */
+
+.hook-scene {
+  animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+}
+
+/* hook left-layout already has cameraSettle — combine both.
+   The cameraSettle is a small Y drift (8px→0) that plays once.
+   We layer the push_in on top as a second animation. */
+.hook-scene[data-layout="left"] {
+  animation:
+    cameraSettle 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+}
+
+.climax-scene {
+  animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.payoff-scene {
+  animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+}
+
+.tension-scene {
+  animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both;
+}
+
+/* When inject.js adds an explicit .cam-* override, it wins because
+   it's added to the element as an inline style via JS — not a class.
+   The class selectors above stay as the CSS default fallback. */

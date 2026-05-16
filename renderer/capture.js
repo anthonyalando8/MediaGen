@@ -1,14 +1,5 @@
 /**
  * capture.js  --  Playwright frame capture for cinematic renderer
- *
- * Usage:
- *   node capture.js --scene scene.json --out frames/ --fps 30
- *
- * Reads scene.json (the full 5-beat contract), renders each beat as a
- * sequence of PNG frames, writes to out/beat_N/frame_FFFFF.png.
- *
- * Determinism:  all CSS animations are paused immediately on page load,
- * then seeked to exact milliseconds per frame — same input = same output.
  */
 
 import { chromium } from 'playwright';
@@ -16,13 +7,12 @@ import { readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { resolve, join } from 'path';
 import { parseArgs } from 'util';
 
-// ── CLI args ────────────────────────────────────────────────────────────────
 const { values: args } = parseArgs({
   options: {
     scene: { type: 'string' },
     out:   { type: 'string', default: 'frames' },
     fps:   { type: 'string', default: '30' },
-    beats: { type: 'string' },   // optional: "0,2,4" to render subset
+    beats: { type: 'string' },
   }
 });
 
@@ -31,15 +21,8 @@ if (!args.scene) {
   process.exit(1);
 }
 
-// resolve() on Windows uses cwd as base, which is renderer/ when called
-// from Python with cwd=renderer_dir.  We need absolute paths.
-// If the path is already absolute (starts with drive letter or /), use as-is.
-// Otherwise resolve relative to the CALLER's cwd (process.env.INIT_CWD or
-// the path passed in).  Simplest fix: Python always passes absolute paths.
 function toAbs(p) {
-  // already absolute on Windows (C:\...) or POSIX (/...)
   if (/^([A-Za-z]:[/\\]|\/)/.test(p)) return p;
-  // relative: resolve from the initial working directory (project root)
   const base = process.env.PROJECT_ROOT || process.cwd();
   return join(base, p);
 }
@@ -55,15 +38,12 @@ console.log('[capture] out:  ', outDir);
 
 mkdirSync(outDir, { recursive: true });
 
-// ── Load scene templates ─────────────────────────────────────────────────────
-// On Windows, import.meta.url gives file:///D:/path so pathname = /D:/path
-// (leading slash before drive letter). fileURLToPath handles this correctly.
 import { fileURLToPath } from 'url';
 const __dir = fileURLToPath(new URL('.', import.meta.url));
 
 function loadTemplate(sceneName) {
-  const base   = readFileSync(join(__dir, 'scenes/_base.html'), 'utf8');
-  const scene  = readFileSync(join(__dir, `scenes/${sceneName}.html`), 'utf8');
+  const base  = readFileSync(join(__dir, 'scenes/_base.html'), 'utf8');
+  const scene = readFileSync(join(__dir, `scenes/${sceneName}.html`), 'utf8');
   return base.replace('{{SCENE_CONTENT}}', scene);
 }
 
@@ -76,47 +56,102 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function injectVariables(html, beat, palette, brand) {
-  const layout = beat.layout || sceneJson.layout || 'left';
+/**
+ * Wrap each word of the keyword in a <span class="kw-word"> so the
+ * animated underline (entries.css .kw-word::after) can stagger per word.
+ * Input:  "STOP WASTING TIME"
+ * Output: '<span class="kw-word">STOP</span> <span class="kw-word">WASTING</span> ...'
+ */
+function wrapKeywordWords(keyword) {
+  if (!keyword) return '';
+  return keyword
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(w => `<span class="kw-word">${escapeHtml(w)}</span>`)
+    .join(' ');
+}
 
-  // CSS vars block — injected before </head>
+/**
+ * Split body text into sentence-based lines and wrap each in a
+ * <span class="body-line"> for staggered entry animation.
+ *
+ * Split strategy:
+ *   - Split on sentence-ending punctuation (. ! ?) followed by whitespace
+ *   - Preserve the punctuation on the preceding token
+ *   - Collapse any fragments under 4 words into the previous line
+ *     (avoids orphan words on their own line)
+ * At most 3 lines — longer text stays as 1 block to avoid layout issues.
+ */
+function wrapBodyLines(body) {
+  if (!body) return '';
+
+  // Split on sentence boundaries while keeping the punctuation
+  const raw = body.split(/(?<=[.!?])\s+/).filter(Boolean);
+
+  // If only 1 sentence or splitting would create too many lines, keep as-is
+  if (raw.length <= 1 || raw.length > 3) {
+    return `<span class="body-line">${escapeHtml(body)}</span>`;
+  }
+
+  // Merge any fragment under 4 words into the previous line
+  const merged = [];
+  for (const sentence of raw) {
+    const wordCount = sentence.trim().split(/\s+/).length;
+    if (wordCount < 4 && merged.length > 0) {
+      merged[merged.length - 1] += ' ' + sentence;
+    } else {
+      merged.push(sentence);
+    }
+  }
+
+  return merged
+    .map(line => `<span class="body-line">${escapeHtml(line.trim())}</span>`)
+    .join('');
+}
+
+function injectVariables(html, beat, palette, brand) {
+  const layout   = beat.layout || sceneJson.layout || 'left';
+  const camDur   = ((beat.duration_ms || 5000) / 1000).toFixed(2) + 's';
+  const beatIdx  = String(beat.beat_index  || '').padStart(2, '0');
+  const beatTot  = String(beat.beat_total  || '').padStart(2, '0');
+
+  // CSS vars
   const cssVars = [
     '<style id="palette-inject">',
     ':root {',
     '  --acc:      ' + palette.accent + ';',
-    '  --spike:    ' + palette.spike + ';',
-    '  --bg:       ' + palette.bg + ';',
-    '  --fg:       ' + palette.fg + ';',
+    '  --spike:    ' + palette.spike  + ';',
+    '  --bg:       ' + palette.bg     + ';',
+    '  --fg:       ' + palette.fg     + ';',
     '  --beat-dur: ' + beat.duration_ms + 'ms;',
+    '  --cam-dur:  ' + camDur + ';',
     '}',
     '</style>',
   ].join('\n');
 
-  // Beat data for inject.js — must escape </script> inside JSON
-  const beatJson = JSON.stringify(beat).replace(/<\/script>/gi, '<\\/script>');
+  const beatJson   = JSON.stringify(beat).replace(/<\/script>/gi, '<\\/script>');
   const beatScript = '<script id="beat-data">window.__BEAT__ = ' + beatJson + ';</scri' + 'pt>';
+  const themeLink  = '<link rel="stylesheet" href="../themes/' + sceneJson.theme + '.css">';
 
-  // Theme CSS link — loaded from themes/ directory relative to scenes/
-  // Must come BEFORE the palette-inject style so CSS vars from the theme
-  // are available as the base, and the inline :root block overrides them.
-  const themeLink = '<link rel="stylesheet" href="../themes/' + sceneJson.theme + '.css">';
-
-  // Anchor injection before </head>
   html = html.replace('</head>', themeLink + '\n' + cssVars + '\n' + beatScript + '\n</head>');
 
   // Text content replacements
+  // {{KEYWORD}} → word-wrapped spans for underline animation
+  // {{BODY}}    → sentence-split spans for line stagger
   const replacements = {
-    '{{KEYWORD}}': escapeHtml(beat.keyword),
-    '{{BODY}}':    escapeHtml(beat.body),
-    '{{HUD_TAG}}': escapeHtml(beat.hud_tag),
-    '{{BRAND}}':   escapeHtml(brand),
-    '{{LAYOUT}}':  layout,
+    '{{KEYWORD}}':    wrapKeywordWords(beat.keyword),
+    '{{BODY}}':       wrapBodyLines(beat.body),
+    '{{HUD_TAG}}':    escapeHtml(beat.hud_tag),
+    '{{BRAND}}':      escapeHtml(brand),
+    '{{LAYOUT}}':     layout,
+    '{{BEAT_INDEX}}': beatIdx,
+    '{{BEAT_TOTAL}}': beatTot,
   };
   for (const [token, value] of Object.entries(replacements)) {
     html = html.replaceAll(token, value);
   }
 
-  // Fix UTF-8 mojibake from Ollama output
+  // Fix UTF-8 mojibake
   const mojibake = [
     ['\u00e2\u0080\u0093', '\u2014'],
     ['\u00e2\u0080\u0098', '\u2018'],
@@ -124,8 +159,8 @@ function injectVariables(html, beat, palette, brand) {
     ['\u00e2\u0080\u009c', '\u201c'],
     ['\u00e2\u0080\u009d', '\u201d'],
     ['\u00e2\u0080\u00a6', '\u2026'],
-    ['\u00c3\u00a9', '\u00e9'],
-    ['\u00c3\u00a0', '\u00e0'],
+    ['\u00c3\u00a9',       '\u00e9'],
+    ['\u00c3\u00a0',       '\u00e0'],
   ];
   for (const [bad, good] of mojibake) {
     html = html.split(bad).join(good);
@@ -134,9 +169,6 @@ function injectVariables(html, beat, palette, brand) {
   return html;
 }
 
-// ── Playwright helpers ───────────────────────────────────────────────────────
-
-/** Pause all animations immediately on load, before first paint. */
 const PAUSE_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style');
@@ -145,31 +177,17 @@ const PAUSE_SCRIPT = `
   }, { once: true });
 `;
 
-/**
- * Seek all Web Animations API animations to t_ms.
- * Works for CSS animations because Chromium exposes them via getAnimations().
- */
 async function seekAnimations(page, t_ms) {
   await page.evaluate((t) => {
-    document.getAnimations().forEach(anim => {
-      anim.currentTime = t;
-    });
+    document.getAnimations().forEach(anim => { anim.currentTime = t; });
   }, t_ms);
 }
-
-// ── Main render loop ─────────────────────────────────────────────────────────
 
 async function renderBeat(browser, beat, beatIdx, palette, brand) {
   const beatOutDir = join(outDir, `beat_${beatIdx}`);
   mkdirSync(beatOutDir, { recursive: true });
 
-  const html = injectVariables(
-    loadTemplate(beat.scene),
-    beat, palette, brand
-  );
-
-  // Write the HTML to a temp file (file:// is more reliable than data: URLs
-  // for complex CSS with fonts)
+  const html    = injectVariables(loadTemplate(beat.scene), beat, palette, brand);
   const tmpHtml = join(beatOutDir, '_scene.html');
   writeFileSync(tmpHtml, html, 'utf8');
 
@@ -177,45 +195,26 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
     viewport: { width: 1080, height: 1920 },
     deviceScaleFactor: 1,
   });
-
-  // Inject the pause script before page load
   await context.addInitScript(PAUSE_SCRIPT);
 
   const page = await context.newPage();
-  // domcontentloaded is instant for local file:// pages.
-  // networkidle was waiting 500ms+ for Google Fonts to timeout (or load) — removed.
   await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded' });
-
-  // Brief wait for @font-face to apply from local file
   await page.waitForTimeout(80);
 
-  // Add a 380ms silence gap at the end of every beat except the last,
-  // matching the gap_s=0.38 in assemble.py's build_slide_video_from_frames.
-  // This prevents the video from cutting off before the narration ends.
-  const isLastBeat   = beatIdx === sceneJson.beats.length - 1;
-  const gap_ms       = isLastBeat ? 0 : 380;
-  const duration_ms  = beat.duration_ms + gap_ms;
-  const frame_count  = Math.ceil((duration_ms / 1000) * fps);
-  const frame_ms     = 1000 / fps;
+  const isLastBeat  = beatIdx === sceneJson.beats.length - 1;
+  const gap_ms      = isLastBeat ? 0 : 380;
+  const duration_ms = beat.duration_ms + gap_ms;
+  const frame_count = Math.ceil((duration_ms / 1000) * fps);
+  const frame_ms    = 1000 / fps;
 
   console.log(`[capture] Beat ${beatIdx} "${beat.keyword}" — ${frame_count} frames @ ${fps}fps`);
 
-  // Seek frame 0 to 80ms (not 0ms) so CSS animations have already begun.
-  // At t=0 all elements are at opacity:0 (their animation start state),
-  // producing black frames until the first delay passes.
-  // 80ms puts us past the label reveal delay so at least one element
-  // is visible on the very first captured frame.
   const TIME_OFFSET_MS = 80;
-
   for (let f = 0; f < frame_count; f++) {
-    const t_ms = (f * frame_ms) + TIME_OFFSET_MS;
+    const t_ms     = (f * frame_ms) + TIME_OFFSET_MS;
     await seekAnimations(page, t_ms);
-
     const framePath = join(beatOutDir, `frame_${String(f).padStart(5, '0')}.png`);
-    await page.screenshot({
-      path: framePath,
-      clip: { x: 0, y: 0, width: 1080, height: 1920 },
-    });
+    await page.screenshot({ path: framePath, clip: { x: 0, y: 0, width: 1080, height: 1920 } });
   }
 
   await context.close();
@@ -225,15 +224,7 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
 
 async function main() {
   let browser = await chromium.launch({
-    // --use-gl=egl is Linux-only and crashes Chromium on Windows.
-    // --disable-gpu is the safe headless default for Windows.
-    // Screenshots work correctly without GPU acceleration.
-    args: [
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-    ],
+    args: ['--disable-gpu', '--disable-dev-shm-usage', '--no-sandbox', '--disable-setuid-sandbox'],
   });
 
   const { palette, brand, beats } = sceneJson;
@@ -241,16 +232,11 @@ async function main() {
 
   for (let i = 0; i < beats.length; i++) {
     if (beatFilter && !beatFilter.includes(i)) continue;
-
-    // Retry up to 2 times per beat. On Windows, Chromium can fail with
-    // "Unable to capture screenshot" after resource exhaustion or a GPU
-    // process crash. Closing and relaunching the browser clears the state.
-    let result = null;
-    let lastErr = null;
+    let result = null, lastErr = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         result = await renderBeat(browser, beats[i], i, palette, brand);
-        break;  // success
+        break;
       } catch (err) {
         lastErr = err;
         console.error(`[capture] Beat ${i} attempt ${attempt} failed: ${err.message}`);
@@ -258,12 +244,7 @@ async function main() {
           console.log('[capture] Restarting browser...');
           try { await browser.close(); } catch (_) {}
           browser = await chromium.launch({
-            args: [
-              '--disable-gpu',
-              '--disable-dev-shm-usage',
-              '--no-sandbox',
-              '--disable-setuid-sandbox',
-            ],
+            args: ['--disable-gpu', '--disable-dev-shm-usage', '--no-sandbox', '--disable-setuid-sandbox'],
           });
         }
       }
@@ -274,14 +255,9 @@ async function main() {
 
   await browser.close();
 
-  // Write a manifest for FFmpeg assembly
-  const manifest = {
-    fps,
-    beats: results.map(r => ({ beatIdx: r.beatIdx, frameCount: r.frameCount, dir: r.dir })),
-  };
-  const manifestPath = join(outDir, 'manifest.json');
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-  console.log(`[capture] Manifest → ${manifestPath}`);
+  const manifest = { fps, beats: results.map(r => ({ beatIdx: r.beatIdx, frameCount: r.frameCount, dir: r.dir })) };
+  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  console.log(`[capture] Manifest → ${join(outDir, 'manifest.json')}`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

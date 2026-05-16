@@ -18,10 +18,8 @@
 
 /* ── KEYWORD ENTRIES ─────────────────────────────────────────────
    Used by hook-kw, insight-kw, climax-kw, cta-kw.
-   Each layout variant has its own direction in the scene files,
-   but here we define EXTRA punch variants that can be swapped in. */
+   Each layout variant has its own direction in the scene files. */
 
-/* Standard upward punch (used for left/center layouts) */
 @keyframes kwPunchUp {
   0%   { opacity: 0; transform: translateY(44px) scaleY(0.92); }
   55%  { opacity: 1; transform: translateY(-5px)  scaleY(1.01); }
@@ -29,7 +27,6 @@
   100% { opacity: 1; transform: translateY(0px)   scaleY(1.00); }
 }
 
-/* Right-entry punch (right layout) */
 @keyframes kwPunchRight {
   0%   { opacity: 0; transform: translateX(52px) scaleX(0.94); }
   55%  { opacity: 1; transform: translateX(-6px)  scaleX(1.01); }
@@ -37,7 +34,6 @@
   100% { opacity: 1; transform: translateX(0px)   scaleX(1.00); }
 }
 
-/* Full-bleed slam (full layout, explosive pace) */
 @keyframes kwSlam {
   0%   { opacity: 0; transform: translateY(72px) scale(0.88); }
   35%  { opacity: 1; transform: translateY(-10px) scale(1.02); }
@@ -45,21 +41,42 @@
   100% { opacity: 1; transform: translateY(0px)   scale(1.00); }
 }
 
-/* Slow reveal (calm/analytical center layout) */
 @keyframes kwDrift {
   0%   { opacity: 0; transform: translateY(20px); filter: blur(4px); }
   100% { opacity: 1; transform: translateY(0px);  filter: blur(0px); }
 }
 
+/* ── KEYWORD IDLE PULSE ──────────────────────────────────────────
+   After the keyword finishes entering, it breathes very subtly.
+   Applied to all keyword elements via their scene's animation-delay.
+   The pulse starts at var(--kw-settle-delay, 1.2s) — after entry.
+   Scale range: 1.000 → 1.003 — imperceptible as movement, but
+   keeps the eye anchored to the most important element on screen.
+   Uses forwards fill so it doesn't reset between iterations.     */
+
+@keyframes kwIdlePulse {
+  0%, 100% { transform: scale(1.000); }
+  50%      { transform: scale(1.003); }
+}
+
+/* Applied to keyword wrappers in each scene via chained animation.
+   Scenes add this as a second animation after their entry animation. */
+.kw-pulse {
+  animation-name: kwIdlePulse;
+  animation-duration: 3.2s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-delay: var(--kw-settle-delay, 1.2s);
+  animation-fill-mode: both;
+}
+
 /* ── BODY TEXT ENTRIES ───────────────────────────────────────────*/
 
-/* Standard — arrives softer after keyword */
 @keyframes bodySlide {
   0%   { opacity: 0; transform: translateY(18px); }
   100% { opacity: 1; transform: translateY(0px);  }
 }
 
-/* Center/calm — almost pure fade with tiny lift */
 @keyframes bodyFade {
   0%   { opacity: 0; transform: translateY(8px);  }
   100% { opacity: 1; transform: translateY(0px);  }
@@ -67,19 +84,16 @@
 
 /* ── RULE / LINE ENTRIES ─────────────────────────────────────────*/
 
-/* Left-anchored rule expands rightward */
 @keyframes ruleExpand {
   from { transform: scaleX(0); transform-origin: left center; }
   to   { transform: scaleX(1); transform-origin: left center; }
 }
 
-/* Center rule expands from middle */
 @keyframes ruleExpandCenter {
   from { transform: scaleX(0); transform-origin: center center; }
   to   { transform: scaleX(1); transform-origin: center center; }
 }
 
-/* Right-anchored rule — expands leftward */
 @keyframes ruleExpandRight {
   from { transform: scaleX(0); transform-origin: right center; }
   to   { transform: scaleX(1); transform-origin: right center; }
@@ -102,7 +116,7 @@
   to   { opacity: 1; }
 }
 
-/* ── ACCENT LINE (vertical rule-left pulse) ──────────────────────*/
+/* ── ACCENT LINE PULSE ───────────────────────────────────────────*/
 @keyframes accentLinePulse {
   0%,100% { opacity: 1;    height: 40px; }
   50%     { opacity: 0.55; height: 44px; }
@@ -111,17 +125,15 @@
   animation: accentLinePulse 2.2s ease-in-out infinite;
 }
 
-/* ── STAGGER UTILITIES ───────────────────────────────────────────
-   Add .stagger-N class to a container for child stagger.
-   Children must have animation-fill-mode: both. */
+/* ── STAGGER UTILITIES ───────────────────────────────────────────*/
 .stagger-2 > *:nth-child(1) { animation-delay-extra: 0ms;   }
 .stagger-2 > *:nth-child(2) { animation-delay-extra: 120ms; }
 .stagger-3 > *:nth-child(1) { animation-delay-extra: 0ms;   }
 .stagger-3 > *:nth-child(2) { animation-delay-extra: 100ms; }
 .stagger-3 > *:nth-child(3) { animation-delay-extra: 200ms; }
 
-/* ── TRANSITION FLASH OVERLAY ─────────────────────────────────── */
-/* Applied at beat start for slam_cut / flash transitions. */
+/* ── TRANSITION FLASH OVERLAY ────────────────────────────────────
+   Applied by inject.js for slam_cut / flash transitions. */
 @keyframes transFlash {
   0%   { opacity: 1; }
   12%  { opacity: 0; }
@@ -132,7 +144,7 @@
   position: fixed; inset: 0;
   background: white;
   pointer-events: none;
-  z-index: 999;
+  z-index: var(--z-flash, 99);
   animation: transFlash 0.22s ease-out forwards;
 }
 
@@ -145,7 +157,56 @@
   position: fixed; inset: 0;
   background: black;
   pointer-events: none;
-  z-index: 999;
+  z-index: var(--z-flash, 99);
   animation: transDipBlack 0.35s ease-in forwards;
   animation-delay: calc(var(--beat-dur, 4000ms) - 350ms);
+}
+
+/* ── CHROMATIC ABERRATION FLASH ──────────────────────────────────
+   Applied by inject.js when beat.transition is slam_cut or flash.
+   Creates a 3-frame RGB-split impact effect at beat start.
+   The .trans-chroma class is added to .scene by inject.js.
+
+   Mechanism: three pseudo-element-like layers via a single ::before.
+   We simulate channel separation with a CSS filter sequence:
+   saturate(2) + hue-rotate gives a vivid colour-split feel without
+   needing three actual elements. Duration: 180ms — felt, not seen.
+
+   Sits at --z-flash (99) — above everything including vignette.     */
+
+@keyframes chromaAberration {
+  0%   {
+    opacity: 1;
+    filter: saturate(3) hue-rotate(-15deg) blur(0.5px);
+    transform: translate(-3px, 0) scaleX(1.004);
+  }
+  18%  {
+    opacity: 0.85;
+    filter: saturate(4) hue-rotate(15deg) blur(0px);
+    transform: translate(3px, 0) scaleX(0.998);
+  }
+  40%  {
+    opacity: 0.4;
+    filter: saturate(2) hue-rotate(-5deg) blur(0.3px);
+    transform: translate(-1px, 0) scaleX(1.001);
+  }
+  100% {
+    opacity: 0;
+    filter: saturate(1) hue-rotate(0deg) blur(0px);
+    transform: translate(0px, 0) scaleX(1.000);
+  }
+}
+
+.trans-chroma::before {
+  content: '';
+  position: fixed; inset: 0;
+  /* Transparent overlay — the filter is applied to the entire ::before
+     which composites over the scene content underneath. */
+  background: transparent;
+  pointer-events: none;
+  z-index: var(--z-flash, 99);
+  animation: chromaAberration 0.18s ease-out forwards;
+  /* Mix-blend-mode screen lets the RGB-split feel additive,
+     not like an opaque white flash. */
+  mix-blend-mode: screen;
 }

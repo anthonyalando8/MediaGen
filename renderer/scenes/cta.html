@@ -80,7 +80,7 @@
 /* ── SHARED ───────────────────────────────────────────── */
 .cta-content {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 .cta-kw {
   font-size: var(--sz-stat);
@@ -114,7 +114,7 @@
 .cta-follow {
   position: absolute;
   bottom: calc(var(--safe-bot) + 100px);
-  z-index: 4;
+  z-index: var(--z-fg);
   border-top: 1px solid var(--fg-3);
   padding-top: 28px;
   opacity: 0;
@@ -149,6 +149,7 @@
     <div class="cta-follow-brand">{{BRAND}}</div>
   </div>
   <div class="brand">{{BRAND}}</div>
+  <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

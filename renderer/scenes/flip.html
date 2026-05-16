@@ -126,7 +126,7 @@
 /* The "before" block — what gets rejected */
 .flip-before-wrap {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 .flip-before-label {
   font-size: var(--sz-stat);
@@ -173,7 +173,7 @@
 /* The "after" keyword — the reframe, arrives with punch */
 .flip-kw-wrap {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 .flip-kw {
   font-size: var(--sz-hero);
@@ -217,7 +217,7 @@
 
 .flip-body {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.32;
@@ -241,6 +241,7 @@
   </div>
   <div class="flip-body">{{BODY}}</div>
   <div class="brand">{{BRAND}}</div>
+  <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>

@@ -98,11 +98,11 @@
   position: absolute;
   top: 20%; left: -8%; right: -8%; height: 45%;
   pointer-events: none;
-  z-index: 1;
+  z-index: var(--z-bg);
 }
 .climax-content {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
 }
 .climax-kw {
   font-size: var(--sz-hero);
@@ -126,7 +126,7 @@
 }
 .climax-body {
   position: absolute;
-  z-index: 4;
+  z-index: var(--z-fg);
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.30;
@@ -135,10 +135,44 @@
   opacity: 0;
   animation: bodyReveal 0.70s cubic-bezier(0.16,1,0.3,1) 1.35s forwards;
 }
+
+/* ── AMBIENT GLOW ─────────────────────────────────────────────── */
+/* Climax: energy erupts from the center outward.
+   Uses the spike colour (set via --acc override on .climax-scene).
+   Faster pulse cycle — this beat is explosive.
+   The scale pulse adds a physical sense of expansion. */
+.climax-ambient-glow {
+  position: absolute;
+  inset: -60px;   /* bleed past edges for fullness */
+  pointer-events: none;
+  z-index: var(--z-bg);
+  animation: climaxGlowErupt 3.2s ease-in-out infinite alternate;
+}
+.scene[data-layout="left"] .climax-ambient-glow,
+.scene[data-layout="full"] .climax-ambient-glow {
+  background:
+    radial-gradient(ellipse 70% 55% at 25% 45%, oklch(from var(--acc) 0.32 0.08 h / .13), transparent 60%),
+    radial-gradient(ellipse 45% 35% at 80% 75%, oklch(from var(--acc) 0.20 0.05 h / .07), transparent 65%);
+}
+.scene[data-layout="center"] .climax-ambient-glow {
+  background:
+    radial-gradient(ellipse 75% 60% at 50% 42%, oklch(from var(--acc) 0.32 0.09 h / .15), transparent 58%),
+    radial-gradient(ellipse 40% 30% at 50% 90%, oklch(from var(--acc) 0.18 0.05 h / .06), transparent 65%);
+}
+.scene[data-layout="right"] .climax-ambient-glow {
+  background:
+    radial-gradient(ellipse 70% 55% at 75% 45%, oklch(from var(--acc) 0.32 0.08 h / .13), transparent 60%),
+    radial-gradient(ellipse 40% 35% at 15% 75%, oklch(from var(--acc) 0.20 0.05 h / .07), transparent 65%);
+}
+@keyframes climaxGlowErupt {
+  from { opacity: 0.60; transform: scale(0.97); }
+  to   { opacity: 1.00; transform: scale(1.03); }
+}
 </style>
 
 <div class="scene climax-scene" data-layout="{{LAYOUT}}">
   <div class="climax-light"></div>
+  <div class="climax-ambient-glow" aria-hidden="true"></div>
   <div class="rule-left"></div>
   <div class="scene-label">{{HUD_TAG}}</div>
   <div class="climax-content">
@@ -147,6 +181,7 @@
   </div>
   <div class="climax-body">{{BODY}}</div>
   <div class="brand">{{BRAND}}</div>
+  <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette"></div>
 </div>
