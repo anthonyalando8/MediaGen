@@ -154,7 +154,9 @@
   inset: 0;
   pointer-events: none;
   z-index: var(--z-bg);
-  animation: hookGlowBreathe 5.5s ease-in-out infinite alternate;
+  /* Static opacity — no animation: infinite alternate is invisible
+     under frame-seek rendering. Depth is constant, not animated. */
+  opacity: 0.75;
 }
 /* Left: corner bloom from top-left — editorial energy source */
 .scene[data-layout="left"] .hook-ambient-glow {
@@ -179,10 +181,7 @@
     radial-gradient(ellipse 55% 40% at 100% 0%, oklch(from var(--acc) 0.30 0.07 h / .10), transparent 65%),
     radial-gradient(ellipse 30% 50% at 0% 100%, oklch(from var(--acc) 0.18 0.04 h / .04), transparent 70%);
 }
-@keyframes hookGlowBreathe {
-  from { opacity: 0.65; transform: scale(1.00); }
-  to   { opacity: 1.00; transform: scale(1.04); }
-}
+/* hookGlowBreathe removed — static opacity used instead */
 </style>
 
 <div class="scene hook-scene" data-layout="{{LAYOUT}}">

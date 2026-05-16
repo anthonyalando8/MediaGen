@@ -146,7 +146,11 @@
   content: '';
   position: absolute;
   top: 50%;
-  left: 0; right: 0;
+  left: 0;
+  /* width: fit-content — constrain strike to actual text width, not frame */
+  width: 100%;
+  max-width: fit-content;
+  right: auto;
   height: 3px;
   background: oklch(from var(--acc) 0.55 0.12 h / .60);
   transform: scaleX(0);

@@ -119,14 +119,10 @@
   inset: 0;
   pointer-events: none;
   z-index: var(--z-bg);
-  /* Visible from frame 0 — dread is already present. */
-  opacity: 0.70;
-  animation: tensionGlowPulse 4.5s ease-in-out infinite alternate;
+  /* Static opacity — dread is present from frame 0. */
+  opacity: 0.80;
 }
-@keyframes tensionGlowPulse {
-  from { opacity: 0.55; }
-  to   { opacity: 0.90; }
-}
+/* tensionGlowIn removed — static opacity used instead */
 
 .tension-content {
   position: absolute;
@@ -212,7 +208,8 @@
   inset: 0;
   pointer-events: none;
   z-index: var(--z-bg);
-  animation: tensionGlowPressure 4.0s ease-in-out infinite alternate;
+  /* Static — infinite alternate is invisible under seek. */
+  opacity: 0.75;
 }
 .scene[data-layout="left"] .tension-ambient-glow,
 .scene[data-layout="full"] .tension-ambient-glow {
@@ -229,10 +226,7 @@
     radial-gradient(ellipse 85% 45% at 85% 100%, oklch(from var(--acc) 0.25 0.07 h / .12), transparent 60%),
     radial-gradient(ellipse 35% 25% at 100% 50%, oklch(from var(--acc) 0.18 0.05 h / .06), transparent 70%);
 }
-@keyframes tensionGlowPressure {
-  from { opacity: 0.50; transform: scaleY(0.96) translateY(8px); }
-  to   { opacity: 1.00; transform: scaleY(1.00) translateY(0px); }
-}
+/* tensionGlowPressure removed — static opacity used instead */
 </style>
 
 <div class="scene tension-scene" data-layout="{{LAYOUT}}">

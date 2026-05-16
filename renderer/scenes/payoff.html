@@ -131,14 +131,10 @@
   inset: 0;
   pointer-events: none;
   z-index: var(--z-bg);
-  /* Visible from frame 0 — light already arriving from above. */
-  opacity: 0.65;
-  animation: payoffLightPulse 6.0s ease-in-out infinite alternate;
+  /* Static — light is already arriving. No fade needed. */
+  opacity: 0.70;
 }
-@keyframes payoffLightPulse {
-  from { opacity: 0.55; }
-  to   { opacity: 0.85; }
-}
+/* payoffLightIn removed — static opacity used instead */
 
 .payoff-content {
   position: absolute;
@@ -216,7 +212,8 @@
   inset: 0;
   pointer-events: none;
   z-index: var(--z-bg);
-  animation: payoffGlowBreathe 6.5s ease-in-out infinite alternate;
+  /* Static — earned, open, present from frame 0. */
+  opacity: 0.70;
 }
 .scene[data-layout="left"] .payoff-ambient-glow {
   background:
@@ -237,10 +234,7 @@
     radial-gradient(ellipse 80% 40% at 50% 0%,  oklch(from var(--acc) 0.26 0.05 h / .10), transparent 65%),
     radial-gradient(ellipse 40% 25% at 50% 100%, oklch(from var(--acc) 0.15 0.03 h / .04), transparent 70%);
 }
-@keyframes payoffGlowBreathe {
-  from { opacity: 0.55; transform: translateY(-6px) scale(1.00); }
-  to   { opacity: 0.95; transform: translateY(0px)  scale(1.02); }
-}
+/* payoffGlowBreathe removed — static opacity used instead */
 </style>
 
 <div class="scene payoff-scene" data-layout="{{LAYOUT}}">

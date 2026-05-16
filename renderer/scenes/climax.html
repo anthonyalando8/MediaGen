@@ -146,7 +146,8 @@
   inset: -60px;   /* bleed past edges for fullness */
   pointer-events: none;
   z-index: var(--z-bg);
-  animation: climaxGlowErupt 3.2s ease-in-out infinite alternate;
+  /* Static at peak intensity — climax glow is at full power. */
+  opacity: 0.85;
 }
 .scene[data-layout="left"] .climax-ambient-glow,
 .scene[data-layout="full"] .climax-ambient-glow {
@@ -164,10 +165,7 @@
     radial-gradient(ellipse 70% 55% at 75% 45%, oklch(from var(--acc) 0.32 0.08 h / .13), transparent 60%),
     radial-gradient(ellipse 40% 35% at 15% 75%, oklch(from var(--acc) 0.20 0.05 h / .07), transparent 65%);
 }
-@keyframes climaxGlowErupt {
-  from { opacity: 0.60; transform: scale(0.97); }
-  to   { opacity: 1.00; transform: scale(1.03); }
-}
+/* climaxGlowErupt removed — static opacity used instead */
 </style>
 
 <div class="scene climax-scene" data-layout="{{LAYOUT}}">
