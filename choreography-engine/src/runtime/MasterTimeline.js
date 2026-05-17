@@ -1,5 +1,6 @@
 import { gsap }             from "gsap";
 import { CharacterTimeline } from "./CharacterTimeline.js";
+import { CameraRig }         from "../camera/CameraRig.js";
 import EventBus              from "./EventBus.js";
 
 /**
@@ -45,8 +46,9 @@ export class MasterTimeline {
     this.rigRegistry  = rigRegistry;
     this.stageEl      = stageEl;
 
-    this.master             = null;   // gsap.timeline
-    this.characterTimelines = {};     // { characterId: CharacterTimeline }
+    this.master             = null;
+    this.characterTimelines = {};
+    this.camera             = null;   // CameraRig instance
     this._deterministic     = false;
     this._frameTime         = 0;
     this._built             = false;
@@ -95,10 +97,9 @@ export class MasterTimeline {
 
     // ── Camera directives ───────────────────────────────────────
     if (this.stageEl && camera.length > 0) {
-      camera.forEach((cam) => {
-        const camTL = this._buildCameraDirective(cam);
-        if (camTL) this.master.add(camTL, cam.at ?? 0);
-      });
+      this.camera = new CameraRig(this.stageEl);
+      const camTL = this.camera.buildTimeline(camera);
+      this.master.add(camTL, 0);
     }
 
     // ── Transition in ───────────────────────────────────────────
@@ -211,8 +212,10 @@ export class MasterTimeline {
 
   destroy() {
     Object.values(this.characterTimelines).forEach(ct => ct.destroy());
+    this.camera?.destroy();
     this.master?.kill();
     this.characterTimelines = {};
+    this.camera = null;
     this.master = null;
     this._built = false;
     EventBus.clear("scene:tick");
@@ -220,68 +223,10 @@ export class MasterTimeline {
 
   // ── Camera internals ───────────────────────────────────────────
 
-  _buildCameraDirective(cam) {
-    if (!this.stageEl) return null;
-    const stage = this.stageEl;
-    const dur   = cam.opts?.dur ?? 0.8;
-
-    switch (cam.preset) {
-      case "push_in":
-        return gsap.timeline()
-          .to(stage, {
-            scale:    cam.opts?.zoom ?? 1.4,
-            x:        -(cam.opts?.target?.x ?? 0) * ((cam.opts?.zoom ?? 1.4) - 1),
-            y:        -(cam.opts?.target?.y ?? 0) * ((cam.opts?.zoom ?? 1.4) - 1),
-            duration: dur,
-            ease:     "power2.inOut",
-          });
-
-      case "dolly_out":
-        return gsap.timeline()
-          .to(stage, {
-            scale:    cam.opts?.zoom ?? 0.8,
-            duration: dur,
-            ease:     "power1.out",
-          });
-
-      case "wide_shot":
-        return gsap.timeline()
-          .to(stage, { scale: 1, x: 0, y: 0, duration: dur, ease: "power2.inOut" });
-
-      case "pan_left":
-        return gsap.timeline()
-          .to(stage, { x: `-=${cam.opts?.amount ?? 80}`, duration: dur, ease: "power1.inOut" });
-
-      case "pan_right":
-        return gsap.timeline()
-          .to(stage, { x: `+=${cam.opts?.amount ?? 80}`, duration: dur, ease: "power1.inOut" });
-
-      case "camera_shake": {
-        const intensity = cam.opts?.intensity ?? 6;
-        return gsap.timeline()
-          .to(stage, {
-            x:        `+=${intensity}`,
-            y:        `+=${intensity * 0.5}`,
-            duration: cam.opts?.dur ?? 0.06,
-            ease:     "power1.inOut",
-            yoyo:     true,
-            repeat:   Math.floor((cam.opts?.shakeDur ?? 0.4) / 0.06),
-          })
-          .to(stage, { x: 0, y: 0, duration: 0.12 });
-      }
-
-      default:
-        console.warn(`[MasterTimeline] Unknown camera preset: "${cam.preset}"`);
-        return null;
-    }
-  }
-
   _buildTransitionIn(cfg) {
     if (!this.stageEl) return null;
     switch (cfg.type) {
       case "fade_black": {
-        // IMPORTANT: use tl.set() not gsap.set() so opacity:0 fires when the
-        // master timeline plays, not immediately at build() time.
         const tl = gsap.timeline();
         tl.set(this.stageEl, { opacity: 0 });
         tl.to(this.stageEl, { opacity: 1, duration: cfg.dur ?? 0.5 });

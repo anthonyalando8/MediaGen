@@ -1,13 +1,11 @@
 import { forwardRef, useRef, useImperativeHandle } from "react";
-
-// Native viewBox: 0 0 56 32
-const VB_W = 56;
+import { PALETTE as C } from "./palette.js";
 
 const Mouth = forwardRef(function Mouth(
-  { width = VB_W, style = {}, className = "", ...rest },
+  { width = 56, style = {}, className = '', ...rest },
   ref
 ) {
-  const s        = width / VB_W;
+  const s        = width / 56;
   const rootRef  = useRef(null);
   const upperRef = useRef(null);
   const lowerRef = useRef(null);
@@ -22,27 +20,47 @@ const Mouth = forwardRef(function Mouth(
     <g
       ref={rootRef}
       data-rig-part="mouth"
-      style={{ transformOrigin: "50% 50%", transformBox: "fill-box", ...style }}
+      style={{ transformOrigin: '50% 50%', transformBox: 'fill-box', ...style }}
       className={className}
       {...rest}
     >
       <g transform={`scale(${s})`}>
-        {/* Mouth — viewBox 56×32 */}
-        <ellipse cx="28" cy="18" rx="20" ry="12" fill="#8B2E3A"/>
-        <rect x="12" y="14" width="32" height="8" rx="3" fill="white"/>
-        <rect x="14" y="20" width="28" height="7" rx="3" fill="#F0ECEA"/>
+        {/* mouth interior (shows when lips part) — LIFTED to y=4..8 in viewBox
+            so when SVGPuppet places mouth at HEAD_Y+56 the lip-line lands at
+            ~75% down the face (anime convention) instead of chin level. */}
+        <path d="M18 6 Q28 12 38 6 Q28 8 18 6 Z" fill={C.mouthIn}/>
+        {/* tongue hint */}
+        <path d="M22 7 Q28 10 34 7 Q28 9 22 7 Z" fill={C.tongue} opacity="0.85"/>
+        {/* upper teeth strip (only peeks when mouth opens) */}
+        <path d="M20 5.5 Q28 6.5 36 5.5 L36 6.8 Q28 7.8 20 6.8 Z" fill={C.teeth}/>
+
+        {/* upper lip (animatable) */}
         <g ref={upperRef} data-rig-part="mouth_upper"
-           style={{ transformOrigin: "50% 100%", transformBox: "fill-box" }}>
-          <path d="M6 16 Q14 10 28 12 Q42 10 50 16 Q42 14 28 16 Q14 14 6 16 Z"
-                fill="#E8848A"/>
+           style={{ transformOrigin: '50% 100%', transformBox: 'fill-box' }}>
+          <path d="M16 5
+                   Q22 1 28 3
+                   Q34 1 40 5
+                   Q34 3 28 4
+                   Q22 3 16 5 Z"
+                fill={C.lip} stroke={C.lipDeep} strokeWidth="0.5"/>
+          <path d="M22 3 Q28 2 34 3" stroke={C.lip} strokeWidth="0.6"
+                fill="none" opacity="0.6"/>
         </g>
+
+        {/* lower lip (animatable) */}
         <g ref={lowerRef} data-rig-part="mouth_lower"
-           style={{ transformOrigin: "50% 0%", transformBox: "fill-box" }}>
-          <path d="M6 16 Q18 26 28 27 Q38 26 50 16 Q40 20 28 20 Q16 20 6 16 Z"
-                fill="#D97079"/>
+           style={{ transformOrigin: '50% 0%', transformBox: 'fill-box' }}>
+          <path d="M16 6
+                   Q22 11 28 11
+                   Q34 11 40 6
+                   Q34 8 28 8
+                   Q22 8 16 6 Z"
+                fill={C.lip} stroke={C.lipDeep} strokeWidth="0.5"/>
+          <ellipse cx="28" cy="9" rx="6" ry="0.7" fill="white" opacity="0.35"/>
         </g>
-        <path d="M6 16 Q18 14 28 15 Q38 14 50 16"
-              stroke="#C05060" strokeWidth="1" strokeLinecap="round" fill="none"/>
+
+        {/* philtrum hint above the upper lip */}
+        <path d="M28 0 L28 2.5" stroke={C.skinShade} strokeWidth="0.4" opacity="0.5"/>
       </g>
     </g>
   );
