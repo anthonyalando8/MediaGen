@@ -1,0 +1,10 @@
+export { default as Head   } from "./Head.jsx";
+export { default as Eye    } from "./Eye.jsx";
+export { default as Brow   } from "./Brow.jsx";
+export { default as Mouth  } from "./Mouth.jsx";
+export { default as Torso  } from "./Torso.jsx";
+export { default as Arm    } from "./Arm.jsx";
+export { default as Hand   } from "./Hand.jsx";
+export { default as Hip    } from "./Hip.jsx";
+export { default as Leg    } from "./Leg.jsx";
+export { default as Shadow } from "./Shadow.jsx";

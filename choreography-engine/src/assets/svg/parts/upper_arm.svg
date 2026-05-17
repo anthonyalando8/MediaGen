@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 70" fill="none">
+  <!-- Sleeve / upper arm -->
+  <path d="M6 2 Q2 2 2 8 L2 60 Q2 66 8 68 L24 68 Q30 66 30 60 L30 8 Q30 2 26 2 Z"
+        fill="#3A6BBF" stroke="#2A4E99" stroke-width="1.5"/>
+  <!-- Arm muscle volume hint -->
+  <ellipse cx="16" cy="34" rx="10" ry="22"
+           fill="white" opacity="0.06"/>
+</svg>

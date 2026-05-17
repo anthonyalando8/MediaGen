@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 65" fill="none">
+  <!-- Forearm — skin tone, slightly tapered -->
+  <path d="M5 2 Q2 2 2 7 L2 55 Q2 62 7 64 L21 64 Q26 62 26 55 L26 7 Q26 2 23 2 Z"
+        fill="#FADADB" stroke="#E8A0A4" stroke-width="1.5"/>
+  <!-- Forearm shading -->
+  <path d="M10 10 L10 58" stroke="#E8A0A4" stroke-width="1" opacity="0.3"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <!-- Head shape — soft rounded rectangle -->
+  <rect x="4" y="8" width="72" height="68" rx="28" ry="28"
+        fill="#FADADB" stroke="#E8A0A4" stroke-width="2"/>
+  <!-- Ear left -->
+  <ellipse cx="4" cy="44" rx="5" ry="9"
+           fill="#FADADB" stroke="#E8A0A4" stroke-width="1.5"/>
+  <!-- Ear right -->
+  <ellipse cx="76" cy="44" rx="5" ry="9"
+           fill="#FADADB" stroke="#E8A0A4" stroke-width="1.5"/>
+  <!-- Hair -->
+  <path d="M14 28 Q14 4 40 4 Q66 4 66 28"
+        fill="#5C3D2E" stroke="none"/>
+</svg>

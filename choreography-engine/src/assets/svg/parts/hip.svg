@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 40" fill="none">
+  <!-- Waistband / hip block -->
+  <path d="M4 2 Q2 2 2 6 L2 34 Q2 38 6 38 L84 38 Q88 38 88 34 L88 6 Q88 2 86 2 Z"
+        fill="#2A4480" stroke="#1A3060" stroke-width="1.5"/>
+  <!-- Belt detail -->
+  <rect x="2" y="2" width="86" height="10" rx="3"
+        fill="#1A3060" opacity="0.6"/>
+  <!-- Belt buckle -->
+  <rect x="38" y="4" width="14" height="6" rx="2"
+        fill="#C0A860" stroke="#A08840" stroke-width="1"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 16" fill="none">
+  <!-- Brow body — slightly arched, thick center tapering at ends -->
+  <path d="M4 12 Q12 4 24 5 Q36 4 44 10"
+        stroke="#5C3D2E" stroke-width="5"
+        stroke-linecap="round" stroke-linejoin="round"
+        fill="none"/>
+</svg>

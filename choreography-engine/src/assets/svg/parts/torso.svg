@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 110" fill="none">
+  <!-- Shirt body -->
+  <path d="M10 10 L80 10 Q88 10 88 20 L88 95 Q88 105 78 105 L12 105 Q2 105 2 95 L2 20 Q2 10 10 10 Z"
+        fill="#3A6BBF" stroke="#2A4E99" stroke-width="1.5"/>
+  <!-- Collar -->
+  <path d="M30 10 Q45 24 60 10"
+        fill="#2A4E99" stroke="none"/>
+  <!-- Shirt fold / shadow detail -->
+  <path d="M45 30 L45 95" stroke="#2A4E99" stroke-width="1" stroke-dasharray="3 4" opacity="0.4"/>
+  <!-- Chest shading -->
+  <ellipse cx="45" cy="55" rx="28" ry="35"
+           fill="white" opacity="0.06"/>
+</svg>

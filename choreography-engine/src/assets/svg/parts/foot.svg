@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54 30" fill="none">
+  <!-- Shoe sole -->
+  <path d="M2 22 Q2 28 10 28 L46 28 Q54 28 52 22 L48 14 Q44 8 36 8 L10 8 Q4 10 2 16 Z"
+        fill="#2A1A0A" stroke="#1A0A00" stroke-width="1.2"/>
+  <!-- Shoe upper -->
+  <path d="M10 8 Q16 2 26 2 L36 8"
+        fill="#3A2A1A" stroke="#1A0A00" stroke-width="1.2"/>
+  <!-- Laces -->
+  <line x1="16" y1="10" x2="30" y2="10" stroke="#E8E0D0" stroke-width="1" stroke-linecap="round"/>
+  <line x1="14" y1="14" x2="32" y2="14" stroke="#E8E0D0" stroke-width="1" stroke-linecap="round"/>
+</svg>
