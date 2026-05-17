@@ -49,14 +49,15 @@ export class CharacterTimeline {
     const { id, actions = [], idleMode = "default", startAt = 0 } = this.charDef;
     const rig = this.rig;
 
-    // Main character timeline — paused, will be driven by MasterTimeline
-    const tl = gsap.timeline({ paused: true, id: `char_${id}` });
+    // Character timeline — NOT paused here; parent master controls it.
+    // A paused child inside a playing parent will NOT play in GSAP 3.
+    const tl = gsap.timeline({ id: `char_${id}` });
 
     // ── Idle base layer ─────────────────────────────────────────
-    // Start idle immediately — it runs in parallel to all actions.
-    // We use a separate GSAP context so idle loops don't block the
-    // finite action timeline from completing.
-    this.idle = startIdleSet(rig, idleMode);
+    // Idle is NOT started at build time — it starts when the scene plays.
+    // MasterTimeline.play() calls charTL.startIdle() for each character.
+    // This prevents idle animations running on a frozen pre-play stage.
+    this._idleMode = idleMode;
 
     // ── Action directives ────────────────────────────────────────
     actions.forEach((directive) => {
@@ -99,6 +100,12 @@ export class CharacterTimeline {
 
     this.timeline = tl;
     return tl;
+  }
+
+  /** Start idle animations (called by MasterTimeline on play/restart) */
+  startIdle() {
+    this.idle?.kill();
+    this.idle = startIdleSet(this.rig, this._idleMode ?? "default");
   }
 
   /** Pause this character's timeline and idle */

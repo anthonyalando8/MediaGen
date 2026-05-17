@@ -12,11 +12,6 @@
     "background": "#0f0f1a"
   },
 
-  "transitions": {
-    "in":  { "type": "fade_black", "dur": 0.6 },
-    "out": { "at": 9.5, "type": "fade_black", "dur": 0.5 }
-  },
-
   "camera": [
     { "at": 0.0, "preset": "wide_shot" },
     { "at": 2.5, "preset": "push_in",
@@ -35,24 +30,22 @@
       "idleMode":    "default",
       "startAt":     0,
       "facingRight": true,
-      "position":    { "x": -60, "y": 0 },
+      "position":    { "x": -55, "y": 0 },
       "scale":       1,
       "actions": [
-        { "at": 0.0,  "name": "fade_in",       "expression": "neutral" },
-        { "at": 0.6,  "name": "walk_in",
-          "opts": { "from": "left", "steps": 5, "distance": 140 },
+        { "at": 0.0,  "name": "walk_in",
+          "opts": { "from": "left", "steps": 6, "distance": 150 },
           "expression": "determined" },
         { "at": 2.8,  "expression": "surprised" },
-        { "at": 3.5,  "name": "stand_firm",     "expression": "angry" },
-        { "at": 4.2,  "name": "point_forward",
-          "opts": { "hold": false } },
+        { "at": 3.5,  "name": "stand_firm",    "expression": "angry" },
+        { "at": 4.2,  "name": "point_forward" },
         { "at": 5.8,  "name": "recoil",
           "opts": { "dir": 1 },
           "expression": "scared" },
         { "at": 6.8,  "name": "stand_firm",
           "opts": { "hold": true },
           "expression": "determined" },
-        { "at": 8.5,  "name": "wave",           "expression": "happy" }
+        { "at": 8.5,  "name": "wave",          "expression": "happy" }
       ]
     },
     {
@@ -60,15 +53,17 @@
       "idleMode":    "menace",
       "startAt":     0,
       "facingRight": false,
-      "position":    { "x": 60, "y": 0 },
+      "position":    { "x": 55, "y": 0 },
       "scale":       1,
       "actions": [
-        { "at": 0.0,  "name": "fade_in",        "expression": "smug" },
+        { "at": 0.0,  "name": "walk_in",
+          "opts": { "from": "right", "steps": 6, "distance": 150 },
+          "expression": "smug" },
         { "at": 1.8,  "name": "arms_cross",
           "opts": { "hold": true },
           "expression": "smug" },
         { "at": 3.0,  "expression": "angry" },
-        { "at": 4.0,  "name": "shake_head",     "expression": "evil_grin" },
+        { "at": 4.0,  "name": "shake_head",   "expression": "evil_grin" },
         { "at": 5.2,  "name": "lunge",
           "opts": { "dir": -1 },
           "expression": "angry" },
@@ -76,7 +71,7 @@
           "opts": { "dir": -1 },
           "expression": "surprised" },
         { "at": 7.5,  "name": "walk_out",
-          "opts": { "to": "right", "steps": 5 },
+          "opts": { "to": "right", "steps": 6 },
           "expression": "scared" }
       ]
     }

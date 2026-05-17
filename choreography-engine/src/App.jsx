@@ -12,9 +12,9 @@ import exampleScene from "../scenes/example_scene.json";
  *   "scene"       — Layer 3 panel: play scene JSON through MasterTimeline
  */
 
-const VIEWBOX = "-180 -350 360 380";
+const VIEWBOX = "-180 -400 360 420";
 const STAGE_W = 360;
-const STAGE_H = 380;
+const STAGE_H = 420;
 
 const ACTION_GROUPS = {
   "entrances":  ["walk_in", "fade_in", "pop_in"],
@@ -39,9 +39,18 @@ export default function App() {
   const [scenePlaying, setScenePlaying] = useState(false);
   const [sceneLog,   setSceneLog]   = useState([]);
 
-  // ── Interactive mode mount ────────────────────────────────────
+  // Track when the interactive rig is actually populated
+  const [rigReady, setRigReady] = useState(false);
+
+  const handleRigRef = useCallback((imperative) => {
+    rigRef.current = imperative;
+    if (imperative) setRigReady(true);
+  }, []);
+
+  // ── Interactive mode mount — waits for rig to be populated ───
   useEffect(() => {
     if (mode !== "interactive") return;
+    if (!rigReady) return;
     const rig = rigRef.current;
     if (!rig) return;
 
@@ -51,9 +60,10 @@ export default function App() {
     });
     setAudit(result);
 
-    idleRef.current = ActionRegistry.startIdle(rig, "default");
+    idleRef.current?.kill();
+    idleRef.current = ActionRegistry.startIdle(rig, idleMode);
     return () => { idleRef.current?.kill(); };
-  }, [mode]);
+  }, [mode, rigReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Scene mode EventBus wiring ────────────────────────────────
   useEffect(() => {
@@ -158,9 +168,9 @@ export default function App() {
               <svg width={STAGE_W} height={STAGE_H} viewBox={VIEWBOX}
                    xmlns="http://www.w3.org/2000/svg" style={{ display: "block" }}
                    aria-label="Interactive stage">
-                <line x1="-170" y1="0" x2="170" y2="0"
+                <line x1="-180" y1="0" x2="180" y2="0"
                       stroke="#ffffff18" strokeWidth="1" strokeDasharray="5 5"/>
-                <SVGPuppet ref={rigRef} characterId="hero"
+                <SVGPuppet ref={handleRigRef} characterId="hero"
                            scale={1} x={0} y={0} facingRight={true}/>
               </svg>
             </div>
@@ -226,7 +236,7 @@ export default function App() {
                 ref={sceneRendererRef}
                 scene={exampleScene}
                 autoPlay={false}
-                width={300}
+                width={340}
                 showDebug={true}
                 onTick={({ time }) => setSceneTime(time)}
                 onComplete={() => setScenePlaying(false)}

@@ -48,8 +48,8 @@ export const MOTION_PRESETS = {
     const startX = -distance * dir;
     const tl     = gsap.timeline();
 
-    // Start off-screen
-    gsap.set(rig.root, { x: startX });
+    // Use tl.set() so this fires when the timeline plays, NOT at build time
+    tl.set(rig.root, { x: startX });
 
     // Walk cycle while sliding in
     const stepDur = 0.22;
@@ -96,21 +96,25 @@ export const MOTION_PRESETS = {
   },
 
   /**
-   * fade_in — character fades in from invisible
+   * fade_in — character fades in from invisible.
+   * IMPORTANT: uses tl.set() not fromTo() — fromTo() applies "from" values
+   * immediately at tween creation (GSAP 3 behavior), making the character
+   * invisible at build time. tl.set() defers until the timeline plays.
    */
   fade_in(rig, { dur = 0.5 } = {}) {
-    gsap.set(rig.root, { opacity: 0 });
     return gsap.timeline()
-      .to(rig.root, { opacity: 1, duration: dur, ease: EASE_OUT });
+      .set(rig.root, { opacity: 0 })
+      .to(rig.root,  { opacity: 1, duration: dur, ease: EASE_OUT });
   },
 
   /**
    * pop_in — elastic scale-in entrance
+   * Same tl.set() pattern — never fromTo().
    */
   pop_in(rig, { dur = 0.5 } = {}) {
-    gsap.set(rig.root, { scale: 0, opacity: 0 });
     return gsap.timeline()
-      .to(rig.root, { scale: 1, opacity: 1, duration: dur, ease: ELASTIC });
+      .set(rig.root, { scale: 0, opacity: 0 })
+      .to(rig.root,  { scale: 1, opacity: 1, duration: dur, ease: ELASTIC });
   },
 
   // ── Locomotion ────────────────────────────────────────────────

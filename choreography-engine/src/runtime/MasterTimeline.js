@@ -119,6 +119,8 @@ export class MasterTimeline {
       console.warn("[MasterTimeline] Call build() before play().");
       return this;
     }
+    // Start each character's idle layer now (deferred from build time)
+    Object.values(this.characterTimelines).forEach(ct => ct.startIdle());
     EventBus.emit("scene:start", { sceneId: this.scene.meta?.id });
     this.master.play();
     return this;
@@ -138,10 +140,13 @@ export class MasterTimeline {
 
   /**
    * Seek to an absolute time position (seconds).
-   * Used for preview scrubbing and Python frame capture.
+   * If seeking to 0 (restart), re-triggers idle layers.
    */
   seekTo(t) {
     this.master?.seek(t);
+    if (t === 0) {
+      Object.values(this.characterTimelines).forEach(ct => ct.startIdle());
+    }
     EventBus.emit("timeline:seek", { time: t });
     return this;
   }
@@ -274,10 +279,14 @@ export class MasterTimeline {
   _buildTransitionIn(cfg) {
     if (!this.stageEl) return null;
     switch (cfg.type) {
-      case "fade_black":
-        gsap.set(this.stageEl, { opacity: 0 });
-        return gsap.timeline()
-          .to(this.stageEl, { opacity: 1, duration: cfg.dur ?? 0.5 });
+      case "fade_black": {
+        // IMPORTANT: use tl.set() not gsap.set() so opacity:0 fires when the
+        // master timeline plays, not immediately at build() time.
+        const tl = gsap.timeline();
+        tl.set(this.stageEl, { opacity: 0 });
+        tl.to(this.stageEl, { opacity: 1, duration: cfg.dur ?? 0.5 });
+        return tl;
+      }
       default:
         return null;
     }
