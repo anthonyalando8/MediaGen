@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "id":       "lipsync_demo_001",
+    "title":    "The Argument",
+    "duration": 12.0,
+    "fps":      30
+  },
+
+  "stage": {
+    "background": "studio",
+    "lighting":   "warm_key"
+  },
+
+  "camera": [
+    { "at": 0.0, "preset": "wide_shot" },
+    { "at": 1.5, "preset": "push_in",   "opts": { "zoom": 1.4, "focusX": -55, "dur": 0.8 } },
+    { "at": 5.5, "preset": "push_in",   "opts": { "zoom": 1.4, "focusX":  55, "dur": 0.6 } },
+    { "at": 9.0, "preset": "dolly_out", "opts": { "zoom": 0.9, "dur": 1.0 } }
+  ],
+
+  "characters": [
+    {
+      "id":          "hero",
+      "idleMode":    "default",
+      "startAt":     0,
+      "facingRight": true,
+      "position":    { "x": -55, "y": 0 },
+      "scale":       1,
+      "actions": [
+        { "at": 0.0, "name": "walk_in",    "opts": { "from": "left", "steps": 4, "distance": 120 }, "expression": "neutral" },
+        { "at": 1.8, "expression": "determined" },
+        { "at": 2.0, "name": "stand_firm", "expression": "angry" },
+        { "at": 6.5, "name": "nod",        "expression": "determined" },
+        { "at": 9.5, "name": "arms_cross", "opts": { "hold": true }, "expression": "smug" }
+      ],
+      "dialogue": [
+        {
+          "startAt": 2.2,
+          "text":    "I told you not to come back here.",
+          "mode":    "text",
+          "wpm":     130,
+          "speaker": "hero"
+        },
+        {
+          "startAt": 7.0,
+          "text":    "This is over.",
+          "mode":    "text",
+          "wpm":     110,
+          "speaker": "hero"
+        }
+      ]
+    },
+    {
+      "id":          "villain",
+      "idleMode":    "menace",
+      "startAt":     0,
+      "facingRight": false,
+      "position":    { "x": 55, "y": 0 },
+      "scale":       1,
+      "actions": [
+        { "at": 0.0, "name": "walk_in",    "opts": { "from": "right", "steps": 4, "distance": 120 }, "expression": "smug" },
+        { "at": 1.8, "expression": "evil_grin" },
+        { "at": 5.8, "name": "laugh",      "expression": "evil_grin" },
+        { "at": 9.2, "name": "shake_head", "expression": "smug" }
+      ],
+      "dialogue": [
+        {
+          "startAt": 4.5,
+          "text":    "You really think you can stop me?",
+          "mode":    "text",
+          "wpm":     120,
+          "speaker": "villain"
+        },
+        {
+          "startAt": 9.5,
+          "text":    "Nothing is over until I say it is.",
+          "mode":    "text",
+          "wpm":     115,
+          "speaker": "villain"
+        }
+      ]
+    }
+  ]
+}
