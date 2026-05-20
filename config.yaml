@@ -11,10 +11,20 @@ subs:
   language: "en"
   font_size: 58
   font_size_active: 64         # active (highlighted) word is slightly bigger
-  primary_color: "&H00FFFFFF&" # white base text  (ASS AABBGGRR)
-  highlight_color: "&H0000FFFF&" # yellow on active word
-  outline_color: "&H00000000&" # black outline
-  back_color: "&H60000000&"    # semi-transparent shadow box
+
+  # Caption visual style — choose one:
+  #   karaoke     White text, yellow active word, semi-transparent box (classic TikTok)
+  #   glow        White text, light-blue/cyan glowing halo on active word — no box
+  #   neon        Dark box, electric cyan active word with aggressive glow radius
+  #   minimal     Clean white text, no box, subtle cyan shift on active word
+  #   bold_drop   Large bold text, heavy drop shadow, bright yellow active word
+  style: "glow"
+
+  # Legacy colour overrides — only used by the karaoke style.
+  primary_color: "&H00FFFFFF"  # white base text
+  highlight_color: "&H0000FFFF" # yellow on active word (karaoke only)
+  outline_color: "&H00000000"  # black outline (karaoke only)
+  back_color: "&H60000000"     # semi-transparent box (karaoke only)
 
 video:
   width: 1080
@@ -42,3 +52,7 @@ palette:
   fg:     "oklch(0.97 0.005 250)"
 
 theme: "tech_blue"   # maps to renderer/themes/tech_blue.css
+# Frame cleanup
+# true  = delete the frames/ directory after assembly completes (saves ~200-400MB per run)
+# false = keep frames on disk (useful for debugging or re-exporting)
+cleanup_frames: true

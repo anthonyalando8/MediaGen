@@ -177,6 +177,9 @@ def render_slides(
     """
     Render all beats via Node/Playwright and return a list of frame directories.
     Each directory contains frame_00000.png … frame_NNNNN.png for one beat.
+    Also returns the parent frames_dir path so the caller can clean it up.
+
+    Returns: (beat_dirs, frames_dir)
 
     Requires renderer/capture.js to exist (run `npm install` in renderer/).
     """
@@ -250,4 +253,4 @@ def render_slides(
             f"[visuals] Renderer exited cleanly but no beat_* dirs found in {frames_dir}"
         )
     print(f"[visuals] HTML render done — {len(beat_dirs)} beat dirs")
-    return beat_dirs
+    return beat_dirs, frames_dir

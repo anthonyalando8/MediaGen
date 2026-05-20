@@ -32,6 +32,8 @@ eggs/
 lib64/
 # parts/
 choreography-engine/node_modules/
+choreography-engine/output/
+choreography-engine/python/output/
 sdist/
 var/
 wheels/

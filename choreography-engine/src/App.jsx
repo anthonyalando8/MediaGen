@@ -1,3 +1,4 @@
+import Layer5Tab from "./Layer5Tab.jsx";
 import { useRef, useEffect, useState, useCallback } from "react";
 import SVGPuppet    from "./characters/SVGPuppet.jsx";
 import Stage        from "./stage/Stage.jsx";
@@ -36,6 +37,7 @@ export default function App() {
   const cameraRef    = useRef(null);
   const idleRef      = useRef(null);
   const actionTLRef  = useRef(null);
+  const exprTLRef    = useRef(null);
   const [audit,       setAudit]       = useState(null);
   const [activeExpr,  setActiveExpr]  = useState("neutral");
   const [activeAct,   setActiveAct]   = useState(null);
@@ -101,9 +103,19 @@ export default function App() {
   }, [mode]);
 
   // ── Interactive actions ────────────────────────────────────────
-  const fireExpr   = useCallback((name) => {
+  const fireExpr = useCallback((name) => {
+    // 1. Kill any in-progress expression tween
+    exprTLRef.current?.kill();
+    // 2. Pause blink so it doesn't fight eye scaleY during the expression
+    idleRef.current?.pauseFaceIdles();
     setActiveExpr(name);
-    ActionRegistry.resolveExpression(name, rigRef.current).play();
+    // 3. Resolve kills expression tweens via ActionRegistry, then returns timeline
+    exprTLRef.current = ActionRegistry.resolveExpression(name, rigRef.current);
+    // 4. Resume blink after expression finishes (onComplete)
+    exprTLRef.current.eventCallback("onComplete", () => {
+      idleRef.current?.resumeFaceIdles();
+    });
+    exprTLRef.current.play();
   }, []);
 
   const fireAction = useCallback((name) => {
@@ -147,7 +159,7 @@ export default function App() {
 
       {/* ── Mode tabs ─────────────────────────────────────────── */}
       <div style={css.tabs}>
-        {["interactive","scene","stage"].map(m => (
+        {["interactive","scene","stage","layer5"].map(m => (
           <button key={m}
             style={mode === m ? css.tabOn : css.tab}
             onClick={() => setMode(m)}>
@@ -398,6 +410,9 @@ export default function App() {
           </>
         )}
 
+
+        {/* ════════ LAYER 5 ════════ */}
+        {mode === "layer5" && <Layer5Tab />}
       </div>
     </div>
   );
@@ -494,3 +509,8 @@ const css = {
     borderRadius: 7, color: "#4ade80", cursor: "pointer",
   },
 };
+
+// ─────────────────────────────────────────────────────────────────
+// NOTE: App.jsx Layer 5 additions are in App.Layer5.jsx
+// The full merged file is provided separately to keep diffs clean.
+// Import and render <Layer5Tab /> inside the mode === "layer5" branch.

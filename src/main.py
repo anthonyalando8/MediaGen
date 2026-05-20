@@ -96,7 +96,7 @@ def run_one(topic: str, cfg: dict) -> dict:
     # Pass beat durations in ms so the renderer captures the correct
     # number of frames per beat — video duration matches narration exactly.
     durations_ms = [int(d * 1000) for d in durations]
-    slide_paths = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)
+    slide_paths, frames_dir = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)
 
     # ── 5. Assembly ───────────────────────────────────────────────────────
     _step(5, "Assembly  (FFmpeg)")
@@ -106,8 +106,17 @@ def run_one(topic: str, cfg: dict) -> dict:
         run_dir, cfg,
     )
 
+    # ── 6. Frame cleanup ─────────────────────────────────────────────
+    if cfg.get("cleanup_frames", True) and frames_dir.exists():
+        import shutil as _shutil
+        _shutil.rmtree(frames_dir)
+        print(f"[main] Frames deleted → {frames_dir.name}/ removed")
+    else:
+        frame_count = sum(1 for _ in frames_dir.rglob("*.png")) if frames_dir.exists() else 0
+        print(f"[main] Frames kept → {frame_count} PNGs in {frames_dir}")
+
     # ── 6. QA + thumbnail ─────────────────────────────────────────────────
-    _step(6, "QA check")
+    _step(7, "QA check")
     report = qa_check(final_path, cfg)
     thumb  = extract_thumbnail(final_path, run_dir)
 

@@ -1,7 +1,8 @@
 import { gsap } from "gsap";
-import { ActionRegistry } from "../actions/ActionRegistry.js";
-import { startIdleSet }   from "../actions/idlePresets.js";
-import EventBus           from "./EventBus.js";
+import { ActionRegistry }  from "../actions/ActionRegistry.js";
+import { startIdleSet }    from "../actions/idlePresets.js";
+import { LipSyncTimeline } from "../lipsync/LipSyncTimeline.js";
+import EventBus            from "./EventBus.js";
 
 /**
  * CharacterTimeline.js
@@ -87,19 +88,62 @@ export class CharacterTimeline {
         const exprFactory = ActionRegistry._expressions[expression];
         if (exprFactory) {
           const exprTL = exprFactory(rig, opts);
-          tl.add(exprTL, at);
 
+          // Pause blink when expression starts, resume when it ends
+          // so blink doesn't fight eye scaleY mid-expression
+          const idleRef = this;
           tl.call(() => {
+            this.idle?.pauseFaceIdles?.();
             EventBus.emit("character:expression", { characterId: id, expression, at });
           }, [], at);
+          tl.add(exprTL, at);
+          tl.call(() => {
+            this.idle?.resumeFaceIdles?.();
+          }, [], at + (exprTL.duration() || 0.3));
         } else {
           console.warn(`[CharacterTimeline:${id}] Unknown expression: "${expression}"`);
         }
       }
     });
 
+    // ── Dialogue / lip sync ──────────────────────────────────────
+    // If the character definition includes dialogue blocks, add
+    // lip sync timelines for each one.
+    const dialogues = this.charDef.dialogue ?? [];
+    const dialogueList = Array.isArray(dialogues) ? dialogues : [dialogues];
+    dialogueList.forEach((d) => {
+      if (d && (d.text || d.phonemes)) {
+        const lipTL = LipSyncTimeline.fromDialogue(d, rig.mouth);
+        tl.add(lipTL, d.startAt ?? 0);
+      }
+    });
+
     this.timeline = tl;
     return tl;
+  }
+
+  // ── Lip sync ─────────────────────────────────────────────────────
+
+  /**
+   * Add a lip sync timeline for a dialogue directive.
+   * Called separately from build() so dialogue can be added
+   * to any existing CharacterTimeline.
+   *
+   * @param {object} dialogue — { startAt, text, phonemes?, wpm? }
+   */
+  addDialogue(dialogue) {
+    if (!this.timeline || !this.rig?.mouth) return;
+    const lipTL = LipSyncTimeline.fromDialogue(dialogue, this.rig.mouth);
+    this.timeline.add(lipTL, dialogue.startAt ?? 0);
+
+    // EventBus notification
+    this.timeline.call(() => {
+      EventBus.emit("character:dialogue", {
+        characterId: this.charDef.id,
+        text: dialogue.text ?? "",
+        at:   dialogue.startAt ?? 0,
+      });
+    }, [], dialogue.startAt ?? 0);
   }
 
   /** Start idle animations (called by MasterTimeline on play/restart) */

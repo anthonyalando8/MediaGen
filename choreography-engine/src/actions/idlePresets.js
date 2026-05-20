@@ -172,5 +172,21 @@ export function startIdleSet(rig, mode = "default") {
     if (t && typeof t.kill === "function") t.kill();
   });
 
+  // ── Face idle control ───────────────────────────────────────────
+  // Expressions need to "borrow" the face from idle.
+  // Call pauseFaceIdles() before firing an expression,
+  // resumeFaceIdles() when the expression completes.
+  // Only blink touches eye scaleY — the only face-idle that fights expressions.
+  timelines.pauseFaceIdles = () => {
+    timelines.blink?.pause();
+  };
+
+  timelines.resumeFaceIdles = () => {
+    // Restart blink from beginning so it doesn't snap mid-close
+    if (timelines.blink) {
+      timelines.blink.restart();
+    }
+  };
+
   return timelines;
 }
