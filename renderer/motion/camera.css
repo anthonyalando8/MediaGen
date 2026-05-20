@@ -25,7 +25,7 @@
   animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
 @keyframes camPushIn {
-  from { transform: scale(1.000) translateY(0px);  }
+  from { transform: scale(1.020) translateY(-4px);  }
   to   { transform: scale(1.060) translateY(-14px); }
 }
 
@@ -34,8 +34,8 @@
   animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
 }
 @keyframes camPullOut {
-  from { transform: scale(1.060) translateY(-14px); }
-  to   { transform: scale(1.000) translateY(0px);   }
+  from { transform: scale(1.055) translateY(-12px); }
+  to   { transform: scale(1.010) translateY(-2px);  }
 }
 
 /* ── HANDHELD — deterministic one-pass ─────────────────────────── */
@@ -60,9 +60,9 @@
   animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes camSnapZoom {
-  0%   { transform: scale(1.000); }
+  0%   { transform: scale(1.035); }
   18%  { transform: scale(1.100); }
-  35%  { transform: scale(1.055); }
+  35%  { transform: scale(1.060); }
   60%  { transform: scale(1.065); }
   100% { transform: scale(1.065); }
 }
@@ -91,10 +91,9 @@
   animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both;
 }
 @keyframes camTiltUp {
-  from { transform: translateY(24px) scale(1.025); }
-  to   { transform: translateY(0px)  scale(1.000); }
+  from { transform: translateY(14px) scale(1.020); }
+  to   { transform: translateY(-4px) scale(1.005); }
 }
-
 /* ================================================================
    PER-SCENE CAMERA DEFAULTS
    ----------------------------------------------------------------

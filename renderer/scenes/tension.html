@@ -16,7 +16,7 @@
 .scene[data-layout="left"] .tension-glow {
   background: radial-gradient(
     ellipse 90% 55% at 15% 85%,
-    oklch(from var(--acc) 0.20 0.06 h / .10), transparent 65%
+    oklch(from var(--acc) 0.48 0.12 h / .28), transparent 65%
   );
 }
 .scene[data-layout="left"] .tension-content {
@@ -28,7 +28,7 @@
   animation: tensionReveal 1.10s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
 }
 .scene[data-layout="left"] .tension-body {
-  top: calc(var(--safe-top) + 980px);
+  top: calc(var(--safe-top) + 780px);
   left: calc(var(--left) + 20px);
   right: calc(var(--right) + 60px);
 }
@@ -37,7 +37,7 @@
 .scene[data-layout="center"] .tension-glow {
   background: radial-gradient(
     ellipse 80% 50% at 50% 90%,
-    oklch(from var(--acc) 0.20 0.06 h / .12), transparent 60%
+    oklch(from var(--acc) 0.48 0.12 h / .32), transparent 60%
   );
 }
 .scene[data-layout="center"] .tension-content {
@@ -56,7 +56,7 @@
   animation: ruleRevealCenter 0.40s cubic-bezier(0.16,1,0.3,1) 1.55s forwards;
 }
 .scene[data-layout="center"] .tension-body {
-  top: calc(var(--safe-top) + 1020px);
+  top: calc(var(--safe-top) + 820px);
   left: calc(var(--left) + 60px);
   right: calc(var(--right) + 60px);
   text-align: center;
@@ -66,7 +66,7 @@
 .scene[data-layout="right"] .tension-glow {
   background: radial-gradient(
     ellipse 75% 55% at 88% 80%,
-    oklch(from var(--acc) 0.20 0.06 h / .10), transparent 65%
+    oklch(from var(--acc) 0.48 0.12 h / .28), transparent 65%
   );
 }
 .scene[data-layout="right"] .tension-content {
@@ -83,7 +83,7 @@
   transform-origin: right center;
 }
 .scene[data-layout="right"] .tension-body {
-  top: calc(var(--safe-top) + 980px);
+  top: calc(var(--safe-top) + 780px);
   left: calc(var(--left) + 80px);
   right: calc(var(--right) + 20px);
   text-align: right;
@@ -93,7 +93,7 @@
 .scene[data-layout="full"] .tension-glow {
   background: radial-gradient(
     ellipse 100% 60% at 50% 95%,
-    oklch(from var(--acc) 0.22 0.07 h / .14), transparent 60%
+    oklch(from var(--acc) 0.50 0.13 h / .36), transparent 60%
   );
 }
 .scene[data-layout="full"] .tension-content {
@@ -107,7 +107,7 @@
   animation: tensionRevealFull 0.90s cubic-bezier(0.16,1,0.3,1) 0.45s forwards;
 }
 .scene[data-layout="full"] .tension-body {
-  top: calc(var(--safe-top) + 1080px);
+  top: calc(var(--safe-top) + 880px);
   left: var(--left);
   right: calc(var(--right) + 40px);
   font-size: calc(var(--sz-body) * 1.05);
@@ -214,12 +214,12 @@
 .scene[data-layout="left"] .tension-ambient-glow,
 .scene[data-layout="full"] .tension-ambient-glow {
   background:
-    radial-gradient(ellipse 90% 45% at 15% 100%, oklch(from var(--acc) 0.25 0.07 h / .12), transparent 60%),
-    radial-gradient(ellipse 40% 25% at 0% 50%,  oklch(from var(--acc) 0.18 0.05 h / .06), transparent 70%);
+    radial-gradient(ellipse 90% 45% at 15% 100%, oklch(from var(--acc) 0.52 0.13 h / .32), transparent 60%),
+    radial-gradient(ellipse 40% 25% at 0% 50%,  oklch(from var(--acc) 0.42 0.10 h / .18), transparent 70%);
 }
 .scene[data-layout="center"] .tension-ambient-glow {
   background:
-    radial-gradient(ellipse 80% 40% at 50% 100%, oklch(from var(--acc) 0.25 0.07 h / .13), transparent 60%);
+    radial-gradient(ellipse 80% 40% at 50% 100%, oklch(from var(--acc) 0.52 0.13 h / .34), transparent 60%);
 }
 .scene[data-layout="right"] .tension-ambient-glow {
   background:

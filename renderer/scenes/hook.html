@@ -12,7 +12,7 @@
 /* ── LEFT (default) ───────────────────────────────────── */
 .scene[data-layout="left"] { animation: cameraSettle 1.8s cubic-bezier(0.16,1,0.3,1) forwards; }
 .scene[data-layout="left"] .hook-bg {
-  background: radial-gradient(80% 60% at 0% 0%, oklch(from var(--acc) 0.22 0.04 h / .08), transparent 60%), var(--bg);
+  background: radial-gradient(80% 60% at 0% 0%, oklch(from var(--acc) 0.45 0.08 h / .22), transparent 60%), var(--bg);
 }
 .scene[data-layout="left"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 80px);
@@ -31,7 +31,7 @@
 
 /* ── CENTER ───────────────────────────────────────────── */
 .scene[data-layout="center"] .hook-bg {
-  background: radial-gradient(60% 50% at 50% 45%, oklch(from var(--acc) 0.18 0.03 h / .07), transparent 65%), var(--bg);
+  background: radial-gradient(60% 50% at 50% 45%, oklch(from var(--acc) 0.40 0.06 h / .20), transparent 65%), var(--bg);
 }
 .scene[data-layout="center"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 220px);
@@ -60,7 +60,7 @@
 
 /* ── RIGHT ────────────────────────────────────────────── */
 .scene[data-layout="right"] .hook-bg {
-  background: radial-gradient(70% 55% at 100% 0%, oklch(from var(--acc) 0.20 0.04 h / .09), transparent 60%), var(--bg);
+  background: radial-gradient(70% 55% at 100% 0%, oklch(from var(--acc) 0.45 0.08 h / .24), transparent 60%), var(--bg);
 }
 .scene[data-layout="right"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 80px);
@@ -86,7 +86,7 @@
 
 /* ── FULL ─────────────────────────────────────────────── */
 .scene[data-layout="full"] .hook-bg {
-  background: radial-gradient(90% 65% at 50% 30%, oklch(from var(--acc) 0.25 0.06 h / .10), transparent 65%), var(--bg);
+  background: radial-gradient(90% 65% at 50% 30%, oklch(from var(--acc) 0.50 0.10 h / .26), transparent 65%), var(--bg);
 }
 .scene[data-layout="full"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 40px);
@@ -161,25 +161,25 @@
 /* Left: corner bloom from top-left — editorial energy source */
 .scene[data-layout="left"] .hook-ambient-glow {
   background:
-    radial-gradient(ellipse 55% 40% at 0% 0%, oklch(from var(--acc) 0.30 0.07 h / .10), transparent 65%),
-    radial-gradient(ellipse 35% 55% at 100% 100%, oklch(from var(--acc) 0.20 0.04 h / .05), transparent 70%);
+    radial-gradient(ellipse 55% 40% at 0% 0%, oklch(from var(--acc) 0.55 0.12 h / .26), transparent 65%),
+    radial-gradient(ellipse 35% 55% at 100% 100%, oklch(from var(--acc) 0.45 0.08 h / .16), transparent 70%);
 }
 /* Full: central overhead bloom — aggressive, fills frame */
 .scene[data-layout="full"] .hook-ambient-glow {
   background:
-    radial-gradient(ellipse 80% 45% at 50% -5%, oklch(from var(--acc) 0.28 0.06 h / .09), transparent 65%),
-    radial-gradient(ellipse 40% 30% at 50% 100%, oklch(from var(--acc) 0.18 0.04 h / .05), transparent 70%);
+    radial-gradient(ellipse 80% 45% at 50% -5%, oklch(from var(--acc) 0.52 0.10 h / .24), transparent 65%),
+    radial-gradient(ellipse 40% 30% at 50% 100%, oklch(from var(--acc) 0.42 0.08 h / .16), transparent 70%);
 }
 /* Center: symmetric soft overhead */
 .scene[data-layout="center"] .hook-ambient-glow {
   background:
-    radial-gradient(ellipse 60% 40% at 50% 0%, oklch(from var(--acc) 0.24 0.05 h / .07), transparent 65%);
+    radial-gradient(ellipse 60% 40% at 50% 0%, oklch(from var(--acc) 0.48 0.09 h / .20), transparent 65%);
 }
 /* Right: top-right bloom — mirrored editorial */
 .scene[data-layout="right"] .hook-ambient-glow {
   background:
-    radial-gradient(ellipse 55% 40% at 100% 0%, oklch(from var(--acc) 0.30 0.07 h / .10), transparent 65%),
-    radial-gradient(ellipse 30% 50% at 0% 100%, oklch(from var(--acc) 0.18 0.04 h / .04), transparent 70%);
+    radial-gradient(ellipse 55% 40% at 100% 0%, oklch(from var(--acc) 0.55 0.12 h / .26), transparent 65%),
+    radial-gradient(ellipse 30% 50% at 0% 100%, oklch(from var(--acc) 0.42 0.08 h / .14), transparent 70%);
 }
 /* hookGlowBreathe removed — static opacity used instead */
 </style>
