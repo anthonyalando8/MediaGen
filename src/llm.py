@@ -1,8 +1,23 @@
 """
-llm.py  —  Script generation via Ollama.
+llm.py  --  Script generation via Ollama.
 
 Calls the local Ollama CLI, parses the JSON response,
-retries up to 3 times on bad output, validates beat structure.
+retries up to 3 times on bad output, validates beat structure
+AND cinematic field variety so the renderer gets motion-rich data.
+
+────────────────────────────────────────────────────────────────────
+CINEMATIC VALIDATION — what's new vs the previous version
+────────────────────────────────────────────────────────────────────
+1. Each cinematic field (camera/pace/emotion/transition/background/
+   layout/visual_intent) is validated against an allowed vocabulary.
+   Unknown values are mapped to safe defaults instead of silently
+   passing through.
+2. Variety gates fail validation (and trigger a retry):
+     - <3 unique cameras across the script
+     - <2 unique paces / layouts / backgrounds
+     - same camera or layout for 3+ consecutive beats
+3. Missing per-beat fields are filled with scene-type defaults instead
+   of dropping through to "static / mid / solid" everywhere.
 """
 
 import subprocess
@@ -13,24 +28,53 @@ import sys
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Cinematic vocabulary — must match renderer/inject.js + scenes contracts
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ALLOWED = {
+    "camera":        {"static", "push_in", "pull_out", "handheld", "snap_zoom", "micro_shake", "tilt_up"},
+    "pace":          {"slow", "mid", "fast", "explosive"},
+    "transition":    {"cut", "slam_cut", "blur_wipe", "flash", "fade", "dip_black", "whip_pan"},
+    "background":    {"solid", "gradient", "noise", "grid", "glow", "lines", "abstract"},
+    "layout":        {"left", "center", "right", "full"},
+    "emotion":       {"urgent", "tense", "hopeful", "melancholic", "angry", "cold",
+                      "confident", "anxious", "serious", "playful", "amused", "surprised"},
+    "visual_intent": {"confrontational", "mysterious", "clean", "chaotic", "cinematic",
+                      "minimal", "aggressive", "documentary", "absurd", "quirky"},
+    "energy":        {"high", "mid", "low"},
+    "type":          {"hook", "insight", "tension", "truth", "flip", "climax", "payoff", "cta"},
+}
+
+# Per-scene-type cinematic defaults — used when LLM omits a field or supplies
+# an out-of-vocabulary value. Mirrors visuals.py defaults so behaviour is
+# consistent whether the field is filled here or downstream.
+_DEFAULTS_BY_TYPE = {
+    "hook":    {"camera": "push_in",     "pace": "fast",      "emotion": "confident", "background": "glow",     "layout": "left"},
+    "insight": {"camera": "static",      "pace": "mid",       "emotion": "serious",   "background": "solid",    "layout": "left"},
+    "climax":  {"camera": "snap_zoom",   "pace": "explosive", "emotion": "urgent",    "background": "abstract", "layout": "full"},
+    "tension": {"camera": "tilt_up",     "pace": "slow",      "emotion": "tense",     "background": "lines",    "layout": "left"},
+    "truth":   {"camera": "static",      "pace": "mid",       "emotion": "confident", "background": "gradient", "layout": "center"},
+    "flip":    {"camera": "micro_shake", "pace": "fast",      "emotion": "anxious",   "background": "noise",    "layout": "right"},
+    "payoff":  {"camera": "pull_out",    "pace": "slow",      "emotion": "hopeful",   "background": "glow",     "layout": "center"},
+    "cta":     {"camera": "push_in",     "pace": "fast",      "emotion": "urgent",    "background": "solid",    "layout": "center"},
+}
+
+_TRANSITION_BY_TYPE = {
+    "hook": "slam_cut", "climax": "slam_cut", "tension": "dip_black",
+    "payoff": "fade",   "flip":   "flash",    "cta":     "dip_black",
+    "truth": "cut",     "insight":"cut",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
     """
-    Generate a structured 5-beat script via Ollama.
+    Generate a structured 4-8 beat script via Ollama.
 
-    Returns a dict:
-      {
-        "title":   str,
-        "keyword": str,
-        "beats": [
-          { "id": int, "keyword": str, "text": str, "hook": bool },
-          ...  (5 items)
-        ]
-      }
-
-    Raises RuntimeError after 3 failed attempts.
+    Retries up to 3 times on bad output OR cinematic-variety failure.
     """
     template = prompt_path.read_text(encoding="utf-8")
     prompt   = template.format(topic=topic)
@@ -47,6 +91,7 @@ def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
             data = _parse_json(raw.strip())
             _validate(data)
             print(f"[llm] ✓ Script OK — \"{data['title']}\"")
+            _print_cinematic_summary(data)
             return data
         except Exception as e:
             print(f"[llm]   ✗ attempt {attempt} failed: {e}", file=sys.stderr)
@@ -63,62 +108,37 @@ def spoken_text(script: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Internals
+# Internals — text cleanup
 # ---------------------------------------------------------------------------
 
 def _strip_ansi(s: str) -> str:
-    """Remove ANSI/VT100 escape sequences that Ollama CLI emits during streaming.
-    Examples: ESC[3D  ESC[K  ESC[?25l  ESC[2J
-    These are cursor-movement / erase codes used for the streaming animation.
-    """
-    # ESC[ ... final-byte  (CSI sequences — most common: [3D, [K, [?25l etc.)
+    """Remove ANSI/VT100 escape sequences that Ollama CLI emits during streaming."""
     s = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", s)
-    # ESC O ...  (SS3 sequences)
     s = re.sub(r"\x1b[O][A-Za-z]", "", s)
-    # bare ESC + single char
     s = re.sub(r"\x1b.", "", s)
     return s
 
 
 def _fix_duplicate_word_fragments(text: str) -> str:
-    """
-    Remove streaming artifacts left by Ollama after ANSI stripping.
-
-    Ollama prints a partial word, rewinds with ANSI cursor codes, then prints
-    the full word. After stripping ANSI both copies remain.
-
-    Handles all forms:
-        "ideas ideas"       -> "ideas"       (pure alpha duplicate)
-        "asset. asset."     -> "asset."      (both copies have punctuation)
-        "building. building,"-> "building,"  (mixed trailing punctuation)
-        "inv invested"      -> "invested"    (prefix fragment, pure alpha)
-        "no now."           -> "now."        (prefix fragment before punct word)
-
-    Single word-by-word pass: strip punctuation to compare alpha cores.
-    Always keeps the SECOND token (Ollama prints the full/correct word last).
-    """
-    tokens = re.split(r'(\s+)', text)   # interleaved [word, space, word, space, ...]
+    """Remove streaming artifacts left by Ollama after ANSI stripping."""
+    tokens = re.split(r'(\s+)', text)
     result = []
     i = 0
     while i < len(tokens):
-        if i % 2 == 0:  # word/punct token
+        if i % 2 == 0:
             token = tokens[i]
             if i + 2 < len(tokens):
                 next_token = tokens[i + 2]
-                # Strip ALL non-alpha for comparison (handles any punctuation)
                 token_alpha = re.sub(r"[^A-Za-z']", '', token)
                 next_alpha  = re.sub(r"[^A-Za-z']", '', next_token)
 
-                # Case A: exact duplicate — alpha cores match (>= 2 chars each)
                 if (len(token_alpha) >= 2 and len(next_alpha) >= 2
                         and token_alpha.lower() == next_alpha.lower()):
-                    i += 2  # skip current token + its trailing space
+                    i += 2
                     continue
 
-                # Case B: prefix fragment — token is pure alpha and is a strict
-                # prefix of next_alpha (e.g. "inv" before "invested")
                 if (len(token_alpha) >= 1 and len(next_alpha) >= 2
-                        and re.match(r"^[A-Za-z']+$", token)  # fragment has no punct
+                        and re.match(r"^[A-Za-z']+$", token)
                         and next_alpha.lower().startswith(token_alpha.lower())
                         and len(token_alpha) < len(next_alpha)):
                     i += 2
@@ -134,12 +154,12 @@ def _fix_duplicate_word_fragments(text: str) -> str:
 def _fix_mojibake(text: str) -> str:
     """Fix UTF-8 characters that were misread as Latin-1 by Ollama output handling."""
     replacements = [
-        ("â€“", "—"),  # â€" -> em-dash
-        ("â€˜", "‘"),  # â€˜ -> left single quote
-        ("â€™", "’"),  # â€™ -> right single quote
-        ("â€œ", "“"),  # â€œ -> left double quote
-        ("â€",       "”"),  # â€  -> right double quote
-        ("â€¦", "…"),  # â€¦ -> ellipsis
+        ("â€“", "—"),
+        ("â€˜", "‘"),
+        ("â€™", "’"),
+        ("â€œ", "“"),
+        ("â€",  "”"),
+        ("â€¦", "…"),
     ]
     for bad, good in replacements:
         text = text.replace(bad, good)
@@ -155,18 +175,21 @@ def _clean_beat_texts(data: dict) -> dict:
     return data
 
 
+# ---------------------------------------------------------------------------
+# Internals — schema normalisation & cinematic-field fill-in
+# ---------------------------------------------------------------------------
+
 def _normalise_schema(data: dict) -> dict:
     """
-    Normalise old schema (id, hook: bool) to new schema (type, energy).
-    Makes the pipeline robust regardless of which format the model returns.
-
-    Old: { id, keyword, text, hook: bool }
-    New: { type, keyword, text, energy }
+    Normalise old schema (id int, hook bool) to new schema (type, energy),
+    AND fill in missing cinematic fields with scene-type defaults so the
+    contract is complete before validation runs.
     """
     beats = data.get("beats", [])
     total = len(beats)
+
     for i, beat in enumerate(beats):
-        # derive "type" from hook bool or position if not already set
+        # derive `type` from hook/position if absent
         if "type" not in beat:
             if beat.get("hook") is True or i == 0:
                 beat["type"] = "hook"
@@ -174,46 +197,60 @@ def _normalise_schema(data: dict) -> dict:
                 beat["type"] = "cta"
             else:
                 beat["type"] = "insight"
+
         # default energy from hook flag or position
         if "energy" not in beat:
             beat["energy"] = "high" if (beat.get("hook") or i == 0) else "mid"
-        # clean up old fields — only remove integer 'id' (old schema);
-        # preserve string beat ids like "beat_01" from the new schema.
+
+        # clean up legacy fields
         if isinstance(beat.get("id"), int):
             beat.pop("id")
         beat.pop("hook", None)
-    # optional top-level fields
+
+        # ── Cinematic field fill-in ──────────────────────────────────
+        # If the LLM emitted an unknown or missing value, fall back to
+        # the scene-type default. This guarantees the contract is valid
+        # without us silently losing information.
+        beat_type = beat.get("type", "insight")
+        defaults  = _DEFAULTS_BY_TYPE.get(beat_type, _DEFAULTS_BY_TYPE["insight"])
+
+        for field, default in defaults.items():
+            val = beat.get(field)
+            if not val or val not in _ALLOWED[field]:
+                beat[field] = default
+
+        # transition default by scene type if missing/invalid
+        if beat.get("transition") not in _ALLOWED["transition"]:
+            beat["transition"] = _TRANSITION_BY_TYPE.get(beat_type, "cut")
+
+        # visual_intent: keep if valid, else mild default
+        if beat.get("visual_intent") not in _ALLOWED["visual_intent"]:
+            beat["visual_intent"] = "cinematic"
+
+        # visual_query is creative — keep whatever the LLM provided (or empty)
+        beat.setdefault("visual_query", "")
+
+    # top-level optional fields
     data.setdefault("thumbnail", data.get("keyword", ""))
     data.setdefault("style", "analytical")
     return data
 
 
+# ---------------------------------------------------------------------------
+# Internals — JSON extraction
+# ---------------------------------------------------------------------------
+
 def _parse_json(raw: str) -> dict:
-    """
-    Clean the raw Ollama CLI output and parse JSON from it.
-
-    Issues we handle:
-      1. ANSI escape codes (cursor-move, erase) from streaming animation.
-      2. Markdown code fences.
-      3. Literal newlines / control chars inside JSON string values.
-      4. Mid-word duplicate fragments left after ANSI stripping.
-    """
-    # 1. strip ANSI escape sequences first (must be before JSON extraction)
+    """Clean the raw Ollama CLI output and parse JSON from it."""
     cleaned = _strip_ansi(raw)
-
-    # 2. strip markdown fences
     cleaned = re.sub(r"```(?:json)?", "", cleaned).strip()
 
-    # 3. extract the first {...} block
     match = re.search(r"\{.*\}", cleaned, re.DOTALL)
     if not match:
         raise ValueError("No JSON object found in model output")
     blob = match.group(0)
-
-    # 4. sanitize remaining control characters inside string values
     blob = _sanitize_json_strings(blob)
 
-    # 5. parse, fix artifacts, normalise schema
     data = json.loads(blob)
     data = _clean_beat_texts(data)
     data = _normalise_schema(data)
@@ -221,72 +258,131 @@ def _parse_json(raw: str) -> dict:
 
 
 def _sanitize_json_strings(s: str) -> str:
-    """
-    Replace literal control characters (newline, tab, etc.) that appear
-    inside JSON string values with a space.
-    Leaves structural JSON whitespace outside quotes untouched.
-    """
-    result = []
-    in_str = False
-    escape = False
-
+    """Replace literal control characters inside JSON string values with a space."""
+    result, in_str, escape = [], False, False
     for ch in s:
         if escape:
-            result.append(ch)
-            escape = False
-            continue
-
+            result.append(ch); escape = False; continue
         if ch == "\\" and in_str:
-            result.append(ch)
-            escape = True
-            continue
-
+            result.append(ch); escape = True; continue
         if ch == '"':
-            in_str = not in_str
-            result.append(ch)
-            continue
-
+            in_str = not in_str; result.append(ch); continue
         if in_str and ord(ch) < 0x20:
-            result.append(" ")
-            continue
-
+            result.append(" "); continue
         result.append(ch)
-
     return "".join(result)
+
+
+# ---------------------------------------------------------------------------
+# Internals — validation (basic + cinematic variety)
+# ---------------------------------------------------------------------------
+
 def _validate(data: dict) -> None:
-    """Accept both old (5-beat, hook bool) and new (4-8 beat, type field) schemas."""
+    """Run all gates. Raises ValueError on any failure → triggers retry."""
+    _validate_basic(data)
+    _validate_cinematic_variety(data["beats"])
+
+
+def _validate_basic(data: dict) -> None:
+    """Schema + word-count gates from the original implementation."""
     if "beats" not in data:
         raise KeyError("Missing key: 'beats'")
     if "title" not in data:
         raise KeyError("Missing key: 'title'")
+
     beats = data["beats"]
     if not isinstance(beats, list):
         raise ValueError("beats must be a list")
     if not (4 <= len(beats) <= 8):
         raise ValueError(f"Expected 4-8 beats, got {len(beats)}")
+
     for i, beat in enumerate(beats):
         for k in ("keyword", "text"):
             if k not in beat:
                 raise KeyError(f"Beat {i} missing key: '{k}'")
         if not beat["text"].strip():
             raise ValueError(f"Beat {i} has empty text")
-        # Per-beat word count: prompt requires 15-25 words per beat
         beat_words = len(beat["text"].split())
         if not (15 <= beat_words <= 30):
             raise ValueError(
                 f"Beat {i} has {beat_words} words — must be 15-25 words per beat."
             )
 
-    # Total word count gate: scales with beat count (15 words/beat minimum).
-    # Target 90-130 words total to match the prompt spec.
     total_words = sum(len(b["text"].split()) for b in beats)
     min_words   = len(beats) * 15
     if total_words < min_words:
         raise ValueError(
             f"Script too short: {total_words} words across {len(beats)} beats "
-            f"(minimum {min_words} at 15 words/beat). Beats are too short — model must expand them."
+            f"(minimum {min_words}). Model must expand."
         )
     if total_words > 200:
+        raise ValueError(f"Script too long: {total_words} words (maximum 200).")
+
+
+def _validate_cinematic_variety(beats: list) -> None:
+    """
+    Reject scripts that would produce stiff renders.
+
+    Gates:
+      - ≥3 distinct cameras across the script
+      - ≥2 distinct paces / layouts / backgrounds
+      - no 3 consecutive beats with the same camera
+      - no 3 consecutive beats with the same layout
+
+    Why these thresholds?
+      A 4-beat script with 2 cameras = 50% variance — acceptable floor.
+      A 6-beat script with 2 cameras = 33% variance — every beat starts to
+      look the same. 3 cameras across 4-8 beats keeps the visual rhythm.
+    """
+    if len(beats) < 4:
+        return  # too short to gate
+
+    def _unique(field):
+        return {b.get(field) for b in beats}
+
+    cams       = _unique("camera")
+    paces      = _unique("pace")
+    layouts    = _unique("layout")
+    bgs        = _unique("background")
+
+    if len(cams) < 3:
         raise ValueError(
-            f"Script too long: {total_words} words (maximum 200)."
+            f"Cinematic variety: only {len(cams)} unique camera(s) "
+            f"across {len(beats)} beats — need ≥3. Got: {cams}"
         )
+    if len(paces) < 2:
+        raise ValueError(
+            f"Cinematic variety: only 1 unique pace across {len(beats)} beats — need ≥2."
+        )
+    if len(layouts) < 2:
+        raise ValueError(
+            f"Cinematic variety: only 1 unique layout across {len(beats)} beats — need ≥2."
+        )
+    if len(bgs) < 2:
+        raise ValueError(
+            f"Cinematic variety: only 1 unique background — need ≥2."
+        )
+
+    # No 3-in-a-row repeats for camera or layout
+    for field in ("camera", "layout"):
+        run = 1
+        for i in range(1, len(beats)):
+            if beats[i].get(field) == beats[i-1].get(field):
+                run += 1
+                if run >= 3:
+                    raise ValueError(
+                        f"Cinematic variety: '{field}' repeated 3+ consecutive beats "
+                        f"({beats[i].get(field)} at index {i-2}..{i})."
+                    )
+            else:
+                run = 1
+
+
+def _print_cinematic_summary(data: dict) -> None:
+    """One-line summary so console log shows what variety the LLM picked."""
+    beats = data["beats"]
+    cams    = ",".join(b.get("camera", "?")[:4]     for b in beats)
+    paces   = ",".join(b.get("pace", "?")[:3]       for b in beats)
+    layouts = ",".join(b.get("layout", "?")[:3]     for b in beats)
+    bgs     = ",".join(b.get("background", "?")[:3] for b in beats)
+    print(f"[llm]   cinematic · cam[{cams}] pace[{paces}] lay[{layouts}] bg[{bgs}]")

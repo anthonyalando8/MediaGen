@@ -6,12 +6,27 @@ per-beat frame directories used by assemble.py.
 
 Requires:
   cd renderer && npm install && npx playwright install chromium
+
+────────────────────────────────────────────────────────────────────
+CINEMATIC UPGRADE — what changed vs the previous version
+────────────────────────────────────────────────────────────────────
+1. Smart per-scene defaults for camera / pace / emotion / background
+   so sparsely-described beats still render with motion variety.
+2. Layout rotation across beats (not one-layout-for-whole-video).
+3. entry_vector emitted per beat — inherits direction from the
+   previous beat's camera exit for inter-beat motion carry.
+4. Transition variation based on scene type + energy delta.
+5. Caller-supplied values always override defaults (LLM wins).
 """
 
 import pathlib
 import subprocess
 import json
 import os
+
+# ---------------------------------------------------------------------------
+# .env loader
+# ---------------------------------------------------------------------------
 
 def _load_dotenv(env: dict) -> dict:
     """Load .env from project root into env dict without requiring python-dotenv."""
@@ -68,19 +83,6 @@ def _beat_hud(beat: dict, i: int, total: int) -> str:
     return mapping.get(t, "// —")
 
 
-def _style_to_layout(style: str) -> str:
-    mapping = {
-        "contrarian": "left",
-        "builder":    "left",
-        "calm":       "center",
-        "analytical": "center",
-        "cinematic":  "right",
-        "intense":    "full",
-        "humorous":   "center",
-    }
-    return mapping.get(style.lower() if style else "", "left")
-
-
 def _style_to_theme(style: str) -> str:
     style_map = {
         "contrarian": "tech_blue",
@@ -117,33 +119,203 @@ _THEME_PALETTES = {
 }
 
 
-def _build_beat_contracts(beats: list, beat_durations_ms: list = None) -> list:
+# ───────────────────────────────────────────────────────────────────────────
+# CINEMATIC DEFAULTS  —  prevents stiff uniformity when the LLM omits fields
+# ───────────────────────────────────────────────────────────────────────────
+
+# Each scene type has a cinematic vocabulary. These are the defaults a
+# director would pick — varied across the video by design.
+_SCENE_CAMERA = {
+    "hook":    "push_in",       # authority — moves toward the viewer
+    "insight": "static",        # composed, considered (but see _camera_for below)
+    "climax":  "snap_zoom",     # explosive punch
+    "tension": "tilt_up",       # slow reveal from below, dread
+    "truth":   "static",        # the line lands clean
+    "flip":    "micro_shake",   # destabilise before reorient
+    "payoff":  "pull_out",      # earned reveal, opens space
+    "cta":     "push_in",       # final push to action
+}
+
+_SCENE_PACE = {
+    "hook":    "fast",
+    "insight": "mid",
+    "climax":  "explosive",
+    "tension": "slow",
+    "truth":   "mid",
+    "flip":    "fast",
+    "payoff":  "slow",
+    "cta":     "fast",
+}
+
+_SCENE_EMOTION = {
+    "hook":    "confident",
+    "insight": "serious",
+    "climax":  "urgent",
+    "tension": "tense",
+    "truth":   "confident",
+    "flip":    "anxious",
+    "payoff":  "hopeful",
+    "cta":     "urgent",
+}
+
+# Backgrounds rotate within a scene-type pool so back-to-back insights
+# don't look identical. The index parameter walks the pool.
+_SCENE_BACKGROUND_POOL = {
+    "hook":    ["glow", "gradient", "abstract"],
+    "insight": ["solid", "grid", "lines", "gradient"],
+    "climax":  ["abstract", "glow"],
+    "tension": ["lines", "noise", "solid"],
+    "truth":   ["gradient", "solid"],
+    "flip":    ["noise", "lines"],
+    "payoff":  ["glow", "gradient"],
+    "cta":     ["solid", "glow"],
+}
+
+# Layout rotation: each scene type has a preferred layout vocabulary.
+# We walk the pool by beat index so the same scene type renders different
+# layouts across the video. Style hint biases the first choice.
+_SCENE_LAYOUT_POOL = {
+    "hook":    ["left", "full", "center"],
+    "insight": ["left", "right", "center"],
+    "climax":  ["full", "center", "left"],
+    "tension": ["left", "right"],
+    "truth":   ["center", "left"],
+    "flip":    ["right", "left"],
+    "payoff":  ["center", "left"],
+    "cta":     ["full", "center"],
+}
+
+# Style-level layout preference biases the first option of the pool.
+_STYLE_LAYOUT_BIAS = {
+    "contrarian": "left",
+    "builder":    "left",
+    "calm":       "center",
+    "analytical": "center",
+    "cinematic":  "right",
+    "intense":    "full",
+    "humorous":   "center",
+}
+
+
+def _camera_for(scene: str, i: int) -> str:
+    """Pick a camera, with subtle insight/truth variation by index so
+    multiple insight beats don't all use the same static camera."""
+    base = _SCENE_CAMERA.get(scene, "static")
+    # For "static" scenes, alternate with a gentle drift so the runtime
+    # gets variety even when the LLM doesn't request it.
+    if base == "static":
+        return ["static", "handheld", "static", "push_in"][i % 4]
+    return base
+
+
+def _layout_for(scene: str, i: int, style: str) -> str:
+    """Rotate layouts across beats. Style bias takes the first option."""
+    pool = list(_SCENE_LAYOUT_POOL.get(scene, ["left", "center", "right"]))
+    bias = _STYLE_LAYOUT_BIAS.get((style or "").lower(), "")
+    if bias and bias in pool:
+        # Move bias to the front of the pool so the FIRST occurrence of
+        # this scene type uses the style preference.
+        pool.remove(bias); pool.insert(0, bias)
+    return pool[i % len(pool)]
+
+
+def _background_for(scene: str, i: int) -> str:
+    pool = _SCENE_BACKGROUND_POOL.get(scene, ["solid"])
+    return pool[i % len(pool)]
+
+
+def _transition_for(prev: dict, curr: dict, i: int) -> str:
+    """Pick a transition based on scene type and energy delta."""
+    curr_scene = curr.get("scene", "")
+    if curr_scene == "climax":  return "slam_cut"
+    if curr_scene == "payoff":  return "fade"
+    if curr_scene == "tension": return "dip_black"
+    if curr_scene == "flip":    return "flash"
+    # default rhythm: cut, occasional whip_pan or blur_wipe
+    rhythm = ["cut", "cut", "blur_wipe", "cut", "whip_pan"]
+    return rhythm[i % len(rhythm)]
+
+
+# Each camera move ends with implied directional energy. The NEXT beat's
+# entry_vector inherits this so the cut preserves motion.
+_CAMERA_EXIT_VECTOR = {
+    "push_in":     {"x":  0,   "y": -10, "scale": 1.04},
+    "pull_out":    {"x":  0,   "y":   4, "scale": 0.98},
+    "tilt_up":     {"x":  0,   "y": -12, "scale": 1.02},
+    "snap_zoom":   {"x":  0,   "y":  -4, "scale": 1.06},
+    "handheld":    {"x":  2,   "y":  -1, "scale": 1.00},
+    "micro_shake": {"x":  0,   "y":   0, "scale": 1.05},
+    "static":      {"x":  0,   "y":   0, "scale": 1.00},
+}
+
+def _exit_vector(camera: str) -> dict:
+    return dict(_CAMERA_EXIT_VECTOR.get(camera, _CAMERA_EXIT_VECTOR["static"]))
+
+
+def _build_beat_contracts(
+    beats: list,
+    beat_durations_ms: list = None,
+    style: str = "",
+) -> list:
+    """
+    Build the per-beat contracts the renderer consumes.
+
+    Each contract gets cinematic defaults applied — but any field the
+    caller (LLM / script) explicitly provided wins. Defaults only fill
+    blanks. This is what prevents the renderer from producing stiff
+    repetitive output when beat JSON is sparse.
+    """
     total = len(beats)
     contracts = []
+
     for i, beat in enumerate(beats):
+        scene  = _beat_scene(beat, i, total)
+        layout = beat.get("layout")    or _layout_for(scene, i, style)
+        camera = beat.get("camera")    or _camera_for(scene, i)
+        pace   = beat.get("pace")      or _SCENE_PACE.get(scene, "mid")
+        emo    = beat.get("emotion")   or _SCENE_EMOTION.get(scene, "")
+        bg     = beat.get("background") or _background_for(scene, i)
+
         contract = {
             "id":              beat.get("id", i),
-            "scene":           _beat_scene(beat, i, total),
+            "scene":           scene,
             "hud_tag":         _beat_hud(beat, i, total),
             "keyword":         beat["keyword"],
             "body":            beat["text"],
             "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
             "accent_override": "spike" if beat.get("type", "") == "climax" else None,
-            # Beat position for HUD counter (1-based display)
             "beat_index":      i + 1,
             "beat_total":      total,
-            # Per-beat cinematic fields forwarded to the renderer
-            "emotion":         beat.get("emotion", ""),
-            "pace":            beat.get("pace", "mid"),
+
+            # Cinematic fields — defaults applied above
+            "layout":          layout,
+            "camera":          camera,
+            "pace":            pace,
+            "emotion":         emo,
+            "background":      bg,
             "visual_intent":   beat.get("visual_intent", ""),
-            "camera":          beat.get("camera", "static"),
-            "transition":      beat.get("transition", "cut"),
-            "background":      beat.get("background", "solid"),
-            # Background image search query — used by capture.js to fetch
-            # a contextual blurred image from Unsplash (empty = no image)
             "visual_query":    beat.get("visual_query", ""),
+
+            # Transition set after we know prev contract (below)
+            "transition":      beat.get("transition", ""),  # may be empty, filled below
+
+            # entry_vector inherited from previous beat's exit
+            "entry_vector":    {"x": 0, "y": 0, "scale": 1.0},
         }
         contracts.append(contract)
+
+    # ── Inter-beat passes: transition + entry_vector handoff ──────────
+    for i in range(len(contracts)):
+        prev = contracts[i - 1] if i > 0 else None
+
+        # Transition: caller-provided wins, else compute from context
+        if not contracts[i]["transition"]:
+            contracts[i]["transition"] = _transition_for(prev, contracts[i], i) if prev else "cut"
+
+        # entry_vector = previous beat's exit_vector (camera-derived)
+        if prev is not None:
+            contracts[i]["entry_vector"] = _exit_vector(prev["camera"])
+
     return contracts
 
 
@@ -159,8 +331,6 @@ def render_slides(
 ) -> list[pathlib.Path]:
     """
     Render all beats via Node/Playwright and return a list of frame directories.
-    Each directory contains frame_00000.png … frame_NNNNN.png for one beat.
-    Also returns the parent frames_dir path so the caller can clean it up.
 
     Returns: (beat_dirs, frames_dir)
 
@@ -175,19 +345,23 @@ def render_slides(
         )
 
     script_style = script.get("style", "contrarian")
-    layout       = _style_to_layout(script_style)
     global_theme = script.get("global", {}).get("theme", "")
     theme        = _style_to_theme(global_theme or script_style)
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])
 
-    beats_contracts = _build_beat_contracts(script["beats"], beat_durations_ms)
-    for beat in beats_contracts:
-        beat["layout"] = layout
+    # Layout is now PER-BEAT inside _build_beat_contracts — we no longer
+    # pin one layout for the entire video. The video-level "layout" field
+    # is kept for back-compat as a hint for the first beat.
+    beats_contracts = _build_beat_contracts(
+        script["beats"],
+        beat_durations_ms,
+        style=script_style,
+    )
 
     scene_json = {
         "video_id": out_dir.name,
         "theme":    theme,
-        "layout":   layout,
+        "layout":   beats_contracts[0]["layout"] if beats_contracts else "left",  # legacy hint
         "fps":      cfg["video"]["fps"],
         "width":    cfg["video"]["width"],
         "height":   cfg["video"]["height"],
@@ -211,7 +385,6 @@ def render_slides(
         return str(p.resolve()).replace("\\", "/")
 
     project_root = pathlib.Path(__file__).parent.parent.resolve()
-    #env = {**os.environ, "PROJECT_ROOT": str(project_root)}
     env = _load_dotenv({**os.environ, "PROJECT_ROOT": str(project_root)})
 
     cmd = [

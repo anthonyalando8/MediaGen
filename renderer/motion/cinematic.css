@@ -1,0 +1,67 @@
+/* ================================================================
+   cinematic.css  --  Easing kit, depth planes, motion carry
+   Load AFTER camera.css, BEFORE scene-specific overrides.
+   ================================================================ */
+:root {
+  /* ── EASING KIT — one curve per job ─────────────────── */
+  --ease-cinema-out: cubic-bezier(.05,.9,.1,1);     /* explosive start → soft settle (default entry) */
+  --ease-cinema-in:  cubic-bezier(.6,.04,.98,.34);   /* slow start → fast finish (exits) */
+  --ease-anticipate: cubic-bezier(.7,-.4,.4,1.4);     /* pull-back then power (climax) */
+  --ease-overshoot:  cubic-bezier(.34,1.32,.64,1);    /* small overshoot (keyword punch) */
+  --ease-overshoot-x:cubic-bezier(.22,1.6,.36,1);     /* hard overshoot (slam, full layout) */
+  --ease-settle:     cubic-bezier(.16,1,.05,1);       /* long settle (rule wipes) */
+  --ease-stomp:      cubic-bezier(.9,0,.95,.4);       /* hard down (dip black) */
+  --ease-glide:      cubic-bezier(.25,.46,.45,.94);    /* neutral travel (body lines, camera drift) */
+
+  /* ── MOTION CARRY — set by inject.js from prev beat ──── */
+  --carry-x: 0px;
+  --carry-y: 0px;
+  --carry-scale: 1;
+
+  /* ── OVERSHOOT MAGNITUDE by pace ─────────────────────── */
+  --overshoot-y: -8px;  /* mid pace default */
+}
+.scene[data-pace="slow"]       { --overshoot-y: -5px;  }
+.scene[data-pace="fast"]       { --overshoot-y: -12px; }
+.scene[data-pace="explosive"]  { --overshoot-y: -18px; }
+
+/* ================================================================
+   DEPTH PLANES — minimum 3-layer parallax
+   ----------------------------------------------------------------
+   Wrap scene content in .depth-bg / .depth-mid / .depth-fg.
+   The camera classes in camera.css now scale each plane by a
+   different factor → real parallax, no JS, fully seek-safe.
+   ================================================================ */
+.depth-bg, .depth-mid, .depth-fg {
+  position: absolute; inset: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.depth-bg  { z-index: var(--z-bg);  }
+.depth-mid { z-index: var(--z-mid); }
+.depth-fg  { z-index: var(--z-fg);  }
+
+/* ================================================================
+   ENTRY HAND-OFF — opening pose reads from --carry-*
+   inject.js sets --carry-x/--carry-y from the previous beat's
+   computed exit pose. The scene wrapper starts pre-offset by that
+   amount and decays it to zero across the first 240ms.
+   ================================================================ */
+.scene.with-carry {
+  animation: carryDecay .36s var(--ease-cinema-out) forwards;
+}
+@keyframes carryDecay {
+  from { transform: translate(var(--carry-x), var(--carry-y)) scale(var(--carry-scale)); }
+  to   { transform: translate(0, 0) scale(1); }
+}
+
+/* ================================================================
+   SETTLE-DRIFT — applied to every text block after entry
+   The most important new primitive. After settle, every text
+   element gets a long-period 2px drift. The frame never freezes.
+   ================================================================ */
+.settle-drift { animation: settleDrift 8s var(--ease-glide) infinite both; }
+@keyframes settleDrift {
+  0%,100% { transform: translate(0,0); }
+  50%     { transform: translate(2px,-1.5px); }
+}

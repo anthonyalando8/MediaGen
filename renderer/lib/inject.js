@@ -242,4 +242,48 @@
   }
   scene.style.setProperty('--grain-opacity', grainOpacity.toFixed(3));
 
+  // ── 15. Motion carry — inherit direction from previous beat ──
+// scene.json beats now optionally carry:
+//   entry_vector: { x: 12, y: -8, scale: 1.02 }
+// Python emits this as `prev_beat.exit_vector` rebadged for the next beat.
+// Default: { x:0, y:0, scale:1 } — no carry, hard cut as before.
+var entry = beat.entry_vector || { x:0, y:0, scale:1 };
+if (entry.x || entry.y || entry.scale !== 1) {
+  scene.style.setProperty('--carry-x', entry.x + 'px');
+  scene.style.setProperty('--carry-y', entry.y + 'px');
+  scene.style.setProperty('--carry-scale', String(entry.scale));
+  scene.classList.add('with-carry');
+}
+
+// ── 16. Pace data-attr (drives overshoot magnitude in CSS) ──
+if (beat.pace) scene.dataset.pace = beat.pace;
+
+// ── 17. Per-element micro-stagger ────────────────────────
+// Adds a hash-derived 0-40ms jitter to each animated element's
+// delay so three sibling animations never land on the same frame.
+// Deterministic from element index — same hash every render. */
+function microStagger(idx) {
+  // fibonacci-ish offsets in ms, looping every 5
+  return [0, 13, 21, 34, 28][idx % 5] / 1000;
+}
+['.kw-word', '.body-line'].forEach(function(sel) {
+  scene.querySelectorAll(sel).forEach(function(el, i) {
+    var cs = getComputedStyle(el);
+    var base = parseFloat(cs.animationDelay) || 0;
+    el.style.animationDelay = (base + microStagger(i)).toFixed(3) + 's';
+  });
+});
+
+// ── 18. Emit exit_vector AFTER capture loop ──────────────
+// capture.js reads document.body.dataset.exitVector at end of
+// beat capture and writes it into manifest.json so the Python
+// orchestrator can pass it as the NEXT beat's entry_vector.
+// (We don't move anything here — Python owns the handoff.) */
+var exitVec = {
+  x: beat.camera === 'push_in' ? -6 : beat.camera === 'pull_out' ? 8  : 0,
+  y: beat.camera === 'tilt_up' ? -12 : beat.camera === 'push_in' ? -10 : 0,
+  scale: beat.camera === 'push_in' ? 1.04 : 1
+};
+document.body.dataset.exitVector = JSON.stringify(exitVec);
+
 })();

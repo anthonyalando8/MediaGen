@@ -135,3 +135,67 @@
 /* When inject.js adds an explicit .cam-* override, it wins because
    it's added to the element as an inline style via JS — not a class.
    The class selectors above stay as the CSS default fallback. */
+
+
+   /* ================================================================
+   DEPTH-AWARE CAMERA  --  applies to .depth-* planes
+   When a scene contains depth planes, the camera class still goes
+   on .scene, but transforms now cascade onto the planes via :has().
+   Falls back to the original scene-level transform if no planes.
+   ================================================================ */
+
+/* PUSH IN — backplate moves more than foreground (closer = less motion) */
+.scene.cam-push-in:has(.depth-fg) { animation: none; }
+.scene.cam-push-in .depth-bg  { animation: camPushBg  var(--cam-dur,5s) var(--ease-glide) both; }
+.scene.cam-push-in .depth-mid { animation: camPushMid var(--cam-dur,5s) var(--ease-glide) both; }
+.scene.cam-push-in .depth-fg  { animation: camPushFg  var(--cam-dur,5s) var(--ease-glide) both; }
+
+@keyframes camPushBg {
+  from { transform: scale(1.04) translateY(-2px);  }
+  to   { transform: scale(1.10) translateY(-14px); }
+}
+@keyframes camPushMid {
+  from { transform: scale(1.02) translateY(0);    }
+  to   { transform: scale(1.06) translateY(-8px); }
+}
+@keyframes camPushFg {
+  from { transform: scale(1.01) translateY(0);    }
+  to   { transform: scale(1.03) translateY(-4px); }
+}
+
+/* HANDHELD — layered onto whatever the base camera is doing.
+   Apply to .depth-mid only (lowest layer would over-amplify, fg
+   under-amplifies). Gives the whole frame a breathing quality
+   without nausea. Deterministic single-pass — seek-safe. */
+.scene.cam-handheld-layer .depth-mid {
+  animation: handheldLayer var(--cam-dur,5s) linear forwards;
+}
+@keyframes handheldLayer {
+  0%   { transform: translate(0,0) rotate(0); }
+  19%  { transform: translate(2px,-1.5px) rotate(0.04deg); }
+  37%  { transform: translate(-1.5px,2px) rotate(-0.05deg); }
+  58%  { transform: translate(2.5px,1px) rotate(0.06deg); }
+  79%  { transform: translate(-1px,-2px) rotate(-0.04deg); }
+  100% { transform: translate(0,0) rotate(0); }
+}
+
+/* GOD-RAY SWEEP — one motivated lighting event per beat.
+   Pass once at ~28%–58% of beat duration, sweeping across the
+   stage. Use mix-blend-mode:screen so darks are preserved. */
+.ambient-ray {
+  position: absolute; inset: -200px;
+  pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(78deg,
+    transparent 35%,
+    oklch(from var(--acc) .6 .16 h / .14) 48%,
+    oklch(from var(--acc) .7 .16 h / .06) 52%,
+    transparent 65%);
+  opacity: 0;
+  animation: rayPass var(--cam-dur,5s) var(--ease-cinema-out) forwards;
+}
+@keyframes rayPass {
+  0%   { opacity: 0; transform: translateX(-220px); }
+  20%  { opacity: 1; }
+  60%  { opacity: .6; }
+  100% { opacity: 0; transform: translateX(240px); }
+}

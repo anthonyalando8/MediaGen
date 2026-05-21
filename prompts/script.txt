@@ -1,488 +1,300 @@
 Write a SHORT-FORM HIGH-RETENTION vertical video script for TikTok/Reels/Shorts.
 
-
-
 TOPIC: "{topic}"
-
-
 
 Return ONLY valid JSON. No text before or after. No markdown. No code fences.
 
-
-
 {{
-
   "title": "max 5 words, creator-style",
-
   "thumbnail": "2-4 word emotionally charged phrase",
-
   "style": "contrarian | builder | intense | cinematic | calm | analytical | humorous",
 
-
-
   "global": {{
-
-    "theme": "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white",
-
+    "theme": "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white | tech_blue | cyber_noir",
     "music_mood": "tense | cinematic | ambient | dark | aggressive | suspense | minimal | emotional | playful | upbeat",
-
     "voice_style": "calm_intense | storyteller | aggressive | documentary | dramatic | analytical | comedic",
-
     "camera_style": "static | dynamic | handheld"
-
   }},
 
-
-
   "beats": [
-
     {{
-
       "id": "beat_01",
-
-      "type": "hook",
-
+      "type": "hook | insight | tension | truth | flip | climax | payoff | cta",
       "keyword": "2-4 WORD PHRASE",
-
       "text": "spoken sentence, 15-25 words",
-
-      "energy": "high",
-
+      "energy": "high | mid | low",
       "emotion": "urgent | tense | hopeful | melancholic | angry | cold | confident | anxious | serious | playful | amused | surprised",
-
       "pace": "slow | mid | fast | explosive",
-
       "visual_intent": "confrontational | mysterious | clean | chaotic | cinematic | minimal | aggressive | documentary | absurd | quirky",
-
       "camera": "static | push_in | pull_out | handheld | snap_zoom | micro_shake | tilt_up",
-
       "transition": "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
-
       "background": "solid | gradient | noise | grid | glow | lines | abstract",
-
+      "layout": "left | center | right | full",
       "visual_query": "2-5 word Unsplash search string matching this beat's mood and topic"
-
     }}
-
   ]
-
 }}
 
-
-
+──────────────────────────────────────────────────────────────────────
 STYLE GUIDE — pick style based on topic:
-
+──────────────────────────────────────────────────────────────────────
 - contrarian: tech, career, productivity — left-anchored, punchy, blue accent
-
-- builder: side projects, indie hacking — left-anchored, direct, blue accent
-
-- intense: psychology, dark truths, shocking facts — full-bleed, no margins, purple
-
-- cinematic: money, ambition, culture — right-anchored, amber accent
-
-- calm: health, habits, philosophy — centered, light type weight, neutral
-
+- builder:    side projects, indie hacking — left-anchored, direct, blue accent
+- intense:    psychology, dark truths, shocking facts — full-bleed, no margins, kinetic red
+- cinematic:  money, ambition, culture — right-anchored, amber accent
+- calm:       health, habits, philosophy — centered, light type weight, neutral
 - analytical: data, finance, systems — centered, considered, neutral
+- humorous:   fun facts, comedy, absurd observations — centered, warm amber accent;
+              keywords are punchlines not statements; body text lands the joke
 
-- humorous: fun facts, comedy, absurd observations — centered, light type weight, warm amber accent; keywords are punchlines not statements; body text lands the joke
+──────────────────────────────────────────────────────────────────────
+STRICT RULES
+──────────────────────────────────────────────────────────────────────
 
+BEAT COUNT: vary between 4 and 8 depending on what the topic needs. Do NOT always use 5.
 
-
-STRICT RULES:
-
-
-
-The number of beats MUST vary between 4 and 8 depending on what the topic needs.
-
-Do NOT always use 5.
-
-Types: hook | insight | tension | truth | flip | climax | payoff | cta
-
-
-
-TEXT: Every beat text must be 15-25 words. No exceptions.
-
+TEXT: every beat text must be 15-25 words. No exceptions.
 Total words across ALL beats: 90-130 words.
 
-
-
 KEYWORD: 2-4 words uppercase. Emotionally loaded. Scroll-stopping.
+  Good: "NO ONE CARES" / "YOU'RE WRONG" / "THEY LIED"
+  Bad:  "CONSISTENCY" / "PRODUCTIVITY" / "THE TRUTH"
 
-Good: "NO ONE CARES" / "YOU'RE WRONG" / "THEY LIED"
+TONE: speak as a creator with a real opinion. Use "you". Be direct. Be specific.
+For humorous style: write like a stand-up bit. Keyword is setup or punchline. Body lands the absurdity straight-faced. Never explain the joke.
 
-Bad: "CONSISTENCY" / "PRODUCTIVITY" / "THE TRUTH"
+BANNED: "here's the thing" / "the truth is" / "most people" / "in today's world"
+        "have you ever" / "let's talk about" / "follow for more"
 
+HOOK: first sentence must create immediate tension, contradiction, or emotional recognition.
 
+ENDING: end with a challenge, sharp question, or unresolved thought. Not a follow CTA.
 
-TONE: Speak as a creator with a real opinion. Use "you". Be direct. Be specific.
-
-For humorous style: write like a stand-up bit in text form. The keyword is the setup or punchline. Body text delivers the absurdity with a straight face. Never explain the joke.
-
-
-
-BANNED: "here's the thing" / "the truth is" / "most people" / "in today's world" / "have you ever" / "let's talk about" / "follow for more"
-
-
-
-HOOK: First sentence must create immediate tension, contradiction, or emotional recognition.
-
-
-
-ENDING: End with a challenge, sharp question, or unresolved thought. Not a follow CTA.
-
-
-
-GLOBAL FIELDS — pick one value per field based on what fits the topic:
-
-- theme: choose the visual world that matches the emotional register
-
-- music_mood: choose what would play under this script
-
-- voice_style: choose how this would be narrated
-
+──────────────────────────────────────────────────────────────────────
+GLOBAL FIELDS — pick one value per field based on what fits the topic.
+──────────────────────────────────────────────────────────────────────
+- theme:        the visual world that matches the emotional register
+- music_mood:   what would play under this script
+- voice_style:  how this would be narrated
 - camera_style: static=considered/calm, dynamic=intense/contrarian, handheld=raw/documentary
 
+──────────────────────────────────────────────────────────────────────
+PER-BEAT FIELDS — choose thoughtfully, NEVER randomly.
+──────────────────────────────────────────────────────────────────────
 
+⚠ VARIETY IS MANDATORY. A stiff, repetitive render is a failure.
+   Across the full script you MUST:
+   1. Use at least 3 different `camera` values total
+   2. Use at least 2 different `pace` values total
+   3. Use at least 2 different `layout` values total
+   4. Use at least 2 different `background` values total
+   5. Never repeat the same `camera` for 3 consecutive beats
+   6. Never repeat the same `layout` for 3 consecutive beats
+   If your script doesn't satisfy ALL of these, rewrite before outputting.
 
-PER-BEAT FIELDS — choose thoughtfully, not randomly:
+FIELD-BY-FIELD GUIDANCE:
 
-- emotion: what the audience should feel during this beat
-
-- pace: slow=weight/gravity, mid=normal, fast=urgency, explosive=impact
-
+- emotion:      what the audience should feel during this beat
+- pace:         slow=weight/gravity, mid=normal, fast=urgency, explosive=impact
 - visual_intent: the aesthetic register of this moment
+- camera:       how the frame moves during this beat.
+                hook=push_in, climax=snap_zoom, tension=tilt_up,
+                payoff=pull_out, flip=micro_shake — but vary within reason.
+- transition:   how this beat ends and the next begins.
+                slam_cut for climax, dip_black for tension, fade for payoff,
+                whip_pan between high-energy beats, cut as neutral default.
+- background:   what sits behind the type. Rotate across beats.
+                hook=glow, climax=abstract, tension=lines, insight=grid/solid.
+- layout:       compositional anchor. Critical for visual rhythm:
+                left   = editorial / contrarian / builder energy
+                center = calm / analytical / humorous / payoff
+                right  = cinematic / wealth / mirrored editorial
+                full   = intense / explosive / climax bleed
+                A good script alternates layouts. Two consecutive `left` is okay;
+                three is monotony.
+- visual_query: 2-5 word Unsplash search string for this beat's background.
+                Think: what image would a human editor put behind this text?
+                Match topic AND emotion. Dark, blurred, atmospheric.
+                Good: "dark code terminal blur" / "person alone crowd"
+                Bad:  "technology" / "business" / "abstract background"
 
-- camera: how the frame moves during this beat
-
-- transition: how this beat ends and the next begins
-
-- background: what sits behind the type on this slide
-
-- visual_query: 2-5 word Unsplash search string for this beat's background image.
-
-  Think: what image would a human editor put behind this text?
-
-  Match topic AND emotion. Dark, blurred, atmospheric.
-
-  Good: "dark code terminal blur" / "person alone crowd" / "server room dark"
-
-  Bad: "technology" / "business" / "abstract background"
-
-
-
-EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the topic needs):
-
+──────────────────────────────────────────────────────────────────────
+EXAMPLE (5 beats — yours may have 4-8 depending on the topic)
+Note the VARIETY across cameras, paces, layouts, backgrounds.
+──────────────────────────────────────────────────────────────────────
 {{
-
   "title": "Sleep Kills Performance",
-
   "thumbnail": "You're Already Broken",
-
   "style": "analytical",
-
   "global": {{
-
     "theme": "clean_modern",
-
     "music_mood": "minimal",
-
     "voice_style": "analytical",
-
     "camera_style": "static"
-
   }},
-
   "beats": [
-
     {{
-
       "id": "beat_01",
-
       "type": "hook",
-
       "keyword": "YOU'RE LOSING",
-
       "text": "Every night you stay up late, you're making a compounding decision that costs you three full days of output.",
-
       "energy": "high",
-
       "emotion": "urgent",
-
       "pace": "fast",
-
       "visual_intent": "confrontational",
-
       "camera": "push_in",
-
       "transition": "slam_cut",
-
-      "background": "solid",
-
-      "visual_query": "person awake dark room night"
-
-    }},
-
-    {{
-
-      "id": "beat_02",
-
-      "type": "truth",
-
-      "keyword": "THE REAL COST",
-
-      "text": "Sleep deprivation doesn't feel like failure. It feels exactly like grinding, which is why nobody catches it until it's too late.",
-
-      "energy": "mid",
-
-      "emotion": "cold",
-
-      "pace": "mid",
-
-      "visual_intent": "documentary",
-
-      "camera": "static",
-
-      "transition": "cut",
-
-      "background": "gradient",
-
-      "visual_query": "exhausted face close up dark"
-
-    }},
-
-    {{
-
-      "id": "beat_03",
-
-      "type": "flip",
-
-      "keyword": "REST IS OUTPUT",
-
-      "text": "The highest performers don't sacrifice sleep for more hours. They protect it the same way they protect their most important meetings.",
-
-      "energy": "mid",
-
-      "emotion": "cold",
-
-      "pace": "mid",
-
-      "visual_intent": "clean",
-
-      "camera": "pull_out",
-
-      "transition": "fade",
-
-      "background": "solid",
-
-      "visual_query": "calm bedroom minimal dark"
-
-    }},
-
-    {{
-
-      "id": "beat_04",
-
-      "type": "climax",
-
-      "keyword": "ONE MORE HOUR",
-
-      "text": "A single extra hour of sleep outperforms every supplement, every morning routine, and every productivity system you've ever tried.",
-
-      "energy": "high",
-
-      "emotion": "confident",
-
-      "pace": "explosive",
-
-      "visual_intent": "cinematic",
-
-      "camera": "snap_zoom",
-
-      "transition": "slam_cut",
-
       "background": "glow",
-
-      "visual_query": "alarm clock dark dramatic"
-
+      "layout": "left",
+      "visual_query": "person awake dark room night"
     }},
-
     {{
-
-      "id": "beat_05",
-
-      "type": "cta",
-
-      "keyword": "WHAT WILL YOU CUT",
-
-      "text": "If sleep is the highest-leverage thing you can do tonight, what are you actually willing to stop doing to protect it?",
-
-      "energy": "mid",
-
-      "emotion": "serious",
-
-      "pace": "slow",
-
-      "visual_intent": "minimal",
-
-      "camera": "static",
-
-      "transition": "dip_black",
-
-      "background": "solid",
-
-      "visual_query": "dark minimalist night sky"
-
-    }}
-
-  ]
-
-}}
-
-
-
-
-HUMOROUS STYLE EXAMPLE (use warm_amber or clean_modern theme):
-
-{{
-
-  "title": "You Are Not Multitasking",
-
-  "thumbnail": "Your Brain Is Lying",
-
-  "style": "humorous",
-
-  "global": {{
-
-    "theme": "warm_amber",
-
-    "music_mood": "playful",
-
-    "voice_style": "comedic",
-
-    "camera_style": "static"
-
-  }},
-
-  "beats": [
-
-    {{
-
-      "id": "beat_01",
-
-      "type": "hook",
-
-      "keyword": "YOU CANNOT MULTITASK",
-
-      "text": "Your brain is not multitasking right now. It is just switching tasks very fast and lying to you about it.",
-
-      "energy": "high",
-
-      "emotion": "amused",
-
-      "pace": "fast",
-
-      "visual_intent": "absurd",
-
-      "camera": "push_in",
-
-      "transition": "slam_cut",
-
-      "background": "solid",
-
-      "visual_query": "person multiple screens overwhelmed"
-
-    }},
-
-    {{
-
       "id": "beat_02",
-
       "type": "truth",
-
-      "keyword": "SCIENCE AGREES",
-
-      "text": "Neuroscience confirmed this in 1999. Nobody changed their behaviour. Everyone just started calling it parallel processing instead.",
-
+      "keyword": "THE REAL COST",
+      "text": "Sleep deprivation doesn't feel like failure. It feels exactly like grinding, which is why nobody catches it until it's too late.",
       "energy": "mid",
-
-      "emotion": "playful",
-
+      "emotion": "cold",
       "pace": "mid",
-
-      "visual_intent": "quirky",
-
+      "visual_intent": "documentary",
       "camera": "static",
-
       "transition": "cut",
-
       "background": "gradient",
-
-      "visual_query": "brain scan colorful abstract"
-
+      "layout": "center",
+      "visual_query": "exhausted face close up dark"
     }},
-
     {{
-
       "id": "beat_03",
-
       "type": "flip",
-
-      "keyword": "THE REAL YOU",
-
-      "text": "What you are actually doing is ignoring two things slightly less efficiently than if you had just done one at a time.",
-
+      "keyword": "REST IS OUTPUT",
+      "text": "The highest performers don't sacrifice sleep for more hours. They protect it the same way they protect their most important meetings.",
       "energy": "mid",
-
-      "emotion": "amused",
-
+      "emotion": "confident",
       "pace": "mid",
-
       "visual_intent": "clean",
-
       "camera": "pull_out",
-
-      "transition": "cut",
-
+      "transition": "fade",
       "background": "solid",
-
-      "visual_query": "focused person single task desk"
-
+      "layout": "right",
+      "visual_query": "calm bedroom minimal dark"
     }},
-
     {{
-
       "id": "beat_04",
-
+      "type": "climax",
+      "keyword": "ONE MORE HOUR",
+      "text": "A single extra hour of sleep outperforms every supplement, every morning routine, and every productivity system you've ever tried.",
+      "energy": "high",
+      "emotion": "confident",
+      "pace": "explosive",
+      "visual_intent": "cinematic",
+      "camera": "snap_zoom",
+      "transition": "slam_cut",
+      "background": "abstract",
+      "layout": "full",
+      "visual_query": "alarm clock dark dramatic"
+    }},
+    {{
+      "id": "beat_05",
       "type": "cta",
-
-      "keyword": "PICK ONE THING",
-
-      "text": "You now have permission to stop pretending. Pick one tab. One task. One crisis at a time. You're welcome.",
-
+      "keyword": "WHAT WILL YOU CUT",
+      "text": "If sleep is the highest-leverage thing you can do tonight, what are you actually willing to stop doing to protect it?",
       "energy": "mid",
-
-      "emotion": "playful",
-
+      "emotion": "serious",
       "pace": "slow",
-
       "visual_intent": "minimal",
-
       "camera": "static",
-
       "transition": "dip_black",
-
       "background": "solid",
-
-      "visual_query": "single light dark room minimal"
-
+      "layout": "center",
+      "visual_query": "dark minimalist night sky"
     }}
-
   ]
-
 }}
 
-WORD COUNT CHECK before outputting:
+──────────────────────────────────────────────────────────────────────
+HUMOROUS EXAMPLE (note: varied layouts + cameras even for jokes)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "You Are Not Multitasking",
+  "thumbnail": "Your Brain Is Lying",
+  "style": "humorous",
+  "global": {{
+    "theme": "warm_amber",
+    "music_mood": "playful",
+    "voice_style": "comedic",
+    "camera_style": "static"
+  }},
+  "beats": [
+    {{
+      "id": "beat_01",
+      "type": "hook",
+      "keyword": "YOU CANNOT MULTITASK",
+      "text": "Your brain is not multitasking right now. It is just switching tasks very fast and lying to you about it.",
+      "energy": "high",
+      "emotion": "amused",
+      "pace": "fast",
+      "visual_intent": "absurd",
+      "camera": "push_in",
+      "transition": "slam_cut",
+      "background": "glow",
+      "layout": "center",
+      "visual_query": "person multiple screens overwhelmed"
+    }},
+    {{
+      "id": "beat_02",
+      "type": "truth",
+      "keyword": "SCIENCE AGREES",
+      "text": "Neuroscience confirmed this in 1999. Nobody changed their behaviour. Everyone just started calling it parallel processing instead.",
+      "energy": "mid",
+      "emotion": "playful",
+      "pace": "mid",
+      "visual_intent": "quirky",
+      "camera": "static",
+      "transition": "cut",
+      "background": "gradient",
+      "layout": "left",
+      "visual_query": "brain scan colorful abstract"
+    }},
+    {{
+      "id": "beat_03",
+      "type": "flip",
+      "keyword": "THE REAL YOU",
+      "text": "What you are actually doing is ignoring two things slightly less efficiently than if you had just done one at a time.",
+      "energy": "mid",
+      "emotion": "amused",
+      "pace": "mid",
+      "visual_intent": "clean",
+      "camera": "pull_out",
+      "transition": "blur_wipe",
+      "background": "solid",
+      "layout": "right",
+      "visual_query": "focused person single task desk"
+    }},
+    {{
+      "id": "beat_04",
+      "type": "cta",
+      "keyword": "PICK ONE THING",
+      "text": "You now have permission to stop pretending. Pick one tab. One task. One crisis at a time. You're welcome.",
+      "energy": "mid",
+      "emotion": "playful",
+      "pace": "slow",
+      "visual_intent": "minimal",
+      "camera": "static",
+      "transition": "dip_black",
+      "background": "solid",
+      "layout": "center",
+      "visual_query": "single light dark room minimal"
+    }}
+  ]
+}}
 
-Count the words in all text fields. If total is below 90: expand. If above 130: trim.
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST before outputting:
+──────────────────────────────────────────────────────────────────────
+1. Word count: total 90-130, each beat 15-25. Trim/expand if off.
+2. Variety: at least 3 cameras, 2 paces, 2 layouts, 2 backgrounds across the script.
+3. No 3+ consecutive beats with the same camera or layout.
+4. Every per-beat field present and from the allowed vocabulary above.
+5. visual_query is specific to the beat, not generic.
 
 Output the JSON only.
