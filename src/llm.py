@@ -85,51 +85,50 @@ def _fix_duplicate_word_fragments(text: str) -> str:
     Remove streaming artifacts left by Ollama after ANSI stripping.
 
     Ollama prints a partial word, rewinds with ANSI cursor codes, then prints
-    the full word.  After stripping ANSI both copies remain:
-        "s side projects"  ->  "side projects"
-        "ideas ideas"      ->  "ideas"
-        "inv invested"     ->  "invested"
-        "no now."          ->  "now."   (trailing punctuation handled)
+    the full word. After stripping ANSI both copies remain.
 
-    Three passes:
-      1. Exact word duplicates (case-insensitive).
-      2. Word-by-word: drop token[i] when it is a strict alpha prefix of token[i+1].
-         Trailing punctuation on token[i+1] is stripped for the comparison only.
-      3. Collapse any double-spaces left by removals.
+    Handles all forms:
+        "ideas ideas"       -> "ideas"       (pure alpha duplicate)
+        "asset. asset."     -> "asset."      (both copies have punctuation)
+        "building. building,"-> "building,"  (mixed trailing punctuation)
+        "inv invested"      -> "invested"    (prefix fragment, pure alpha)
+        "no now."           -> "now."        (prefix fragment before punct word)
+
+    Single word-by-word pass: strip punctuation to compare alpha cores.
+    Always keeps the SECOND token (Ollama prints the full/correct word last).
     """
-    # Pass 1: exact case-insensitive duplicates  e.g. "ideas ideas" -> "ideas"
-    text = re.sub(
-        r"\b([A-Za-z\']{2,})\s+\1\b",
-        lambda m: m.group(1),
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    # Pass 2: prefix-fragment removal, word by word
-    words = re.split(r'(\s+)', text)   # interleaved [word, space, word, space, ...]
+    tokens = re.split(r'(\s+)', text)   # interleaved [word, space, word, space, ...]
     result = []
     i = 0
-    while i < len(words):
-        token = words[i]
-        if i % 2 == 0 and token and i + 2 < len(words):
-            next_token = words[i + 2]
-            # strip trailing punctuation from next_token for comparison only
-            next_alpha = re.sub(r"[^A-Za-z']+$", "", next_token)
-            if (
-                re.match(r"^[A-Za-z']+$", token)        # fragment is pure alpha
-                and next_alpha                             # following word has alpha content
-                and next_alpha.lower().startswith(token.lower())
-                and len(token) < len(next_alpha)
-            ):
-                i += 2   # skip fragment + its trailing whitespace
-                continue
-        result.append(token)
+    while i < len(tokens):
+        if i % 2 == 0:  # word/punct token
+            token = tokens[i]
+            if i + 2 < len(tokens):
+                next_token = tokens[i + 2]
+                # Strip ALL non-alpha for comparison (handles any punctuation)
+                token_alpha = re.sub(r"[^A-Za-z']", '', token)
+                next_alpha  = re.sub(r"[^A-Za-z']", '', next_token)
+
+                # Case A: exact duplicate — alpha cores match (>= 2 chars each)
+                if (len(token_alpha) >= 2 and len(next_alpha) >= 2
+                        and token_alpha.lower() == next_alpha.lower()):
+                    i += 2  # skip current token + its trailing space
+                    continue
+
+                # Case B: prefix fragment — token is pure alpha and is a strict
+                # prefix of next_alpha (e.g. "inv" before "invested")
+                if (len(token_alpha) >= 1 and len(next_alpha) >= 2
+                        and re.match(r"^[A-Za-z']+$", token)  # fragment has no punct
+                        and next_alpha.lower().startswith(token_alpha.lower())
+                        and len(token_alpha) < len(next_alpha)):
+                    i += 2
+                    continue
+
+        result.append(tokens[i])
         i += 1
 
-    # Pass 3: collapse double-spaces left by removed fragments
     text = "".join(result)
-    text = re.sub(r'  +', ' ', text)
-    return text
+    return re.sub(r'  +', ' ', text)
 
 
 def _fix_mojibake(text: str) -> str:

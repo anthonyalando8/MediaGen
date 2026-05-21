@@ -58,7 +58,9 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
 
       "transition": "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
 
-      "background": "solid | gradient | noise | grid | glow | lines | abstract"
+      "background": "solid | gradient | noise | grid | glow | lines | abstract",
+
+      "visual_query": "2-5 word Unsplash search string matching this beat's mood and topic"
 
     }}
 
@@ -81,6 +83,7 @@ STYLE GUIDE — pick style based on topic:
 - calm: health, habits, philosophy — centered, light type weight, neutral
 
 - analytical: data, finance, systems — centered, considered, neutral
+
 - humorous: fun facts, comedy, absurd observations — centered, light type weight, warm amber accent; keywords are punchlines not statements; body text lands the joke
 
 
@@ -112,6 +115,7 @@ Bad: "CONSISTENCY" / "PRODUCTIVITY" / "THE TRUTH"
 
 
 TONE: Speak as a creator with a real opinion. Use "you". Be direct. Be specific.
+
 For humorous style: write like a stand-up bit in text form. The keyword is the setup or punchline. Body text delivers the absurdity with a straight face. Never explain the joke.
 
 
@@ -153,6 +157,16 @@ PER-BEAT FIELDS — choose thoughtfully, not randomly:
 - transition: how this beat ends and the next begins
 
 - background: what sits behind the type on this slide
+
+- visual_query: 2-5 word Unsplash search string for this beat's background image.
+
+  Think: what image would a human editor put behind this text?
+
+  Match topic AND emotion. Dark, blurred, atmospheric.
+
+  Good: "dark code terminal blur" / "person alone crowd" / "server room dark"
+
+  Bad: "technology" / "business" / "abstract background"
 
 
 
@@ -202,7 +216,9 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
       "transition": "slam_cut",
 
-      "background": "solid"
+      "background": "solid",
+
+      "visual_query": "person awake dark room night"
 
     }},
 
@@ -228,7 +244,9 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
       "transition": "cut",
 
-      "background": "gradient"
+      "background": "gradient",
+
+      "visual_query": "exhausted face close up dark"
 
     }},
 
@@ -254,7 +272,9 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
       "transition": "fade",
 
-      "background": "solid"
+      "background": "solid",
+
+      "visual_query": "calm bedroom minimal dark"
 
     }},
 
@@ -280,7 +300,9 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
       "transition": "slam_cut",
 
-      "background": "glow"
+      "background": "glow",
+
+      "visual_query": "alarm clock dark dramatic"
 
     }},
 
@@ -306,7 +328,9 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
       "transition": "dip_black",
 
-      "background": "solid"
+      "background": "solid",
+
+      "visual_query": "dark minimalist night sky"
 
     }}
 
@@ -318,70 +342,143 @@ EXAMPLE of correct output (5 beats — yours may have 4-8 depending on what the 
 
 
 HUMOROUS STYLE EXAMPLE (use warm_amber or clean_modern theme):
+
 {{
+
   "title": "You Are Not Multitasking",
+
   "thumbnail": "Your Brain Is Lying",
+
   "style": "humorous",
+
   "global": {{
+
     "theme": "warm_amber",
+
     "music_mood": "playful",
+
     "voice_style": "comedic",
+
     "camera_style": "static"
+
   }},
+
   "beats": [
+
     {{
+
       "id": "beat_01",
+
       "type": "hook",
+
       "keyword": "YOU CANNOT MULTITASK",
+
       "text": "Your brain is not multitasking right now. It is just switching tasks very fast and lying to you about it.",
+
       "energy": "high",
+
       "emotion": "amused",
+
       "pace": "fast",
+
       "visual_intent": "absurd",
+
       "camera": "push_in",
+
       "transition": "slam_cut",
-      "background": "solid"
+
+      "background": "solid",
+
+      "visual_query": "person multiple screens overwhelmed"
+
     }},
+
     {{
+
       "id": "beat_02",
+
       "type": "truth",
+
       "keyword": "SCIENCE AGREES",
+
       "text": "Neuroscience confirmed this in 1999. Nobody changed their behaviour. Everyone just started calling it parallel processing instead.",
+
       "energy": "mid",
+
       "emotion": "playful",
+
       "pace": "mid",
+
       "visual_intent": "quirky",
+
       "camera": "static",
+
       "transition": "cut",
-      "background": "gradient"
+
+      "background": "gradient",
+
+      "visual_query": "brain scan colorful abstract"
+
     }},
+
     {{
+
       "id": "beat_03",
+
       "type": "flip",
+
       "keyword": "THE REAL YOU",
+
       "text": "What you are actually doing is ignoring two things slightly less efficiently than if you had just done one at a time.",
+
       "energy": "mid",
+
       "emotion": "amused",
+
       "pace": "mid",
+
       "visual_intent": "clean",
+
       "camera": "pull_out",
+
       "transition": "cut",
-      "background": "solid"
+
+      "background": "solid",
+
+      "visual_query": "focused person single task desk"
+
     }},
+
     {{
+
       "id": "beat_04",
+
       "type": "cta",
+
       "keyword": "PICK ONE THING",
+
       "text": "You now have permission to stop pretending. Pick one tab. One task. One crisis at a time. You're welcome.",
+
       "energy": "mid",
+
       "emotion": "playful",
+
       "pace": "slow",
+
       "visual_intent": "minimal",
+
       "camera": "static",
+
       "transition": "dip_black",
-      "background": "solid"
+
+      "background": "solid",
+
+      "visual_query": "single light dark room minimal"
+
     }}
+
   ]
+
 }}
 
 WORD COUNT CHECK before outputting:

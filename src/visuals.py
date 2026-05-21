@@ -13,53 +13,46 @@ import subprocess
 import json
 import os
 
+def _load_dotenv(env: dict) -> dict:
+    """Load .env from project root into env dict without requiring python-dotenv."""
+    dotenv_path = pathlib.Path(__file__).parent.parent / ".env"
+    if not dotenv_path.exists():
+        return env
+    result = dict(env)
+    for line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in result:   # shell env takes precedence
+            result[key] = value
+    return result
 
 # ---------------------------------------------------------------------------
 # Beat contract helpers
 # ---------------------------------------------------------------------------
 
-# Scene files that exist on disk. Any beat type NOT in this set
-# falls back to "insight" so a missing template never crashes the renderer.
 _KNOWN_SCENES = {
-    "hook", "insight", "climax", "cta",   # original four
-    "tension", "truth", "flip", "payoff",  # added scenes
+    "hook", "insight", "climax", "cta",
+    "tension", "truth", "flip", "payoff",
 }
 
 def _beat_scene(beat: dict, i: int, total: int) -> str:
-    """
-    Map beat type + position to the correct HTML scene template.
-
-    Priority order:
-      1. Position locks: first beat → hook, last beat → cta.
-         These are structural — position always wins over type.
-      2. Direct type match: if the type has a dedicated scene file,
-         use it (tension, truth, flip, payoff, climax, insight).
-      3. Energy-based climax promotion: a high-energy beat at
-         position total-2 that has no dedicated scene → climax.
-      4. Fallback: any unknown/future type → insight.
-    """
     t = beat.get("type", "insight").lower()
-
-    # 1. Position locks — non-negotiable
     if i == 0:
         return "hook"
     if i == total - 1:
         return "cta"
-
-    # 2. Direct type → scene (only if the scene file exists)
     if t in _KNOWN_SCENES:
         return t
-
-    # 3. Energy-based climax promotion for unknown types
     if beat.get("energy", "") == "high" and i == total - 2:
         return "climax"
-
-    # 4. Fallback
     return "insight"
 
 
 def _beat_hud(beat: dict, i: int, total: int) -> str:
-    """Derive HUD label from beat type."""
     t = beat.get("type", "insight").lower()
     mapping = {
         "hook":    "// HOOK",
@@ -76,13 +69,6 @@ def _beat_hud(beat: dict, i: int, total: int) -> str:
 
 
 def _style_to_layout(style: str) -> str:
-    """
-    Map script style to composition layout.
-      left    contrarian, builder       (left-anchored editorial)
-      center  calm, analytical          (centered, considered)
-      right   cinematic                 (reversed anchor, cinematic)
-      full    intense                   (full-bleed, no margins)
-    """
     mapping = {
         "contrarian": "left",
         "builder":    "left",
@@ -96,12 +82,6 @@ def _style_to_layout(style: str) -> str:
 
 
 def _style_to_theme(style: str) -> str:
-    """
-    Map script global.style → CSS theme filename (without .css).
-    Also accepts global.theme values directly — so if the LLM returns
-    the theme name itself (e.g. "dark_kinetic") it passes through.
-    """
-    # style → theme (script style names from prompt)
     style_map = {
         "contrarian": "tech_blue",
         "builder":    "tech_blue",
@@ -111,7 +91,6 @@ def _style_to_theme(style: str) -> str:
         "intense":    "dark_kinetic",
         "humorous":   "warm_amber",
     }
-    # direct theme passthrough (global.theme names from prompt)
     known_themes = {
         "dark_kinetic", "luxury_minimal", "tech_hud",
         "cinematic_grain", "documentary_gritty", "clean_modern",
@@ -125,12 +104,10 @@ def _style_to_theme(style: str) -> str:
 
 
 _THEME_PALETTES = {
-    # ── existing themes ──────────────────────────────────────────────
     "tech_blue":          {"accent": "#4ab0f5", "spike": "#f0884a", "bg": "#09090b", "fg": "#efefed"},
     "editorial_white":    {"accent": "#e8e0d0", "spike": "#c8a882", "bg": "#09090b", "fg": "#efefed"},
     "warm_amber":         {"accent": "#f0a84a", "spike": "#70c8f0", "bg": "#09090b", "fg": "#efefed"},
     "cyber_noir":         {"accent": "#a870f0", "spike": "#70f0a0", "bg": "#060608", "fg": "#efefed"},
-    # ── new themes ───────────────────────────────────────────────────
     "dark_kinetic":       {"accent": "#f03a2e", "spike": "#f5f0e8", "bg": "#030304", "fg": "#f2f0ee"},
     "luxury_minimal":     {"accent": "#c8a96e", "spike": "#d8d0c0", "bg": "#08080a", "fg": "#f0ece4"},
     "tech_hud":           {"accent": "#28d4e8", "spike": "#b8f040", "bg": "#050709", "fg": "#e8f0f4"},
@@ -152,6 +129,9 @@ def _build_beat_contracts(beats: list, beat_durations_ms: list = None) -> list:
             "body":            beat["text"],
             "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
             "accent_override": "spike" if beat.get("type", "") == "climax" else None,
+            # Beat position for HUD counter (1-based display)
+            "beat_index":      i + 1,
+            "beat_total":      total,
             # Per-beat cinematic fields forwarded to the renderer
             "emotion":         beat.get("emotion", ""),
             "pace":            beat.get("pace", "mid"),
@@ -159,6 +139,9 @@ def _build_beat_contracts(beats: list, beat_durations_ms: list = None) -> list:
             "camera":          beat.get("camera", "static"),
             "transition":      beat.get("transition", "cut"),
             "background":      beat.get("background", "solid"),
+            # Background image search query — used by capture.js to fetch
+            # a contextual blurred image from Unsplash (empty = no image)
+            "visual_query":    beat.get("visual_query", ""),
         }
         contracts.append(contract)
     return contracts
@@ -193,7 +176,6 @@ def render_slides(
 
     script_style = script.get("style", "contrarian")
     layout       = _style_to_layout(script_style)
-    # global.theme (e.g. "dark_kinetic") takes precedence over style mapping
     global_theme = script.get("global", {}).get("theme", "")
     theme        = _style_to_theme(global_theme or script_style)
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])
@@ -229,7 +211,8 @@ def render_slides(
         return str(p.resolve()).replace("\\", "/")
 
     project_root = pathlib.Path(__file__).parent.parent.resolve()
-    env = {**os.environ, "PROJECT_ROOT": str(project_root)}
+    #env = {**os.environ, "PROJECT_ROOT": str(project_root)}
+    env = _load_dotenv({**os.environ, "PROJECT_ROOT": str(project_root)})
 
     cmd = [
         "node", str(capture_js),
@@ -241,6 +224,10 @@ def render_slides(
     print("[visuals] Running HTML renderer (Playwright)...")
     result = subprocess.run(cmd, cwd=str(renderer_dir), env=env,
                             capture_output=True, text=True)
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
     if result.returncode != 0:
         raise RuntimeError(
             f"[visuals] HTML renderer failed (exit {result.returncode}):\n"

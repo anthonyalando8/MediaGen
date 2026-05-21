@@ -33,6 +33,65 @@ const outDir     = toAbs(args.out);
 const fps        = parseInt(args.fps, 10);
 const beatFilter = args.beats ? args.beats.split(',').map(Number) : null;
 
+// ── Unsplash ─────────────────────────────────────────────────────────────────
+// Uses the Access Key (UNSPLASH_API_KEY), not the secret.
+// Set in environment: UNSPLASH_API_KEY=your_access_key
+const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY || '';
+
+/**
+ * Fetch a single contextual image URL from Unsplash for a beat.
+ *
+ * Uses the /photos/random endpoint with portrait orientation so images
+ * are vertical — closer to 9:16 than landscape shots.
+ *
+ * Returns the `urls.regular` URL (1080px wide) or null on any failure.
+ * Never throws — a missing image is a degraded experience, not a crash.
+ */
+async function fetchUnsplashUrl(query) {
+  if (!UNSPLASH_KEY) {
+    console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
+    return null;
+  }
+  if (!query) {
+    console.log(`[capture] Beat has no visual_query — skipping image`);
+    return null;
+  }
+
+  const url = `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=portrait&content_filter=high&client_id=${UNSPLASH_KEY}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: { 'Accept-Version': 'v1' },
+      signal: AbortSignal.timeout(6000),   // 6s hard timeout — never stall render
+    });
+
+    if (!res.ok) {
+      console.warn(`[capture] Unsplash ${res.status} for "${query}" — skipping`);
+      return null;
+    }
+
+    const data = await res.json();
+    const imageUrl = data?.urls?.regular;
+
+    if (!imageUrl) {
+      console.warn(`[capture] Unsplash returned no URL for "${query}"`);
+      return null;
+    }
+
+    // Log attribution — Unsplash API guidelines require it
+    const credit = data?.user?.name || 'unknown';
+    console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
+    console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
+    return imageUrl;
+
+  } catch (err) {
+    console.warn(`[capture] Unsplash fetch failed for "${query}": ${err.message}`);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 console.log('[capture] scene:', scenePath);
 console.log('[capture] out:  ', outDir);
 
@@ -56,12 +115,6 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-/**
- * Wrap each word of the keyword in a <span class="kw-word"> so the
- * animated underline (entries.css .kw-word::after) can stagger per word.
- * Input:  "STOP WASTING TIME"
- * Output: '<span class="kw-word">STOP</span> <span class="kw-word">WASTING</span> ...'
- */
 function wrapKeywordWords(keyword) {
   if (!keyword) return '';
   return keyword
@@ -71,29 +124,15 @@ function wrapKeywordWords(keyword) {
     .join(' ');
 }
 
-/**
- * Split body text into sentence-based lines and wrap each in a
- * <span class="body-line"> for staggered entry animation.
- *
- * Split strategy:
- *   - Split on sentence-ending punctuation (. ! ?) followed by whitespace
- *   - Preserve the punctuation on the preceding token
- *   - Collapse any fragments under 4 words into the previous line
- *     (avoids orphan words on their own line)
- * At most 3 lines — longer text stays as 1 block to avoid layout issues.
- */
 function wrapBodyLines(body) {
   if (!body) return '';
 
-  // Split on sentence boundaries while keeping the punctuation
   const raw = body.split(/(?<=[.!?])\s+/).filter(Boolean);
 
-  // If only 1 sentence or splitting would create too many lines, keep as-is
   if (raw.length <= 1 || raw.length > 3) {
     return `<span class="body-line">${escapeHtml(body)}</span>`;
   }
 
-  // Merge any fragment under 4 words into the previous line
   const merged = [];
   for (const sentence of raw) {
     const wordCount = sentence.trim().split(/\s+/).length;
@@ -109,13 +148,25 @@ function wrapBodyLines(body) {
     .join('');
 }
 
-function injectVariables(html, beat, palette, brand) {
+/**
+ * injectVariables — same as before plus one new CSS var: --bg-image.
+ *
+ * imageUrl is the Unsplash URL string, or null.
+ * When null, --bg-image is set to 'none' so the .scene-bg-image div
+ * in _base.html renders as invisible — no visual change.
+ */
+function injectVariables(html, beat, palette, brand, imageUrl) {
   const layout   = beat.layout || sceneJson.layout || 'left';
   const camDur   = ((beat.duration_ms || 5000) / 1000).toFixed(2) + 's';
   const beatIdx  = String(beat.beat_index  || '').padStart(2, '0');
   const beatTot  = String(beat.beat_total  || '').padStart(2, '0');
 
-  // CSS vars
+  // Escape URL for CSS — parentheses and quotes need escaping inside url()
+  const bgImageValue = imageUrl
+    ? `url("${imageUrl.replace(/"/g, '%22')}")`
+    : 'none';
+
+  // CSS vars — --bg-image added so _base.html .scene-bg-image can read it
   const cssVars = [
     '<style id="palette-inject">',
     ':root {',
@@ -125,6 +176,7 @@ function injectVariables(html, beat, palette, brand) {
     '  --fg:       ' + palette.fg     + ';',
     '  --beat-dur: ' + beat.duration_ms + 'ms;',
     '  --cam-dur:  ' + camDur + ';',
+    '  --bg-image: ' + bgImageValue + ';',
     '}',
     '</style>',
   ].join('\n');
@@ -135,9 +187,6 @@ function injectVariables(html, beat, palette, brand) {
 
   html = html.replace('</head>', themeLink + '\n' + cssVars + '\n' + beatScript + '\n</head>');
 
-  // Text content replacements
-  // {{KEYWORD}} → word-wrapped spans for underline animation
-  // {{BODY}}    → sentence-split spans for line stagger
   const replacements = {
     '{{KEYWORD}}':    wrapKeywordWords(beat.keyword),
     '{{BODY}}':       wrapBodyLines(beat.body),
@@ -171,9 +220,26 @@ function injectVariables(html, beat, palette, brand) {
 
 const PAUSE_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
-    const style = document.createElement('style');
-    style.textContent = '*, *::before, *::after { animation-play-state: paused !important; }';
-    document.head.appendChild(style);
+    // Pause all animations for frame-seek rendering
+    const pauseStyle = document.createElement('style');
+    pauseStyle.textContent = '*, *::before, *::after { animation-play-state: paused !important; }';
+    document.head.appendChild(pauseStyle);
+
+    // Apply Unsplash image directly as .scene background.
+    // Multi-layer: scrim on top keeps text readable, image underneath.
+    // All glows, grain, vignette overlays run above it — no z-index conflicts.
+    const bgImage = getComputedStyle(document.documentElement)
+      .getPropertyValue('--bg-image').trim();
+    if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
+      const scene = document.querySelector('.scene');
+      if (scene) {
+        const scrim = 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72))';
+        scene.style.backgroundImage    = scrim + ', ' + bgImage;
+        scene.style.backgroundSize     = 'cover, cover';
+        scene.style.backgroundPosition = 'center center, center center';
+        console.log('[PAUSE_SCRIPT] background image applied to .scene');
+      }
+    }
   }, { once: true });
 `;
 
@@ -183,11 +249,27 @@ async function seekAnimations(page, t_ms) {
   }, t_ms);
 }
 
+/**
+ * renderBeat — now async-fetches the Unsplash image before rendering.
+ *
+ * Fetch happens before injectVariables so the URL is baked into the
+ * static HTML file — no runtime network request inside the browser page.
+ * The image loads via Playwright's own network stack (which bypasses
+ * CORS since it's a top-level fetch, not a cross-origin xhr).
+ */
 async function renderBeat(browser, beat, beatIdx, palette, brand) {
   const beatOutDir = join(outDir, `beat_${beatIdx}`);
   mkdirSync(beatOutDir, { recursive: true });
 
-  const html    = injectVariables(loadTemplate(beat.scene), beat, palette, brand);
+  // Fetch background image before building the HTML — baked into CSS vars
+  const imageUrl = await fetchUnsplashUrl(beat.visual_query || '');
+  if (imageUrl) {
+    console.log(`[capture] Beat ${beatIdx}: background image applied`);
+  } else {
+    console.log(`[capture] Beat ${beatIdx}: no background image (visual_query="${beat.visual_query || ''}")`);
+  }
+
+  const html    = injectVariables(loadTemplate(beat.scene), beat, palette, brand, imageUrl);
   const tmpHtml = join(beatOutDir, '_scene.html');
   writeFileSync(tmpHtml, html, 'utf8');
 
@@ -198,7 +280,12 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
   await context.addInitScript(PAUSE_SCRIPT);
 
   const page = await context.newPage();
-  await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded' });
+
+  // Wait for the background image to load before we start capturing.
+  // We use 'networkidle' only when there's an image to fetch — otherwise
+  // keep the cheaper 'domcontentloaded' which is fast for local files.
+  const waitUntil = imageUrl ? 'networkidle' : 'domcontentloaded';
+  await page.goto(`file://${tmpHtml}`, { waitUntil, timeout: 15000 });
   await page.waitForTimeout(80);
 
   const isLastBeat  = beatIdx === sceneJson.beats.length - 1;
