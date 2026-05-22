@@ -497,6 +497,7 @@ def render_slides(
         "--scene", _abs(scene_path),
         "--out",   _abs(frames_dir),
         "--fps",   str(cfg["video"]["fps"]),
+        "--concurrency", str(cfg.get("render", {}).get("concurrency", 2)),
     ]
 
     print("[visuals] Running HTML renderer (Playwright)...")

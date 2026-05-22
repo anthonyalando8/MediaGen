@@ -6,6 +6,9 @@ tts:
   speed: 1.05                  # slightly faster reads punchier on tiktok
   sample_rate: 24000
 
+render:
+  concurrency: 3
+
 subs:
   whisper_model: "base"        # tiny | base | small — base is the sweet spot
   language: "en"

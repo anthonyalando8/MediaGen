@@ -212,3 +212,4 @@ if __name__ == "__main__":
     else:
         topic = " ".join(args)
         run_one(topic, cfg)
+
