@@ -1,21 +1,21 @@
 """
-assemble.py -- FFmpeg assembly pipeline.
+assemble.py -- FFmpeg assembly pipeline (v2 — mood-aware BGM).
 
 Supports two input modes, auto-detected:
 
   Pillow mode   slide_paths = [slide_0.png, slide_1.png, ...]
-                Each PNG held for beat duration via concat demuxer.
-
   HTML mode     slide_paths = [beat_0/, beat_1/, ...]  (frame directories)
-                Each directory contains frame_00000.png ... frame_NNNNN.png
-                captured by Playwright. Assembled via image2 demuxer.
 
-Stages (both modes share stages 2-4):
-  1a. (Pillow) build_slide_video         -- PNG stills -> silent .mp4
-  1b. (HTML)   build_slide_video_from_frames -- frame dirs -> silent .mp4
-  2.  mix_audio                          -- loudnorm voice + duck BGM -> .aac
-  3.  mux                                -- video + audio -> muxed.mp4
-  4.  burn_captions                      -- ASS subtitles -> final.mp4
+────────────────────────────────────────────────────────────────────
+v2 CHANGES
+────────────────────────────────────────────────────────────────────
+1. BGM is now selected based on script.global.music_mood by matching
+   keywords against filenames in assets/bgm/.  No directory
+   reorganisation required — name files like "tense_ambient_01.mp3"
+   or "cinematic_strings.wav" and the picker will find them.
+2. assemble() and mix_audio() now accept the script dict so mood
+   reaches the picker.
+3. Falls back to random pick when no filename matches the mood.
 """
 
 import pathlib
@@ -52,7 +52,6 @@ def build_slide_video(slide_paths, durations, out_path, cfg, gap_s=0.38):
         hold = dur + (gap_s if i < len(slide_paths) - 1 else 0)
         lines.append(f"file '{slide.resolve().as_posix()}'")
         lines.append(f"duration {hold:.4f}")
-    # concat demuxer needs last file repeated without duration to flush
     lines.append(f"file '{slide_paths[-1].resolve().as_posix()}'")
     concat_file.write_text("\n".join(lines), encoding="utf-8")
 
@@ -79,13 +78,7 @@ def build_slide_video(slide_paths, durations, out_path, cfg, gap_s=0.38):
 # -----------------------------------------------------------------------
 
 def build_slide_video_from_frames(beat_dirs, out_path, cfg):
-    """
-    Convert Playwright frame sequences to a video.
-
-    For each beat dir:
-      frame_00000.png ... frame_NNNNN.png  ->  beat_N.mp4
-    Then concat all beat_N.mp4 -> out_path (stream copy, no re-encode).
-    """
+    """Convert Playwright frame sequences to a concatenated video."""
     fps    = cfg["video"]["fps"]
     w      = cfg["video"]["width"]
     h      = cfg["video"]["height"]
@@ -117,7 +110,6 @@ def build_slide_video_from_frames(beat_dirs, out_path, cfg):
 
         beat_videos.append(beat_mp4)
 
-    # stream-copy concat (no re-encode)
     concat_file = work / "concat_beats.txt"
     concat_file.write_text(
         "\n".join(f"file '{p.resolve().as_posix()}'" for p in beat_videos),
@@ -135,16 +127,63 @@ def build_slide_video_from_frames(beat_dirs, out_path, cfg):
 
 
 # -----------------------------------------------------------------------
-# Stage 2 -- audio mix
+# Stage 2 -- mood-aware BGM picker + audio mix
 # -----------------------------------------------------------------------
 
-def _pick_bgm(bgm_dir):
+# Keyword vocabulary per mood. Filenames in assets/bgm/ are matched
+# case-insensitively against these. Extend the lists as your library grows.
+_BGM_KEYWORDS = {
+    "tense":      ["tense", "suspense", "thriller", "anxious"],
+    "cinematic":  ["cinematic", "epic", "filmic", "score", "drama"],
+    "ambient":    ["ambient", "atmosphere", "drone", "pad"],
+    "dark":       ["dark", "shadow", "noir", "low"],
+    "aggressive": ["aggressive", "hard", "intense", "drive", "trap"],
+    "suspense":   ["suspense", "tense", "thriller", "build"],
+    "minimal":    ["minimal", "clean", "soft", "piano"],
+    "emotional":  ["emotional", "warm", "heart", "soft"],
+    "playful":    ["playful", "light", "fun", "bounce", "quirk"],
+    "upbeat":     ["upbeat", "energy", "bright", "uplift"],
+}
+
+
+def _pick_bgm_for_mood(bgm_dir: pathlib.Path, mood: str | None) -> pathlib.Path | None:
+    """
+    Pick a BGM track that matches the script's music_mood.
+
+    Strategy:
+      1. List all *.mp3 / *.wav in bgm_dir
+      2. If mood is None or unknown → random pick (legacy behaviour)
+      3. Filter tracks whose filename contains any mood keyword (case-insensitive)
+      4. If matches found → random pick among them
+      5. If no matches → fall back to random across all (with a log warning)
+    """
     tracks = list(bgm_dir.glob("*.mp3")) + list(bgm_dir.glob("*.wav"))
     if not tracks:
-        print("[assemble] No BGM tracks found -- continuing without music")
+        print("[assemble] No BGM tracks found — continuing without music")
         return None
+
+    mood_norm = (mood or "").strip().lower()
+    if not mood_norm or mood_norm not in _BGM_KEYWORDS:
+        track = random.choice(tracks)
+        print(f"[assemble] BGM (random, no mood): {track.name}")
+        return track
+
+    keywords = _BGM_KEYWORDS[mood_norm]
+    matches  = [
+        t for t in tracks
+        if any(kw in t.stem.lower() for kw in keywords)
+    ]
+
+    if matches:
+        track = random.choice(matches)
+        print(f"[assemble] BGM (mood='{mood_norm}', {len(matches)} match): {track.name}")
+        return track
+
+    # No filename matches — fall back but log so the user can see they need
+    # to organise/rename their library to take advantage of mood filtering.
     track = random.choice(tracks)
-    print(f"[assemble] BGM: {track.name}")
+    print(f"[assemble] BGM (mood='{mood_norm}' had no filename matches — falling back): {track.name}")
+    print(f"[assemble]   tip: rename tracks to include mood keywords like {keywords[:2]}")
     return track
 
 
@@ -163,35 +202,35 @@ def _voice_duration(wav_path: pathlib.Path) -> float:
         return 0.0
 
 
-def mix_audio(voice_path, bgm_dir, out_path, bgm_vol=0.10):
+def mix_audio(
+    voice_path: pathlib.Path,
+    bgm_dir:    pathlib.Path,
+    out_path:   pathlib.Path,
+    bgm_vol:    float       = 0.10,
+    mood:       str | None  = None,
+) -> pathlib.Path:
     """
-    Mix narration voice with a background music track.
+    Mix narration voice with a mood-matched background music track.
 
-    BGM treatment:
-      - Trimmed/looped to exactly the voice duration.
-      - Volume set to bgm_vol (default 10% — audible but not competing).
-      - 1s fade-in at the start.
-      - 2s fade-out at the end (calculated from actual voice duration).
-      - Voice normalized to -16 LUFS so levels are consistent.
+    bgm_vol — typically 0.08–0.12. Audible but not competing with voice.
+    mood    — script.global.music_mood. Drives BGM filename filtering.
     """
-    bgm = _pick_bgm(bgm_dir)
+    bgm = _pick_bgm_for_mood(bgm_dir, mood)
 
     if bgm is None:
-        print("[assemble] No BGM — normalizing voice only")
+        print("[assemble] No BGM — normalising voice only")
         _run([
             "ffmpeg", "-y",
             "-i", str(voice_path),
             "-af", "loudnorm=I=-16:LRA=11:TP=-1.5",
             "-c:a", "aac", "-b:a", "192k",
             str(out_path),
-        ], "Normalize voice (no BGM)")
+        ], "Normalise voice (no BGM)")
         return out_path
 
-    # Get actual voice duration so we can set the BGM fade-out correctly.
-    # afade st= must be (duration - fade_length), not 0.
-    voice_dur = _voice_duration(voice_path)
-    fade_in   = 1.0
-    fade_out  = 2.5
+    voice_dur      = _voice_duration(voice_path)
+    fade_in        = 1.0
+    fade_out       = 2.5
     fade_out_start = max(0.0, voice_dur - fade_out)
 
     print(f"[assemble] BGM: {bgm.name}  voice={voice_dur:.1f}s  "
@@ -200,18 +239,14 @@ def mix_audio(voice_path, bgm_dir, out_path, bgm_vol=0.10):
     _run([
         "ffmpeg", "-y",
         "-i", str(voice_path),
-        # Loop BGM so it always covers the full video regardless of track length
         "-stream_loop", "-1", "-i", str(bgm),
         "-filter_complex", (
-            # Voice: loudnorm to -16 LUFS
             "[0:a]loudnorm=I=-16:LRA=11:TP=-1.5[voice];"
-            # BGM: set volume, trim to voice duration, fade in + fade out
             f"[1:a]"
             f"volume={bgm_vol},"
             f"afade=t=in:st=0:d={fade_in},"
             f"afade=t=out:st={fade_out_start:.3f}:d={fade_out}"
             f"[bgm];"
-            # Mix: voice takes priority; BGM fills the full duration
             "[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[out]"
         ),
         "-map", "[out]",
@@ -242,7 +277,7 @@ def mux(video_path, audio_path, out_path):
 
 
 # -----------------------------------------------------------------------
-# Stage 4 -- burn captions
+# Stage 4 -- burn captions (Windows path quirks)
 # -----------------------------------------------------------------------
 
 def _short_temp_ass(ass_path):
@@ -270,12 +305,6 @@ def _short_temp_ass(ass_path):
 
 
 def burn_captions(video_path, ass_path, out_path, cfg):
-    """
-    Burn ASS subtitles.  Windows FFmpeg path workaround:
-      - Resolve ALL paths to absolute BEFORE chdir.
-      - Copy .ass to C:/tmp (short, no spaces).
-      - chdir to drive root so the .ass is a relative path (no colon in vf).
-    """
     tmp_ass = _short_temp_ass(ass_path)
     print(f"[assemble] ASS temp copy: {tmp_ass}")
 
@@ -310,23 +339,32 @@ def burn_captions(video_path, ass_path, out_path, cfg):
 
 
 # -----------------------------------------------------------------------
-# Public API -- unified entry point
+# Public API
 # -----------------------------------------------------------------------
 
-def assemble(slide_paths, durations, voice_path, ass_path, run_dir, cfg):
+def assemble(
+    slide_paths,
+    durations,
+    voice_path,
+    ass_path,
+    run_dir,
+    cfg,
+    script: dict | None = None,
+):
     """
-    Auto-detects renderer mode from slide_paths:
-      - list of .png files  ->  Pillow mode (static slide hold)
-      - list of directories ->  HTML renderer mode (frame sequences)
+    Auto-detects renderer mode and assembles the final video.
+
+    script (optional) — passed to BGM picker for mood-matched selection.
+                        If None, falls back to random BGM choice.
     """
     bgm_dir = pathlib.Path(cfg["paths"]["bgm"])
+    mood    = (script or {}).get("global", {}).get("music_mood", "") if script else ""
 
     silent = run_dir / "slides_silent.mp4"
     mixed  = run_dir / "audio_mix.aac"
     muxed  = run_dir / "muxed.mp4"
     final  = run_dir / "final.mp4"
 
-    # detect mode: is the first item a directory?
     first = pathlib.Path(slide_paths[0])
     if first.is_dir():
         print("[assemble] HTML renderer mode — assembling from frame directories")
@@ -335,7 +373,7 @@ def assemble(slide_paths, durations, voice_path, ass_path, run_dir, cfg):
         print("[assemble] Pillow mode — assembling from static PNGs")
         build_slide_video(slide_paths, durations, silent, cfg)
 
-    mix_audio(voice_path, bgm_dir, mixed, cfg["video"]["bgm_volume"])
+    mix_audio(voice_path, bgm_dir, mixed, cfg["video"]["bgm_volume"], mood=mood)
     mux(silent, mixed, muxed)
     burn_captions(muxed, ass_path, final, cfg)
 

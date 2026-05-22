@@ -51,14 +51,10 @@ def _load_cfg() -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_one(topic: str, cfg: dict) -> dict:
-    """
-    Run the full pipeline for a single topic.
-    Returns the QA report dict.
-    """
+    """Run the full pipeline for a single topic. Returns the QA report dict."""
     t0 = time.time()
 
     run_id, run_dir = make_run_dir(cfg["paths"]["workspace"])
-
     _banner(f"Topic: {topic}", f"Run:   {run_id}", f"Dir:   {run_dir}")
 
     # ── 1. Script ─────────────────────────────────────────────────────────
@@ -71,14 +67,13 @@ def run_one(topic: str, cfg: dict) -> dict:
     _print_script(script)
 
     # ── 2. Voice ──────────────────────────────────────────────────────────
-    _step(2, "Voice synthesis  (Kokoro)")
+    _step(2, "Voice synthesis  (Kokoro, voice_style-aware)")
     voice_path, beat_wavs = synthesize(
         script, run_dir,
-        voice=cfg["tts"]["voice"],
+        voice=cfg["tts"]["voice"],         # set to "auto" in config.yaml for voice_style mapping
         speed=cfg["tts"]["speed"],
         sample_rate=cfg["tts"]["sample_rate"],
     )
-    # Guard against TTS silently skipping a beat
     n_beats = len(script["beats"])
     if len(beat_wavs) != n_beats:
         raise RuntimeError(
@@ -88,25 +83,26 @@ def run_one(topic: str, cfg: dict) -> dict:
     print(f"         Beat durations: {[f'{d:.1f}s' for d in durations]}")
 
     # ── 3. Captions ───────────────────────────────────────────────────────
-    _step(3, "Word-level captions  (whisper-timestamped → ASS)")
-    ass_path = generate_captions(voice_path, run_dir, cfg)
+    _step(3, "Word-level captions  (auto-style by script)")
+    ass_path = generate_captions(voice_path, run_dir, cfg, script=script)
 
     # ── 4. Slides ─────────────────────────────────────────────────────────
-    _step(4, "Slide rendering  (HTML/Playwright)")
-    # Pass beat durations in ms so the renderer captures the correct
-    # number of frames per beat — video duration matches narration exactly.
+    _step(4, "Slide rendering  (HTML/Playwright + depth planes)")
     durations_ms = [int(d * 1000) for d in durations]
-    slide_paths, frames_dir = render_slides(script, run_dir, cfg, beat_durations_ms=durations_ms)
+    slide_paths, frames_dir = render_slides(
+        script, run_dir, cfg, beat_durations_ms=durations_ms,
+    )
 
     # ── 5. Assembly ───────────────────────────────────────────────────────
-    _step(5, "Assembly  (FFmpeg)")
+    _step(5, "Assembly  (FFmpeg, mood-aware BGM)")
     final_path = assemble(
         slide_paths, durations,
         voice_path, ass_path,
         run_dir, cfg,
+        script=script,
     )
 
-    # ── 6. Frame cleanup ─────────────────────────────────────────────
+    # ── 6. Frame cleanup ──────────────────────────────────────────────────
     if cfg.get("cleanup_frames", True) and frames_dir.exists():
         import shutil as _shutil
         _shutil.rmtree(frames_dir)
@@ -115,12 +111,11 @@ def run_one(topic: str, cfg: dict) -> dict:
         frame_count = sum(1 for _ in frames_dir.rglob("*.png")) if frames_dir.exists() else 0
         print(f"[main] Frames kept → {frame_count} PNGs in {frames_dir}")
 
-    # ── 6. QA + thumbnail ─────────────────────────────────────────────────
+    # ── 7. QA + thumbnail ─────────────────────────────────────────────────
     _step(7, "QA check")
     report = qa_check(final_path, cfg)
     thumb  = extract_thumbnail(final_path, run_dir)
 
-    # enrich report
     report.update({
         "topic":      topic,
         "run_id":     run_id,
@@ -174,7 +169,7 @@ def _banner(*lines: str) -> None:
 
 
 def _step(n: int, label: str) -> None:
-    print(f"\n── Step {n}/6: {label} {'─' * max(0, 44 - len(label))}")
+    print(f"\n── Step {n}/7: {label} {'─' * max(0, 44 - len(label))}")
 
 
 def _print_script(script: dict) -> None:
@@ -183,6 +178,10 @@ def _print_script(script: dict) -> None:
     if thumb: print(f"  Thumb:    {thumb}")
     style = script.get('style', '')
     if style: print(f"  Style:    {style}")
+    g = script.get('global', {}) or {}
+    if g:
+        print(f"  Globals:  theme={g.get('theme','')}  music={g.get('music_mood','')}  "
+              f"voice={g.get('voice_style','')}  cam={g.get('camera_style','')}")
     for i, b in enumerate(script["beats"]):
         btype  = b.get("type", "beat").upper()
         energy = b.get("energy", "")
@@ -196,7 +195,6 @@ def _print_script(script: dict) -> None:
 
 if __name__ == "__main__":
     cfg = _load_cfg()
-
     args = sys.argv[1:]
 
     if not args:
@@ -205,14 +203,12 @@ if __name__ == "__main__":
 
     if args[0] == "--batch":
         run_batch(cfg)
-
     elif args[0] == "--random":
         topic = random_topic(pathlib.Path(cfg["paths"]["topics"]))
         if not topic:
             print("[main] No topics in data/topics.txt")
             sys.exit(1)
         run_one(topic, cfg)
-
     else:
         topic = " ".join(args)
         run_one(topic, cfg)

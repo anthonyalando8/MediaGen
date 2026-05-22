@@ -1,27 +1,27 @@
 """
 captions.py  —  Word-level captions via whisper-timestamped → ASS format.
 
-Why ASS instead of SRT?
-  ASS supports the {\\kf<cs>} karaoke tag — each word lights up exactly
-  when it is spoken. SRT only does line-level timing.
-
 Caption styles (set via config.yaml  subs.style):
-  karaoke      Default. White text, yellow active word, semi-transparent box.
-               Classic TikTok look.
-  glow         White text, light-blue/cyan glowing border on active word.
-               No background box — glow effect via \\blur + wide border.
-               The style you see on premium motion caption edits.
-  neon         Dark background box, electric cyan active word, heavy glow.
-               More aggressive than glow — works on busy backgrounds.
-  minimal      Clean white text, no box, thin accent underline via colour.
-               Flat, editorial feel matching the scene aesthetics.
-  bold_drop    Large bold text, heavy black drop shadow, bright yellow active.
-               Maximum readability, slightly retro energy.
+  auto         NEW v2 — picks a style from script.style / global.voice_style
+  karaoke      White text, yellow active word, semi-transparent box (TikTok classic)
+  glow         Light-cyan glow halo on active word, no box
+  neon         Dark box, electric cyan active word, aggressive glow
+  minimal      Clean white text, no box, subtle cyan accent shift
+  bold_drop    Large bold, heavy drop shadow, bright yellow active
 
-Output
-------
-  captions.ass   burned into the video by FFmpeg
-  transcript.json  raw whisper output (for debugging)
+────────────────────────────────────────────────────────────────────
+v2 — AUTO-STYLE
+────────────────────────────────────────────────────────────────────
+When config.yaml sets subs.style: "auto", the style is derived from the
+script so every video gets captions that match its emotional register:
+
+  contrarian / builder       → bold_drop  (punchy, max readability)
+  intense                    → neon       (aggressive)
+  cinematic                  → minimal    (editorial restraint)
+  calm / analytical          → minimal    (refined)
+  humorous                   → glow       (bright, friendly)
+
+Explicit config values still win — only "auto" triggers the mapping.
 """
 
 import pathlib
@@ -31,23 +31,65 @@ import json
 # ─────────────────────────────────────────────────────────────────────────────
 # ASS colour helpers
 # ─────────────────────────────────────────────────────────────────────────────
-# ASS colour format: &HAABBGGRR  (alpha, blue, green, red — all hex pairs)
-# Alpha: 00 = fully opaque, FF = fully transparent
+# ASS colour format: &HAABBGGRR  (alpha, blue, green, red)
+# Alpha: 00 = opaque, FF = transparent
 
 def _rgba(r: int, g: int, b: int, a: int = 0) -> str:
-    """Return ASS colour string  &HAABBGGRR"""
     return f"&H{a:02X}{b:02X}{g:02X}{r:02X}"
 
-# Common colours
 _WHITE      = _rgba(255, 255, 255)
 _BLACK      = _rgba(0,   0,   0  )
 _YELLOW     = _rgba(255, 255, 0  )
-_CYAN_LIGHT = _rgba(180, 240, 255)   # very light blue-cyan — the glow base
-_CYAN_HOT   = _rgba(80,  220, 255)   # saturated cyan — active word glow
-_CYAN_NEON  = _rgba(0,   255, 240)   # electric neon cyan
-_TRANS      = _rgba(0,   0,   0, 255)  # fully transparent (used to hide elements)
-_BOX_DARK   = _rgba(0,   0,   0, 96)   # semi-transparent black box (~62% opacity)
-_BOX_NEON   = _rgba(0,   0,   0, 140)  # darker box for neon style
+_CYAN_LIGHT = _rgba(180, 240, 255)
+_CYAN_HOT   = _rgba(80,  220, 255)
+_CYAN_NEON  = _rgba(0,   255, 240)
+_TRANS      = _rgba(0,   0,   0, 255)
+_BOX_DARK   = _rgba(0,   0,   0, 96)
+_BOX_NEON   = _rgba(0,   0,   0, 140)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTO-STYLE MAPPING — script.style → caption style
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CAPTION_BY_SCRIPT_STYLE = {
+    "contrarian":  "bold_drop",
+    "builder":     "bold_drop",
+    "intense":     "neon",
+    "cinematic":   "minimal",
+    "calm":        "minimal",
+    "analytical":  "minimal",
+    "humorous":    "glow",
+}
+
+# Voice-style fallback for cases where script.style is missing/unknown
+_CAPTION_BY_VOICE_STYLE = {
+    "calm_intense": "minimal",
+    "storyteller":  "glow",
+    "aggressive":   "bold_drop",
+    "documentary":  "minimal",
+    "dramatic":     "neon",
+    "analytical":   "minimal",
+    "comedic":      "glow",
+}
+
+_FALLBACK_STYLE = "karaoke"
+
+
+def _auto_style_for_script(script: dict | None) -> str:
+    """Pick a caption style based on the script's style + voice_style."""
+    if not script:
+        return _FALLBACK_STYLE
+
+    script_style = (script.get("style", "") or "").strip().lower()
+    if script_style in _CAPTION_BY_SCRIPT_STYLE:
+        return _CAPTION_BY_SCRIPT_STYLE[script_style]
+
+    voice_style = (script.get("global", {}) or {}).get("voice_style", "").strip().lower()
+    if voice_style in _CAPTION_BY_VOICE_STYLE:
+        return _CAPTION_BY_VOICE_STYLE[voice_style]
+
+    return _FALLBACK_STYLE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,24 +97,9 @@ _BOX_NEON   = _rgba(0,   0,   0, 140)  # darker box for neon style
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
-    """
-    Return a dict with all parameters needed to build the ASS header
-    and per-dialogue override tags for a given style.
-
-    Keys:
-      header_base    ASS Style line for inactive (Base) words
-      header_active  ASS Style line for active (highlighted) words
-      base_tag       Override tags prepended to every dialogue line
-      active_tag     Override tags applied to the active word span
-                     (replaces the \\kf tag context)
-    """
+    """Return ASS Style + per-line override tags for one caption style."""
 
     if style == "glow":
-        # ── GLOW ─────────────────────────────────────────────────────────
-        # White text, NO background box.
-        # Active word: light-cyan primary colour + wide soft border (the glow).
-        # Border is rendered as a coloured halo via \\bord + \\blur.
-        # Inactive words: white with a very thin dark border for readability.
         return {
             "header_base": (
                 f"Style: Base,Space Grotesk,{fs},"
@@ -84,17 +111,11 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
                 f"{_CYAN_LIGHT},{_TRANS},{_CYAN_HOT},{_TRANS},"
                 f"1,0,0,0,100,100,0,0,1,5,0,2,80,80,220,1"
             ),
-            # Per-line override: no blur on base, keep it clean
             "base_tag":   r"{\blur0}",
-            # Active word gets the glow: saturated cyan + soft blur
-            # The \\blur spreads the border colour outward as a luminous halo
             "active_tag": r"{\1c" + _CYAN_LIGHT + r"\3c" + _CYAN_HOT + r"\bord6\blur8\fs" + str(fs_hi) + r"}",
         }
 
     elif style == "neon":
-        # ── NEON ─────────────────────────────────────────────────────────
-        # Dark box behind each line. Active word is electric cyan with
-        # an aggressive glow radius. Feels more nightclub than editorial.
         return {
             "header_base": (
                 f"Style: Base,Space Grotesk,{fs},"
@@ -111,10 +132,6 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
         }
 
     elif style == "minimal":
-        # ── MINIMAL ──────────────────────────────────────────────────────
-        # No box. Clean white text with thin outline.
-        # Active word: accent shifts to light cyan, slightly larger.
-        # Feels like the scene's own typography system — editorial, flat.
         return {
             "header_base": (
                 f"Style: Base,Space Grotesk,{fs},"
@@ -131,10 +148,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
         }
 
     elif style == "bold_drop":
-        # ── BOLD DROP ────────────────────────────────────────────────────
-        # Large bold white text, heavy drop shadow (no box).
-        # Active word: bright yellow. Maximum legibility, slightly retro.
-        _SHADOW_COL = _rgba(0, 0, 0, 40)  # near-opaque shadow
+        _SHADOW_COL = _rgba(0, 0, 0, 40)
         return {
             "header_base": (
                 f"Style: Base,Space Grotesk,{fs},"
@@ -151,11 +165,9 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
         }
 
     else:
-        # ── KARAOKE (default) ────────────────────────────────────────────
-        # Original style. White text, yellow active word, dark semi-transparent
-        # background box. Classic high-retention TikTok caption look.
-        hi   = "&H0000FFFF"  # yellow (ASS format) — keep original config value
-        back = "&H60000000"  # semi-transparent box
+        # ── KARAOKE (default) ─────────────────────────────────────
+        hi   = "&H0000FFFF"
+        back = "&H60000000"
         return {
             "header_base": (
                 f"Style: Base,Space Grotesk,{fs},"
@@ -168,7 +180,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
                 f"1,0,0,0,100,100,1,0,1,4,2,2,80,80,220,1"
             ),
             "base_tag":   r"{\k0}",
-            "active_tag": None,  # karaoke uses native kf tag, no extra override needed
+            "active_tag": None,
         }
 
 
@@ -202,7 +214,6 @@ _LINE_LINGER        = 0.18
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _ts(sec: float) -> str:
-    """Float seconds → ASS timestamp  H:MM:SS.cc"""
     h  = int(sec // 3600)
     m  = int((sec % 3600) // 60)
     s  = sec % 60
@@ -211,27 +222,14 @@ def _ts(sec: float) -> str:
 
 
 def _karaoke_line(words: list[dict], active_tag: str | None) -> str:
-    """
-    Build the karaoke-tagged text for one caption line.
-
-    karaoke style:  {\\kf<cs>}word  — native ASS karaoke colouring.
-    other styles:   {\\kf<cs>}{active_tag}word{reset}  — each word
-                    gets the active override for its spoken duration,
-                    then resets to base style.
-    """
     parts = []
     for w in words:
         dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
         word   = w["text"].strip()
-
         if active_tag is None:
-            # Native karaoke — ASS handles the colour transition automatically
             parts.append(f"{{\\kf{dur_cs}}}{word} ")
         else:
-            # Manual per-word override: word lights up with active_tag for dur_cs,
-            # then the reset tag (empty braces restore Base style context)
             parts.append(f"{{\\kf{dur_cs}}}{active_tag}{word}{{\\r}} ")
-
     return "".join(parts).rstrip()
 
 
@@ -257,14 +255,25 @@ def _transcribe(wav_path: pathlib.Path, model_size: str, language: str) -> dict:
 # ASS builder
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_ass(transcript: dict, out_path: pathlib.Path, cfg: dict) -> pathlib.Path:
+def _build_ass(
+    transcript: dict,
+    out_path:   pathlib.Path,
+    cfg:        dict,
+    script:     dict | None = None,
+) -> pathlib.Path:
     sc      = cfg["subs"]
     vid     = cfg["video"]
     fs      = sc["font_size"]
     fs_hi   = sc["font_size_active"]
-    style   = sc.get("style", "karaoke").lower().strip()
 
-    print(f"[captions] Caption style: {style}")
+    raw_style = (sc.get("style", "karaoke") or "karaoke").strip().lower()
+    if raw_style == "auto":
+        style = _auto_style_for_script(script)
+        print(f"[captions] subs.style='auto' → resolved to '{style}' "
+              f"(script.style='{(script or {}).get('style','')}')")
+    else:
+        style = raw_style
+        print(f"[captions] Caption style: {style}")
 
     sdef = _get_style_def(style, fs, fs_hi)
 
@@ -281,7 +290,6 @@ def _build_ass(transcript: dict, out_path: pathlib.Path, cfg: dict) -> pathlib.P
 
     for seg in transcript.get("segments", []):
         words = seg.get("words", [])
-
         if not words:
             words = [{"text": seg["text"], "start": seg["start"], "end": seg["end"]}]
 
@@ -308,10 +316,14 @@ def generate_captions(
     wav_path: pathlib.Path,
     out_dir:  pathlib.Path,
     cfg:      dict,
+    script:   dict | None = None,
 ) -> pathlib.Path:
     """
     Transcribe voice.wav and write captions.ass.
-    Also saves transcript.json for debugging.
+
+    script (optional) — when provided AND cfg.subs.style == "auto",
+    the caption style is derived from script.style / global.voice_style.
+
     Returns path to .ass file.
     """
     sc = cfg["subs"]
@@ -323,4 +335,4 @@ def generate_captions(
     )
 
     ass_path = out_dir / "captions.ass"
-    return _build_ass(transcript, ass_path, cfg)
+    return _build_ass(transcript, ass_path, cfg, script=script)

@@ -18,7 +18,7 @@ subs:
   #   neon        Dark box, electric cyan active word with aggressive glow radius
   #   minimal     Clean white text, no box, subtle cyan shift on active word
   #   bold_drop   Large bold text, heavy drop shadow, bright yellow active word
-  style: "glow"
+  style: "auto"
 
   # Legacy colour overrides — only used by the karaoke style.
   primary_color: "&H00FFFFFF"  # white base text

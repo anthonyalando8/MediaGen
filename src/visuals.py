@@ -256,6 +256,7 @@ def _build_beat_contracts(
     beats: list,
     beat_durations_ms: list = None,
     style: str = "",
+    camera_style: str = "",
 ) -> list:
     """
     Build the per-beat contracts the renderer consumes.
@@ -295,6 +296,10 @@ def _build_beat_contracts(
             "background":      bg,
             "visual_intent":   beat.get("visual_intent", ""),
             "visual_query":    beat.get("visual_query", ""),
+
+            # Whole-video handheld bias from script.global.camera_style.
+            # Read by inject.js step 20 → adds .cam-handheld-layer to .scene.
+            "camera_style":    camera_style,
 
             # Transition set after we know prev contract (below)
             "transition":      beat.get("transition", ""),  # may be empty, filled below
@@ -352,10 +357,15 @@ def render_slides(
     # Layout is now PER-BEAT inside _build_beat_contracts — we no longer
     # pin one layout for the entire video. The video-level "layout" field
     # is kept for back-compat as a hint for the first beat.
+    # Pull global.camera_style so inject.js can apply a whole-video handheld
+    # bias (or any future global motion modifier) per beat.
+    global_cam_style = (script.get("global", {}) or {}).get("camera_style", "")
+
     beats_contracts = _build_beat_contracts(
         script["beats"],
         beat_durations_ms,
         style=script_style,
+        camera_style=global_cam_style,
     )
 
     scene_json = {
