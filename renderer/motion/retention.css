@@ -1,0 +1,236 @@
+:root {
+  --intensity: .65; /* default — overridden by inject.js step 21 */
+}
+
+/* ── INTENSITY-DRIVEN MAGNITUDES ───────────────────────────
+   Every motion that "should hit harder when the beat matters"
+   multiplies through --intensity. No animation needs to know.
+   ─────────────────────────────────────────────────────────── */
+
+/* Scale magnitude scales 1.00 → 1.06 over intensity 0 → 1 */
+.kw-pulse, .scale-by-intensity {
+  --scale-mag: calc(1 + var(--intensity) * .06);
+}
+
+/* Vignette gets darker with higher intensity (combines with --vignette-strength). */
+.vignette {
+  opacity: calc(.7 + var(--intensity) * .3);
+}
+
+/* Particle density / brightness scales */
+.ambient-particles {
+  opacity: calc(.45 + var(--intensity) * .55);
+}
+
+/* God-ray amplitude */
+.ambient-ray {
+  opacity: calc(var(--intensity) * var(--intensity));
+}
+
+/* ── PATTERN INTERRUPTS — fire once per beat at intensity > .80 ─
+   inject.js adds .pi-{name} to .scene; CSS handles the timing.
+   All animations are forwards/both — seek-safe. */
+
+/* PI-02  SCALE SLAM — keyword punches to 1.22 then settles ──── */
+.pi-slam .kw-pulse {
+  animation: piSlam .36s var(--ease-slam, cubic-bezier(.22,1.6,.36,1)) var(--pi-delay, 2s) forwards;
+}
+@keyframes piSlam {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.22) translateY(-4px); }
+  55%  { transform: scale(.97); }
+  100% { transform: scale(1); }
+}
+
+/* PI-03  CHROMATIC BLAST — RGB split for 80ms ───────────────── */
+.pi-chroma::after {
+  content: ""; position: absolute; inset: 0;
+  pointer-events: none; z-index: var(--z-flash, 99);
+  mix-blend-mode: screen;
+  animation: piChroma .18s linear var(--pi-delay, 2s) forwards;
+}
+@keyframes piChroma {
+  0%   { background: oklch(.6 .2 25 / .6); transform: translateX(-4px); }
+  40%  { background: oklch(.6 .2 240 / .6); transform: translateX(4px); }
+  100% { background: transparent; transform: translateX(0); }
+}
+
+/* PI-01  FREEZE FRAME — pauses scale-driven motion mid-beat ─── */
+.pi-freeze .depth-fg {
+  animation-delay: 0s, 0s;
+  animation-fill-mode: forwards;
+  /* paused window is achieved with negative delay on a 2-track */
+  animation:
+    freezeTrack var(--cam-dur, 5s) steps(2, jump-none) forwards;
+}
+@keyframes freezeTrack {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.02); }
+  100% { transform: scale(1.02); }
+}
+
+/* PI-04  INVERT — 80ms negative exposure flash ──────────────── */
+.pi-invert .depth-fg,
+.pi-invert .depth-bg {
+  animation: piInvert .08s steps(1) var(--pi-delay, 2s) forwards;
+}
+@keyframes piInvert {
+  0%   { filter: invert(1) hue-rotate(180deg); }
+  100% { filter: none; }
+}
+
+/* PI-06  IRIS PULL — vignette tightens then releases ────────── */
+.pi-iris::before {
+  content: ""; position: absolute; inset: 0;
+  pointer-events: none; z-index: var(--z-vignette, 9);
+  background: radial-gradient(circle at 50% 50%,
+    transparent 55%, oklch(0 0 0 / .95) 100%);
+  animation: piIris .4s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) var(--pi-delay, 2s) forwards;
+}
+@keyframes piIris {
+  0%   { transform: scale(1.5); opacity: 0; }
+  40%  { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* PI-07  TILT-SHAKE — whole frame rotates 3 frames ──────────── */
+.pi-tilt {
+  animation: piTilt .18s steps(6) var(--pi-delay, 2s) forwards;
+}
+@keyframes piTilt {
+  0%   { transform: rotate(0); }
+  25%  { transform: rotate(1.5deg) translate(2px,-2px); }
+  50%  { transform: rotate(-1.5deg) translate(-2px,1px); }
+  75%  { transform: rotate(.8deg); }
+  100% { transform: rotate(0); }
+}
+
+/* PI-08  NEGATIVE FLASH — single over-exposed frame ─────────── */
+.pi-flash::before {
+  content: ""; position: absolute; inset: 0;
+  pointer-events: none; z-index: var(--z-flash, 99);
+  background: oklch(1 0 0 / .85);
+  animation: piFlash .08s steps(1) var(--pi-delay, 2s) forwards;
+}
+@keyframes piFlash {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── BREATH BEATS — explicit slow-down at intensity < .60 ─── */
+.breath {
+  --pace-mult: 1.45;          /* same as pace=slow */
+  --overshoot-y: -4px;        /* gentler entries */
+}
+
+/* ── COMPOSITION MUTATORS ───────────────────────────────────── */
+/* .comp-crop-low .depth-fg,
+.comp-crop-low [class$="-kw"] { top: auto !important; bottom: 9% !important; }
+.comp-tilt .depth-fg      { transform: rotate(-2deg); }
+.comp-corner .depth-fg,
+.comp-corner [class$="-kw"] { text-align: right !important; top: auto !important; bottom: 15% !important; }
+.comp-sparse [class$="-kw"]   { right: auto !important; max-width: 35%; } */
+
+/* ── COMPOSITION MUTATORS ──────────────────────────────────────────
+   Each mutator targets the SCENE'S content container (every scene
+   uses a [class$="-content"] wrapper for its keyword block, and a
+   [class$="-body"] container for its body line). We translate or
+   re-anchor the content, NOT the .depth-fg wrapper — moving the
+   wrapper collapses its bounding box and breaks scene-internal
+   absolute positioning.
+
+   Matched containers (all scene files use one of these):
+     .hook-content / .hook-body / .hook-kw-wrap
+     .insight-content / .insight-body
+     .climax-content / .climax-body
+     .tension-content / .tension-body
+     .truth-content / .truth-body
+     .flip-content / .flip-body
+     .payoff-content / .payoff-body
+     .cta-content / .cta-body                                       */
+
+/* CROP-LOW — push everything down to bottom third */
+.comp-crop-low [class$="-content"],
+.comp-crop-low [class$="-kw-wrap"] {
+  transform: translateY(50%) !important;
+}
+.comp-crop-low [class$="-body"] {
+  transform: translateY(15%) !important;
+}
+
+/* TILT — small dutch-angle rotation on the whole content stack */
+.comp-tilt [class$="-content"],
+.comp-tilt [class$="-kw-wrap"],
+.comp-tilt [class$="-body"] {
+  transform: rotate(-2deg) !important;
+  transform-origin: 30% 50%;
+}
+
+/* CORNER — push content to bottom-right, right-align */
+.comp-corner [class$="-content"],
+.comp-corner [class$="-kw-wrap"] {
+  transform: translate(20%, 60%) !important;
+  text-align: right !important;
+}
+.comp-corner [class$="-body"] {
+  transform: translate(15%, 25%) !important;
+  text-align: right !important;
+}
+
+/* SPARSE — keyword takes only 40% width, anchored left */
+.comp-sparse [class$="-kw"],
+.comp-sparse [class$="-kw-wrap"] {
+  max-width: 42% !important;
+}
+.comp-sparse [class$="-body"] {
+  max-width: 55% !important;
+}
+
+/* ── EMPHASIS WORD — guaranteed override ─────────────────────────
+   Every scene file (insight.html, hook.html, …) hard-codes a
+   body colour like .insight-body { color: var(--fg-2) }. The .em
+   inside body-line needs to beat that specificity AND survive after
+   the animation completes. Hence !important on color + font-weight,
+   and a sustained post-animation state (color stays --acc).         */
+.body-line .em,
+[class$="-body"] .em,
+.insight-body .em,
+.hook-body    .em,
+.climax-body  .em,
+.tension-body .em,
+.truth-body   .em,
+.flip-body    .em,
+.payoff-body  .em,
+.cta-body     .em {
+  display: inline-block !important;
+  position: relative;
+  font-weight: 700 !important;
+  color: var(--fg) !important;          /* visibly brighter than --fg-2 even at rest */
+  animation: emPunch 0.45s var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1))
+             var(--em-delay, 1.6s) both !important;
+}
+
+/* Persistent underline arrives with the punch — survives forever */
+.body-line .em::after,
+[class$="-body"] .em::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -3px; height: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: emUnderline 0.5s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1))
+             var(--em-delay, 1.6s) forwards;
+}
+
+@keyframes emPunch {
+  0%   { transform: scale(1);                       color: var(--fg); }
+  40%  { transform: scale(1.22) translateY(-4px);   color: var(--acc); }
+  60%  { transform: scale(0.96);                    color: var(--acc); }
+  80%  { transform: scale(1.02);                    color: var(--acc); }
+  100% { transform: scale(1);                       color: var(--acc); }   /* HOLDS accent */
+}
+@keyframes emUnderline {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}

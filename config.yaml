@@ -2,7 +2,7 @@ llm:
   model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b
 
 tts:
-  voice: "af_heart"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
+  voice: "auto"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
   speed: 1.05                  # slightly faster reads punchier on tiktok
   sample_rate: 24000
 
@@ -55,4 +55,4 @@ theme: "tech_blue"   # maps to renderer/themes/tech_blue.css
 # Frame cleanup
 # true  = delete the frames/ directory after assembly completes (saves ~200-400MB per run)
 # false = keep frames on disk (useful for debugging or re-exporting)
-cleanup_frames: true
+cleanup_frames: false

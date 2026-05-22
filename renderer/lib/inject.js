@@ -318,4 +318,59 @@
     }
   }
 
+
+  // ── 21. INTENSITY — master magnitude dial ──────────────────────
+// beat.intensity ∈ [0, 1]. Sets a CSS var every retention rule reads.
+// Default 0.65 if missing — neutral, doesn't accidentally amp anything.
+var intensity = typeof beat.intensity === 'number'
+  ? Math.max(0, Math.min(1, beat.intensity))
+  : 0.65;
+scene.style.setProperty('--intensity', intensity.toFixed(3));
+if (intensity < 0.60) scene.classList.add('breath');
+
+// ── 22. PATTERN INTERRUPT — one per beat, eligible at intensity > .80
+// OR explicit beat.pattern_interrupt. inject.js picks the type and
+// schedules it at 45-65% of beat duration (peak attention window). */
+var PI_TYPES = ['slam', 'chroma', 'iris', 'tilt', 'flash', 'freeze', 'invert'];
+var PI_BY_SCENE = {
+  hook:    'slam',
+  climax:  'chroma',
+  tension: 'iris',
+  truth:   'iris',
+  flip:    'invert',
+  payoff:  'flash',
+  cta:     'slam',
+};
+var pi = beat.pattern_interrupt
+  || (intensity >= 0.80 ? PI_BY_SCENE[beat.scene] || 'slam' : null);
+if (pi && PI_TYPES.indexOf(pi) !== -1) {
+  scene.classList.add('pi-' + pi);
+  // Delay = 50% of beat (peak attention window).
+  var piDelay = (beat.duration_ms || 5000) * 0.5 / 1000;
+  scene.style.setProperty('--pi-delay', piDelay.toFixed(2) + 's');
+}
+
+// ── 23. EMPHASIS WORDS — time per-word punch to body line entry
+// capture.js wraps *foo* as <span class="em">foo</span>.
+// Each .em gets a CSS var --em-delay = body line entry + 0.42s,
+// so the punch lands on the spoken word (≈ syllable 2 of the line). */
+scene.querySelectorAll('.body-line').forEach(function (line, i) {
+  var ems = line.querySelectorAll('.em');
+  if (!ems.length) return;
+  var base = parseFloat(getComputedStyle(line).animationDelay) || 1.1;
+  // Punch on second-syllable timing ≈ 420ms after line entry */
+  var emDelay = base + 0.42;
+  ems.forEach(function (em, j) {
+    // Stagger if multiple emphasis words in the same line. */
+    em.style.setProperty('--em-delay', (emDelay + j * 0.25).toFixed(3) + 's');
+  });
+});
+
+// ── 24. COMPOSITION MUTATOR — optional, opt-in via beat field ──
+// beat.composition ∈ ['crop-low', 'tilt', 'corner', 'sparse']
+// Applied as .comp-{name} class. CSS handles the override. */
+if (beat.composition) {
+  scene.classList.add('comp-' + beat.composition);
+}
+
 })();

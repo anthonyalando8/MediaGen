@@ -252,6 +252,94 @@ def _exit_vector(camera: str) -> dict:
     return dict(_CAMERA_EXIT_VECTOR.get(camera, _CAMERA_EXIT_VECTOR["static"]))
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# INTENSITY CURVE — drives motion magnitude across the video
+# ───────────────────────────────────────────────────────────────────────────
+
+_SCENE_INTENSITY = {
+    "hook":    0.95,
+    "climax":  1.00,
+    "cta":     0.85,
+    "flip":    0.82,
+    "tension": 0.70,
+    "truth":   0.72,
+    "payoff":  0.78,
+    "insight": 0.60,
+}
+
+def _intensity_for(scene: str, i: int, total: int) -> float:
+    """Per-beat retention pressure ∈ [0, 1]."""
+    if scene in _SCENE_INTENSITY:
+        base = _SCENE_INTENSITY[scene]
+    else:
+        # Rising baseline 0.55 → 0.95 over the video
+        progress = i / max(1, total - 1)
+        base = 0.55 + 0.40 * progress
+
+    # Inject ONE breath beat at ~30% of the video. Drops intensity 35%.
+    # If beat i is in the breath window AND is a non-critical scene,
+    # quiet it down so the climax has more pop. */
+    progress = i / max(1, total - 1)
+    if 0.25 < progress < 0.40 and scene in {"insight", "truth"}:
+        base *= 0.65
+
+    return round(max(0.0, min(1.0, base)), 2)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# PATTERN INTERRUPT DISTRIBUTION — no two adjacent beats fire the same one
+# ───────────────────────────────────────────────────────────────────────────
+
+_PI_BY_SCENE = {
+    "hook":    "slam",
+    "climax":  "chroma",
+    "tension": "iris",
+    "truth":   "iris",
+    "flip":    "invert",
+    "payoff":  "flash",
+    "cta":     "slam",
+}
+
+def _assign_interrupts(contracts: list) -> None:
+    """Mutate contracts: add pattern_interrupt to high-intensity beats."""
+    last_pi = None
+    for i, c in enumerate(contracts):
+        if c.get("pattern_interrupt"):          # LLM-provided wins
+            last_pi = c["pattern_interrupt"]
+            continue
+        if c.get("intensity", 0) < 0.80:     # not eligible
+            continue
+        scene = c["scene"]
+        choice = _PI_BY_SCENE.get(scene, "slam")
+        # Avoid two consecutive beats firing the same interrupt
+        if choice == last_pi:
+            alternates = ["slam", "flash", "iris", "chroma"]
+            choice = next((x for x in alternates if x != last_pi), choice)
+        c["pattern_interrupt"] = choice
+        last_pi = choice
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# COMPOSITION MUTATOR — pick ONE non-critical beat per video to mutate
+# ───────────────────────────────────────────────────────────────────────────
+
+_MUTATABLE_SCENES = {"insight", "truth", "flip"}
+_MUTATORS = ["crop-low", "tilt", "corner", "sparse"]
+
+def _pick_composition_mutator(contracts: list) -> None:
+    """Apply ONE composition mutator across the whole video for variety."""
+    eligible = [
+        i for i, c in enumerate(contracts)
+        if c["scene"] in _MUTATABLE_SCENES and not c.get("composition")
+    ]
+    if not eligible:
+        return
+    # Deterministic pick: hash-mod across run so the same script reruns identically
+    idx = eligible[len(contracts) % len(eligible)]
+    mut = _MUTATORS[len(contracts) % len(_MUTATORS)]
+    contracts[idx]["composition"] = mut
+
+
 def _build_beat_contracts(
     beats: list,
     beat_durations_ms: list = None,
@@ -296,7 +384,9 @@ def _build_beat_contracts(
             "background":      bg,
             "visual_intent":   beat.get("visual_intent", ""),
             "visual_query":    beat.get("visual_query", ""),
-
+            "composition":     beat.get("composition") or None,
+            "pattern_interrupt": beat.get("pattern_interrupt") or None,
+            "intensity":       beat["intensity"] if isinstance(beat.get("intensity"), (int, float)) else None,
             # Whole-video handheld bias from script.global.camera_style.
             # Read by inject.js step 20 → adds .cam-handheld-layer to .scene.
             "camera_style":    camera_style,
@@ -320,6 +410,11 @@ def _build_beat_contracts(
         # entry_vector = previous beat's exit_vector (camera-derived)
         if prev is not None:
             contracts[i]["entry_vector"] = _exit_vector(prev["camera"])
+
+    for i, c in enumerate(contracts):
+        c["intensity"] = c.get("intensity") or _intensity_for(c["scene"], i, len(contracts))
+    _assign_interrupts(contracts)
+    _pick_composition_mutator(contracts)
 
     return contracts
 

@@ -43,6 +43,8 @@ _ALLOWED = {
                       "minimal", "aggressive", "documentary", "absurd", "quirky"},
     "energy":        {"high", "mid", "low"},
     "type":          {"hook", "insight", "tension", "truth", "flip", "climax", "payoff", "cta"},
+    "pattern_interrupt": {"", "slam", "chroma", "iris", "tilt","flash", "freeze", "invert"},
+    "composition":       {"", "crop-low", "tilt", "corner", "sparse"},
 }
 
 # Per-scene-type cinematic defaults — used when LLM omits a field or supplies
@@ -229,6 +231,15 @@ def _normalise_schema(data: dict) -> dict:
 
         # visual_query is creative — keep whatever the LLM provided (or empty)
         beat.setdefault("visual_query", "")
+
+        val = beat.get("intensity")
+        if not isinstance(val, (int, float)) or not (0.0 <= val <= 1.0):
+            beat.pop("intensity", None)
+
+        # Strip unknown pattern_interrupt / composition values
+        for field in ("pattern_interrupt", "composition"):
+            if beat.get(field) and beat[field] not in _ALLOWED[field]:
+                beat[field] = ""   # silently fall back; visuals.py will re-pick
 
     # top-level optional fields
     data.setdefault("thumbnail", data.get("keyword", ""))
