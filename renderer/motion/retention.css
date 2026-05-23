@@ -47,7 +47,8 @@
   content: ""; position: absolute; inset: 0;
   pointer-events: none; z-index: var(--z-flash, 99);
   mix-blend-mode: screen;
-  animation: piChroma .18s linear var(--pi-delay, 2s) forwards;
+  background: transparent;                 /* hidden until animation fires */
+  animation: piChroma .18s linear var(--pi-delay, 2s) both;
 }
 @keyframes piChroma {
   0%   { background: oklch(.6 .2 25 / .6); transform: translateX(-4px); }
@@ -85,7 +86,8 @@
   pointer-events: none; z-index: var(--z-vignette, 9);
   background: radial-gradient(circle at 50% 50%,
     transparent 55%, oklch(0 0 0 / .95) 100%);
-  animation: piIris .4s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) var(--pi-delay, 2s) forwards;
+  opacity: 0;                              /* hidden until animation fires */
+  animation: piIris .4s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) var(--pi-delay, 2s) both;
 }
 @keyframes piIris {
   0%   { transform: scale(1.5); opacity: 0; }
@@ -110,7 +112,8 @@
   content: ""; position: absolute; inset: 0;
   pointer-events: none; z-index: var(--z-flash, 99);
   background: oklch(1 0 0 / .85);
-  animation: piFlash .08s steps(1) var(--pi-delay, 2s) forwards;
+  opacity: 0;                              /* hidden until animation fires */
+  animation: piFlash .08s steps(1) var(--pi-delay, 2s) both;
 }
 @keyframes piFlash {
   0%   { opacity: 1; }
