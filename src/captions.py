@@ -22,6 +22,17 @@ script so every video gets captions that match its emotional register:
   humorous                   → glow       (bright, friendly)
 
 Explicit config values still win — only "auto" triggers the mapping.
+
+────────────────────────────────────────────────────────────────────
+KARAOKE DIRECTION FIX
+────────────────────────────────────────────────────────────────────
+Unspoken words now render DIM (50% white) until spoken, then flash to
+the active style (cyan/yellow/etc), then settle to full white once past.
+This matches the standard TikTok/Instagram karaoke expectation:
+  dim (upcoming) → bright/colored (now) → white (done)
+
+Previously all unspoken words were bright white, making the active word
+look like it was highlighting a word already in the past.
 """
 
 import pathlib
@@ -46,6 +57,17 @@ _CYAN_NEON  = _rgba(0,   255, 240)
 _TRANS      = _rgba(0,   0,   0, 255)
 _BOX_DARK   = _rgba(0,   0,   0, 96)
 _BOX_NEON   = _rgba(0,   0,   0, 140)
+
+# Dim/unspoken state — 50% transparent white, style-agnostic.
+# Applied as the pre-active override on every word so unspoken words
+# appear visually dim, making the active (bright/colored) word stand out.
+# After a word is spoken, {\r} resets to Base style (full white).
+#
+# Three-state karaoke sequence per word:
+#   1. Unspoken  → DIM_UNSPOKEN (50% white — upcoming)
+#   2. Speaking  → active_tag   (bright/colored — now)
+#   3. Spoken    → Base style   (full white — done)
+_DIM_UNSPOKEN = r"{\1c&H80FFFFFF}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,6 +135,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
             ),
             "base_tag":   r"{\blur0}",
             "active_tag": r"{\1c" + _CYAN_LIGHT + r"\3c" + _CYAN_HOT + r"\bord6\blur8\fs" + str(fs_hi) + r"}",
+            "dim_tag":    _DIM_UNSPOKEN,
         }
 
     elif style == "neon":
@@ -129,6 +152,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
             ),
             "base_tag":   r"{\blur0}",
             "active_tag": r"{\1c" + _CYAN_NEON + r"\3c" + _CYAN_NEON + r"\bord8\blur12\fs" + str(fs_hi) + r"}",
+            "dim_tag":    _DIM_UNSPOKEN,
         }
 
     elif style == "minimal":
@@ -145,6 +169,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
             ),
             "base_tag":   r"{\blur0}",
             "active_tag": r"{\1c" + _CYAN_LIGHT + r"\bord1\blur0\fs" + str(fs_hi) + r"}",
+            "dim_tag":    _DIM_UNSPOKEN,
         }
 
     elif style == "bold_drop":
@@ -162,10 +187,12 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
             ),
             "base_tag":   r"{\blur0\shad4}",
             "active_tag": r"{\1c" + _YELLOW + r"\shad5\bord2\blur0\fs" + str(fs_hi) + r"}",
+            "dim_tag":    _DIM_UNSPOKEN,
         }
 
     else:
         # ── KARAOKE (default) ─────────────────────────────────────
+        # Karaoke uses native \kf fill — dim_tag is unused (active_tag=None)
         hi   = "&H0000FFFF"
         back = "&H60000000"
         return {
@@ -181,6 +208,7 @@ def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
             ),
             "base_tag":   r"{\k0}",
             "active_tag": None,
+            "dim_tag":    None,   # native \kf handles timing — no dim needed
         }
 
 
@@ -197,7 +225,7 @@ ScaledBorderAndShadow: yes
 WrapStyle: 0
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginV, MarginL, MarginR, Encoding
 {style_base}
 {style_active}
 
@@ -221,34 +249,35 @@ def _ts(sec: float) -> str:
     return f"{h}:{m:02d}:{int(s):02d}.{cs:02d}"
 
 
-def _karaoke_line(words: list[dict], active_tag: str | None) -> str:
+def _karaoke_line(words: list[dict], active_tag: str | None, dim_tag: str | None) -> str:
+    """
+    Build the inline-tagged text for one caption line.
+
+    Three-state sequence per word (when active_tag and dim_tag are set):
+      dim_tag   → unspoken words appear at 50% white (upcoming)
+      \\kf{N}   → marks the word's active window (N centiseconds)
+      active_tag → bright/colored style during the active window
+      word text
+      {\\r}      → resets to Base style = full white (already spoken)
+
+    This produces the standard TikTok karaoke direction:
+      DIM → BRIGHT → WHITE  (upcoming → now → past)
+
+    For the native karaoke style (active_tag=None), standard \\kf fill is
+    used without color overrides — the Base/Active styles handle everything.
+    """
     parts = []
     for w in words:
         dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
         word   = w["text"].strip()
         if active_tag is None:
+            # Native karaoke: \kf timing only, no color overrides
             parts.append(f"{{\\kf{dur_cs}}}{word} ")
         else:
-            parts.append(f"{{\\kf{dur_cs}}}{active_tag}{word}{{\\r}} ")
+            # dim → active window → bright → reset to white
+            dim = dim_tag or ""
+            parts.append(f"{dim}{{\\kf{dur_cs}}}{active_tag}{word}{{\\r}} ")
     return "".join(parts).rstrip()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Transcription
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _transcribe(wav_path: pathlib.Path, model_size: str, language: str) -> dict:
-    import whisper_timestamped as wt
-    print(f"[captions] Transcribing with whisper-timestamped (model={model_size})…")
-    model  = wt.load_model(model_size)
-    audio  = wt.load_audio(str(wav_path))
-    result = wt.transcribe(
-        model, audio,
-        language=language,
-        detect_disfluencies=False,
-        verbose=False,
-    )
-    return result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -285,6 +314,7 @@ def _build_ass(
     )
 
     active_tag      = sdef["active_tag"]
+    dim_tag         = sdef["dim_tag"]
     base_tag_prefix = sdef["base_tag"]
     dialogue_lines: list[str] = []
 
@@ -297,7 +327,7 @@ def _build_ass(
             chunk  = words[chunk_i: chunk_i + _MAX_WORDS_PER_LINE]
             t_in   = chunk[0]["start"]
             t_out  = chunk[-1]["end"] + _LINE_LINGER
-            kline  = _karaoke_line(chunk, active_tag)
+            kline  = _karaoke_line(chunk, active_tag, dim_tag)
             dialogue_lines.append(
                 f"Dialogue: 0,{_ts(t_in)},{_ts(t_out)},Base,,0,0,0,,{base_tag_prefix}{kline}"
             )
@@ -336,3 +366,21 @@ def generate_captions(
 
     ass_path = out_dir / "captions.ass"
     return _build_ass(transcript, ass_path, cfg, script=script)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Transcription
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _transcribe(wav_path: pathlib.Path, model_size: str, language: str) -> dict:
+    import whisper_timestamped as wt
+    print(f"[captions] Transcribing with whisper-timestamped (model={model_size})…")
+    model  = wt.load_model(model_size)
+    audio  = wt.load_audio(str(wav_path))
+    result = wt.transcribe(
+        model, audio,
+        language=language,
+        detect_disfluencies=False,
+        verbose=False,
+    )
+    return result
