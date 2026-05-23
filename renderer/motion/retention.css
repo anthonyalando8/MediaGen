@@ -181,44 +181,44 @@
 /* Default / left layout */
 .comp-corner [class$="-content"],
 .comp-corner [class$="-kw-wrap"] {
-  transform: translate(20%, 60%) !important;
+  transform: translate(20%, 15%) !important;
   text-align: right !important;
 }
 .comp-corner [class$="-body"] {
-  transform: translate(15%, 25%) !important;
+  transform: translate(15%, 8%) !important;
   text-align: right !important;
 }
 
 /* Right layout — flip x to avoid off-canvas bleed */
 .scene[data-layout="right"].comp-corner [class$="-content"],
 .scene[data-layout="right"].comp-corner [class$="-kw-wrap"] {
-  transform: translate(-15%, 60%) !important;
+  transform: translate(-15%, 15%) !important;
   text-align: right !important;
 }
 .scene[data-layout="right"].comp-corner [class$="-body"] {
-  transform: translate(-12%, 25%) !important;
+  transform: translate(-12%, 8%) !important;
   text-align: right !important;
 }
 
 /* Center layout — reduced x shift, vertical emphasis */
 .scene[data-layout="center"].comp-corner [class$="-content"],
 .scene[data-layout="center"].comp-corner [class$="-kw-wrap"] {
-  transform: translate(8%, 60%) !important;
+  transform: translate(0%, 15%) !important;
   text-align: right !important;
 }
 .scene[data-layout="center"].comp-corner [class$="-body"] {
-  transform: translate(6%, 25%) !important;
+  transform: translate(0%, 8%) !important;
   text-align: right !important;
 }
 
 /* Full layout — vertical only */
 .scene[data-layout="full"].comp-corner [class$="-content"],
 .scene[data-layout="full"].comp-corner [class$="-kw-wrap"] {
-  transform: translate(0%, 60%) !important;
+  transform: translate(0%, 15%) !important;
   text-align: right !important;
 }
 .scene[data-layout="full"].comp-corner [class$="-body"] {
-  transform: translate(0%, 20%) !important;
+  transform: translate(0%, 8%) !important;
   text-align: right !important;
 }
 

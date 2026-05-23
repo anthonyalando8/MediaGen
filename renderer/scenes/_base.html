@@ -216,7 +216,13 @@ html, body {
 .kw-word {
   display: inline-block;
   position: relative;
-  white-space: nowrap;
+  /* white-space:normal (not nowrap) — allows long words to wrap between spans.
+     overflow-wrap:break-word handles the case where a single word is wider
+     than the container (e.g. "RESENTMENT" at sz-hero in a narrow column).
+     The underline ::after uses width:100% of the rendered inline-block,
+     so it correctly follows the constrained width regardless. */
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 .kw-word::after {
   content: '';
