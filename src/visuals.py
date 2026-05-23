@@ -353,14 +353,32 @@ def _calc_kw_font_size(keyword: str, layout: str, scene: str) -> int:
         'flip':    168, 'payoff':  168, 'tension': 104,
         'insight': 104, 'cta':     104,
     }
-    CHAR_RATIO = 0.62   # effective width per em (bold, -0.055em letter-spacing)
-    SAFETY     = 0.90   # 10% breathing room so chars never crowd the edge
+    CHAR_RATIO = 0.69   # effective width per em (bold uppercase Space Grotesk)
+    # Empirically derived: CONFIDENCE(10) at 168px breaks in 840px  → ratio > 0.50
+    # IRREPLACEABLE(13) at 111px (ratio=0.62 calc) still breaks in 1000px → ratio > 0.693
+    # Bracket: 0.69 fits all known breaking cases with 8% safety margin below.
+    SAFETY     = 0.92   # 8% breathing room — more accurate ratio needs less margin
     MIN_PX     = 56     # floor — below this text becomes unreadable
 
     container = CONTAINER_PX.get(layout, 840) * SAFETY
     max_sz    = SCENE_MAX_PX.get(scene, 168)
-    longest   = max(keyword.split(), key=len)
-    max_font  = container / (len(longest) * CHAR_RATIO)
+    words     = keyword.split()
+
+    # Constraint 1: longest single word must fit on one line
+    single = max(len(w) for w in words)
+
+    # Constraint 2: for 3+ word keywords, the widest adjacent pair must also
+    # fit on one line — this guarantees max 2 lines of wrapping and prevents
+    # the 3-line overflow that causes body text overlap (e.g. "THE HIDDEN PATH"
+    # at sz-hero wraps to 3 separate lines, pushing content into the body zone).
+    # 2-word keywords are intentionally left unconstrained: each word gets its
+    # own line at large sizes, which is the cinematic 2-line look (see "SILENT GRIND").
+    if len(words) >= 3:
+        pair_widths = [len(words[i]) + 1 + len(words[i + 1])
+                       for i in range(len(words) - 1)]
+        single = max(single, max(pair_widths))
+
+    max_font  = container / (single * CHAR_RATIO)
 
     return max(MIN_PX, min(max_sz, int(max_font)))
 # ▲▲▲ END NEW: DYNAMIC KEYWORD FONT SIZE ▲▲▲

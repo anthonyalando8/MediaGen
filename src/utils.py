@@ -3,6 +3,7 @@ utils.py  —  QA, thumbnail extraction, topic file reader, workspace helpers.
 """
 
 import pathlib
+import re
 import subprocess
 import json
 import random
@@ -13,11 +14,45 @@ import uuid
 # Workspace
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Pattern that matches run dirs created by make_run_dir: "001_a3f2b1c4"
+_RUN_DIR_PAT = re.compile(r'^(\d+)_[0-9a-f]{8}$')
+
+
 def make_run_dir(workspace: str) -> tuple[str, pathlib.Path]:
-    """Create a new run directory. Returns (run_id, path)."""
-    run_id  = uuid.uuid4().hex[:8]
-    run_dir = pathlib.Path(workspace) / run_id
+    """
+    Create a new sequenced run directory. Returns (run_id, path).
+
+    Format: ``NNN_xxxxxxxx``  e.g. ``003_a3f2b1c4``
+
+    NNN  — zero-padded 3-digit sequence number, one higher than the
+           largest existing run dir in the workspace.  Starts at 001
+           for a fresh workspace.  Non-run dirs (backups, notes, etc.)
+           are ignored by the pattern match so they never affect the count.
+
+    xxxxxxxx — 8-char hex UUID suffix for uniqueness (safe against the
+               rare case where two processes start simultaneously and
+               land on the same sequence number).
+
+    Examples in a workspace that already has 001..005:
+        make_run_dir(ws) → "006_9bbcee5e"   ← easy to spot as latest
+        make_run_dir(ws) → "007_4f8d795e"
+    """
+    ws = pathlib.Path(workspace)
+    ws.mkdir(parents=True, exist_ok=True)
+
+    # Find the highest sequence number already present
+    highest = 0
+    for d in ws.iterdir():
+        if d.is_dir():
+            m = _RUN_DIR_PAT.match(d.name)
+            if m:
+                highest = max(highest, int(m.group(1)))
+
+    seq     = highest + 1
+    run_id  = f"{seq:03d}_{uuid.uuid4().hex[:8]}"
+    run_dir = ws / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[utils] Run dir → {run_dir}")
     return run_id, run_dir
 
 

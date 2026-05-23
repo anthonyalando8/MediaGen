@@ -7,7 +7,7 @@ tts:
   sample_rate: 24000
 
 render:
-  concurrency: 3
+  concurrency: 2
 
 subs:
   whisper_model: "base"        # tiny | base | small — base is the sweet spot

@@ -11,6 +11,22 @@
 .scene[data-layout="left"] .insight-kw {
   animation: titleReveal 0.75s cubic-bezier(0.16,1,0.3,1) 0.30s forwards;
 }
+/* ── insight-body now position:absolute sibling ─────────
+   Previously insight-body was INSIDE insight-content, which meant
+   comp-corner's translate(20%, ...) moved both the keyword AND the body
+   rightward by the same amount — pushing the body past the right clip edge.
+
+   Fix: declare explicit top per layout so body sits below the keyword
+   block at all times, and comp-corner [class$="-body"] can apply its
+   own independent (smaller) translate without dragging the keyword with it.
+
+   Mirrors the pattern used by truth-body and flip-body, which have always
+   been siblings and have never had this overflow problem.            */
+.scene[data-layout="left"] .insight-body {
+  top: calc(var(--safe-top) + 420px);
+  left: calc(var(--left) + 20px);
+  right: calc(var(--right) + 160px);
+}
 
 /* ── CENTER ───────────────────────────────────────────── */
 .scene[data-layout="center"] .insight-content {
@@ -30,6 +46,9 @@
   animation: ruleRevealCenter 0.35s cubic-bezier(0.16,1,0.3,1) 1.0s forwards;
 }
 .scene[data-layout="center"] .insight-body {
+  top: calc(var(--safe-top) + 560px);
+  left: calc(var(--left) + 40px);
+  right: calc(var(--right) + 40px);
   text-align: center;
 }
 
@@ -47,6 +66,12 @@
   margin-left: auto;
   transform-origin: right center;
 }
+.scene[data-layout="right"] .insight-body {
+  top: calc(var(--safe-top) + 420px);
+  left: calc(var(--left) + 100px);
+  right: calc(var(--right) + 20px);
+  text-align: right;
+}
 
 /* ── FULL ─────────────────────────────────────────────── */
 .scene[data-layout="full"] .insight-content {
@@ -57,6 +82,11 @@
 .scene[data-layout="full"] .insight-kw {
   font-size: calc(var(--sz-stat) * 1.05);
   animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.20s forwards;
+}
+.scene[data-layout="full"] .insight-body {
+  top: calc(var(--safe-top) + 440px);
+  left: var(--left);
+  right: calc(var(--right) + 40px);
 }
 
 /* ── SHARED ───────────────────────────────────────────── */
@@ -84,8 +114,14 @@
   transform-origin: left center;
   animation: ruleReveal 0.35s cubic-bezier(0.16,1,0.3,1) 0.90s forwards;
 }
+
+/* insight-body is now a position:absolute sibling of insight-content —
+   NOT a child of it. This keeps it independent of comp-corner transforms
+   applied to insight-content, matching the pattern of truth-body and
+   flip-body which have always been architectural siblings.            */
 .insight-body {
-  margin-top: 28px;
+  position: absolute;
+  z-index: var(--z-fg);
   font-size: var(--sz-body);
   font-weight: 400;
   line-height: 1.32;
@@ -102,8 +138,11 @@
   <div class="insight-content">
     <div class="insight-kw">{{KEYWORD}}</div>
     <span class="insight-rule"></span>
-    <div class="insight-body">{{BODY}}</div>
   </div>
+  <!-- insight-body is a SIBLING of insight-content, NOT a child.
+       This prevents comp-corner's translate on insight-content from
+       also shifting the body text, which caused right-edge overflow. -->
+  <div class="insight-body">{{BODY}}</div>
   <div class="brand">{{BRAND}}</div>
   <div class="beat-counter">{{BEAT_INDEX}} / {{BEAT_TOTAL}}</div>
   <div class="grain" aria-hidden="true"></div>
