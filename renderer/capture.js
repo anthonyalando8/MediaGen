@@ -65,22 +65,11 @@ async function runChunked(items, n, fn) {
 }
 
 // ── Renderer directory + absolute file:// URL ───────────────────────────────
-// __dir is the location of this capture.js file. RENDERER_URL is the same
-// thing as a file:// URL, used to rewrite all relative ../foo/bar.css hrefs
-// in the scene HTML so they resolve correctly when the HTML is written to a
-// different directory under workspace/runs/.
 const __dir        = fileURLToPath(new URL('.', import.meta.url));
 const RENDERER_URL = pathToFileURL(__dir).href;  // file:///D:/Projects/MediaGen/renderer/
 
 /**
  * Rewrite relative asset URLs in scene HTML to absolute file:// URLs.
- *
- * Targets: <link href="../motion/X.css">, <script src="../lib/X.js">, etc.
- * After rewrite: <link href="file:///.../renderer/motion/X.css">
- *
- * Safe because we only rewrite paths that start with `../<known folder>/`,
- * not arbitrary URLs. Adding a folder to this regex's alternation list
- * extends the rewrite to that folder.
  */
 function rewriteAssetUrls(html) {
   return html.replace(
@@ -90,19 +79,8 @@ function rewriteAssetUrls(html) {
 }
 
 // ── Unsplash ─────────────────────────────────────────────────────────────────
-// Uses the Access Key (UNSPLASH_API_KEY), not the secret.
-// Set in environment: UNSPLASH_API_KEY=your_access_key
 const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY || '';
 
-/**
- * Fetch a single contextual image URL from Unsplash for a beat.
- *
- * Uses the /photos/random endpoint with portrait orientation so images
- * are vertical — closer to 9:16 than landscape shots.
- *
- * Returns the `urls.regular` URL (1080px wide) or null on any failure.
- * Never throws — a missing image is a degraded experience, not a crash.
- */
 async function fetchUnsplashUrl(query) {
   if (!UNSPLASH_KEY) {
     console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
@@ -118,7 +96,7 @@ async function fetchUnsplashUrl(query) {
   try {
     const res = await fetch(url, {
       headers: { 'Accept-Version': 'v1' },
-      signal: AbortSignal.timeout(6000),   // 6s hard timeout — never stall render
+      signal: AbortSignal.timeout(6000),
     });
 
     if (!res.ok) {
@@ -134,7 +112,6 @@ async function fetchUnsplashUrl(query) {
       return null;
     }
 
-    // Log attribution — Unsplash API guidelines require it
     const credit = data?.user?.name || 'unknown';
     console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
     console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
@@ -156,9 +133,6 @@ mkdirSync(outDir, { recursive: true });
 
 /**
  * Load the base + per-scene HTML templates and rewrite relative URLs.
- *
- * The rewrite is what makes ../motion/*.css and ../lib/inject.js resolve
- * correctly once the HTML is written into workspace/runs/.../beat_N/.
  */
 function loadTemplate(sceneName) {
   const base  = readFileSync(join(__dir, 'scenes/_base.html'), 'utf8');
@@ -190,12 +164,6 @@ function wrapBodyLines(body) {
 
   const raw = body.split(/(?<=[.!?])\s+/).filter(Boolean);
 
-  // Escape FIRST, then replace *foo* tokens with <span class="em">foo</span>.
-  // The asterisks survive escape verbatim, so this is safe. Regex tolerates
-  // up to 60 chars between markers (covers multi-word emphasis like
-  // "*not for you*"). Any leftover lone asterisks are stripped at the end
-  // so they never appear in the rendered video — TTS already strips them
-  // separately in tts.py.
   function withEmphasis(line) {
     const escaped = escapeHtml(line);
     return escaped
@@ -236,14 +204,22 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
   const beatIdx  = String(beat.beat_index  || '').padStart(2, '0');
   const beatTot  = String(beat.beat_total  || '').padStart(2, '0');
 
-  // Escape URL for CSS — parentheses and quotes need escaping inside url()
   const bgImageValue = imageUrl
     ? `url("${imageUrl.replace(/"/g, '%22')}")`
     : 'none';
 
-  // CSS vars — --bg-image added so _base.html .scene-bg-image can read it.
-  // Theme link uses RENDERER_URL — absolute path, resolves regardless of
-  // where _scene.html is written.
+  // ▼▼▼ NEW: read sz_kw from beat contract ▼▼▼
+  // visuals.py calculates sz_kw per beat using _calc_kw_font_size().
+  // When present, inject as --sz-kw CSS variable into :root AND add a
+  // one-line global override rule that forces ALL keyword elements
+  // ([class$="-kw"] covers hook-kw, truth-kw, climax-kw, insight-kw,
+  // flip-kw, tension-kw, payoff-kw, cta-kw) to use the calculated size.
+  // !important beats scene-specific font-size rules including full-layout
+  // upscaling (e.g. calc(var(--sz-hero)*1.10) in climax/flip/hook).
+  // When sz_kw equals the scene default the override is a no-op.
+  const szKw = (beat.sz_kw ? beat.sz_kw + 'px' : null);
+  // ▲▲▲ END NEW ▲▲▲
+
   const cssVars = [
     '<style id="palette-inject">',
     ':root {',
@@ -254,14 +230,24 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
     '  --beat-dur: ' + beat.duration_ms + 'ms;',
     '  --cam-dur:  ' + camDur + ';',
     '  --bg-image: ' + bgImageValue + ';',
+    // ▼▼▼ NEW: inject --sz-kw when a reduced size was calculated ▼▼▼
+    ...(szKw ? ['  --sz-kw:    ' + szKw + ';'] : []),
+    // ▲▲▲ END NEW ▲▲▲
     '}',
+    // ▼▼▼ NEW: global kw font-size override — applies to all scene types ▼▼▼
+    // Injected only when sz_kw is set (i.e. longest word would overflow at
+    // the scene default size). Silent no-op for short keywords.
+    ...(szKw ? [
+      '</style>',
+      '<style id="sz-kw-override">',
+      '[class$="-kw"] { font-size: var(--sz-kw) !important; }',
+    ] : []),
+    // ▲▲▲ END NEW ▲▲▲
     '</style>',
   ].join('\n');
 
   const beatJson   = JSON.stringify(beat).replace(/<\/script>/gi, '<\\/script>');
   const beatScript = '<script id="beat-data">window.__BEAT__ = ' + beatJson + ';</scri' + 'pt>';
-  // Theme link uses RENDERER_URL — absolute path, resolves regardless of
-  // where _scene.html is written.
   const themeLink  = '<link rel="stylesheet" href="' + RENDERER_URL + 'themes/' + sceneJson.theme + '.css">';
 
   html = html.replace('</head>', themeLink + '\n' + cssVars + '\n' + beatScript + '\n</head>');
@@ -299,14 +285,10 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
 
 const PAUSE_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
-    // Pause all animations for frame-seek rendering
     const pauseStyle = document.createElement('style');
     pauseStyle.textContent = '*, *::before, *::after { animation-play-state: paused !important; }';
     document.head.appendChild(pauseStyle);
 
-    // Apply Unsplash image directly as .scene background.
-    // Multi-layer: scrim on top keeps text readable, image underneath.
-    // All glows, grain, vignette overlays run above it — no z-index conflicts.
     const bgImage = getComputedStyle(document.documentElement)
       .getPropertyValue('--bg-image').trim();
     if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
@@ -328,13 +310,6 @@ async function seekAnimations(page, t_ms) {
   }, t_ms);
 }
 
-/**
- * renderBeat — fetches Unsplash image before rendering, then captures frames.
- *
- * imageUrl is pre-fetched in parallel by main() — no fetch here.
- * Asset 404s are surfaced via requestfailed / response listeners so path
- * issues are obvious. After the v3.1 rewrite this should stay silent.
- */
 async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = null) {
   const beatOutDir = join(outDir, `beat_${beatIdx}`);
   mkdirSync(beatOutDir, { recursive: true });
@@ -357,8 +332,6 @@ async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = nul
 
   const page = await context.newPage();
 
-  // ── Surface any asset 404s in the console so path issues are obvious.
-  // After the v3.1 rewrite this should stay silent in normal operation.
   page.on('requestfailed', req => {
     const url = req.url();
     if (url.endsWith('.css') || url.endsWith('.js') || url.includes('/motion/') ||
@@ -373,9 +346,6 @@ async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = nul
     }
   });
 
-  // Wait for the background image to load before we start capturing.
-  // We use 'networkidle' only when there's an image to fetch — otherwise
-  // keep the cheaper 'domcontentloaded' which is fast for local files.
   const waitUntil = imageUrl ? 'networkidle' : 'domcontentloaded';
   await page.goto(`file://${tmpHtml}`, { waitUntil, timeout: 15000 });
   await page.waitForTimeout(80);
@@ -409,8 +379,6 @@ async function main() {
   const { palette, brand, beats } = sceneJson;
   const results = [];
 
-  // ── Phase 1: fetch all Unsplash images in parallel ──────────────────
-  // All network calls fire at once — saves up to 6s × N beats of waiting.
   const activeIndices = beats
     .map((_, i) => i)
     .filter(i => !beatFilter || beatFilter.includes(i));
@@ -420,10 +388,6 @@ async function main() {
     activeIndices.map(i => fetchUnsplashUrl(beats[i].visual_query || ''))
   );
 
-  // ── Phase 2: render beats in parallel chunks ─────────────────────────
-  // Each beat has its own browser context — isolated, no state leakage.
-  // On failure, attempt 2 restarts the shared browser before retrying,
-  // matching the original single-beat restart behaviour.
   console.log(`[capture] Rendering ${activeIndices.length} beats (concurrency=${CONCURRENCY})…`);
   const beatTasks = activeIndices.map((beatIdx, j) => ({ beatIdx, imageUrl: imageUrls[j] }));
 

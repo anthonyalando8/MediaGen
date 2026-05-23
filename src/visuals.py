@@ -123,17 +123,15 @@ _THEME_PALETTES = {
 # CINEMATIC DEFAULTS  —  prevents stiff uniformity when the LLM omits fields
 # ───────────────────────────────────────────────────────────────────────────
 
-# Each scene type has a cinematic vocabulary. These are the defaults a
-# director would pick — varied across the video by design.
 _SCENE_CAMERA = {
-    "hook":    "push_in",       # authority — moves toward the viewer
-    "insight": "static",        # composed, considered (but see _camera_for below)
-    "climax":  "snap_zoom",     # explosive punch
-    "tension": "tilt_up",       # slow reveal from below, dread
-    "truth":   "static",        # the line lands clean
-    "flip":    "micro_shake",   # destabilise before reorient
-    "payoff":  "pull_out",      # earned reveal, opens space
-    "cta":     "push_in",       # final push to action
+    "hook":    "push_in",
+    "insight": "static",
+    "climax":  "snap_zoom",
+    "tension": "tilt_up",
+    "truth":   "static",
+    "flip":    "micro_shake",
+    "payoff":  "pull_out",
+    "cta":     "push_in",
 }
 
 _SCENE_PACE = {
@@ -158,8 +156,6 @@ _SCENE_EMOTION = {
     "cta":     "urgent",
 }
 
-# Backgrounds rotate within a scene-type pool so back-to-back insights
-# don't look identical. The index parameter walks the pool.
 _SCENE_BACKGROUND_POOL = {
     "hook":    ["glow", "gradient", "abstract"],
     "insight": ["solid", "grid", "lines", "gradient"],
@@ -171,9 +167,6 @@ _SCENE_BACKGROUND_POOL = {
     "cta":     ["solid", "glow"],
 }
 
-# Layout rotation: each scene type has a preferred layout vocabulary.
-# We walk the pool by beat index so the same scene type renders different
-# layouts across the video. Style hint biases the first choice.
 _SCENE_LAYOUT_POOL = {
     "hook":    ["left", "full", "center"],
     "insight": ["left", "right", "center"],
@@ -185,7 +178,6 @@ _SCENE_LAYOUT_POOL = {
     "cta":     ["full", "center"],
 }
 
-# Style-level layout preference biases the first option of the pool.
 _STYLE_LAYOUT_BIAS = {
     "contrarian": "left",
     "builder":    "left",
@@ -198,23 +190,16 @@ _STYLE_LAYOUT_BIAS = {
 
 
 def _camera_for(scene: str, i: int) -> str:
-    """Pick a camera, with subtle insight/truth variation by index so
-    multiple insight beats don't all use the same static camera."""
     base = _SCENE_CAMERA.get(scene, "static")
-    # For "static" scenes, alternate with a gentle drift so the runtime
-    # gets variety even when the LLM doesn't request it.
     if base == "static":
         return ["static", "handheld", "static", "push_in"][i % 4]
     return base
 
 
 def _layout_for(scene: str, i: int, style: str) -> str:
-    """Rotate layouts across beats. Style bias takes the first option."""
     pool = list(_SCENE_LAYOUT_POOL.get(scene, ["left", "center", "right"]))
     bias = _STYLE_LAYOUT_BIAS.get((style or "").lower(), "")
     if bias and bias in pool:
-        # Move bias to the front of the pool so the FIRST occurrence of
-        # this scene type uses the style preference.
         pool.remove(bias); pool.insert(0, bias)
     return pool[i % len(pool)]
 
@@ -225,19 +210,15 @@ def _background_for(scene: str, i: int) -> str:
 
 
 def _transition_for(prev: dict, curr: dict, i: int) -> str:
-    """Pick a transition based on scene type and energy delta."""
     curr_scene = curr.get("scene", "")
     if curr_scene == "climax":  return "slam_cut"
     if curr_scene == "payoff":  return "fade"
     if curr_scene == "tension": return "dip_black"
     if curr_scene == "flip":    return "flash"
-    # default rhythm: cut, occasional whip_pan or blur_wipe
     rhythm = ["cut", "cut", "blur_wipe", "cut", "whip_pan"]
     return rhythm[i % len(rhythm)]
 
 
-# Each camera move ends with implied directional energy. The NEXT beat's
-# entry_vector inherits this so the cut preserves motion.
 _CAMERA_EXIT_VECTOR = {
     "push_in":     {"x":  0,   "y": -10, "scale": 1.04},
     "pull_out":    {"x":  0,   "y":   4, "scale": 0.98},
@@ -253,7 +234,7 @@ def _exit_vector(camera: str) -> dict:
 
 
 # ───────────────────────────────────────────────────────────────────────────
-# INTENSITY CURVE — drives motion magnitude across the video
+# INTENSITY CURVE
 # ───────────────────────────────────────────────────────────────────────────
 
 _SCENE_INTENSITY = {
@@ -268,17 +249,12 @@ _SCENE_INTENSITY = {
 }
 
 def _intensity_for(scene: str, i: int, total: int) -> float:
-    """Per-beat retention pressure ∈ [0, 1]."""
     if scene in _SCENE_INTENSITY:
         base = _SCENE_INTENSITY[scene]
     else:
-        # Rising baseline 0.55 → 0.95 over the video
         progress = i / max(1, total - 1)
         base = 0.55 + 0.40 * progress
 
-    # Inject ONE breath beat at ~30% of the video. Drops intensity 35%.
-    # If beat i is in the breath window AND is a non-critical scene,
-    # quiet it down so the climax has more pop. */
     progress = i / max(1, total - 1)
     if 0.25 < progress < 0.40 and scene in {"insight", "truth"}:
         base *= 0.65
@@ -287,7 +263,7 @@ def _intensity_for(scene: str, i: int, total: int) -> float:
 
 
 # ───────────────────────────────────────────────────────────────────────────
-# PATTERN INTERRUPT DISTRIBUTION — no two adjacent beats fire the same one
+# PATTERN INTERRUPT DISTRIBUTION
 # ───────────────────────────────────────────────────────────────────────────
 
 _PI_BY_SCENE = {
@@ -301,17 +277,15 @@ _PI_BY_SCENE = {
 }
 
 def _assign_interrupts(contracts: list) -> None:
-    """Mutate contracts: add pattern_interrupt to high-intensity beats."""
     last_pi = None
     for i, c in enumerate(contracts):
-        if c.get("pattern_interrupt"):          # LLM-provided wins
+        if c.get("pattern_interrupt"):
             last_pi = c["pattern_interrupt"]
             continue
-        if c.get("intensity", 0) < 0.80:     # not eligible
+        if c.get("intensity", 0) < 0.80:
             continue
         scene = c["scene"]
         choice = _PI_BY_SCENE.get(scene, "slam")
-        # Avoid two consecutive beats firing the same interrupt
         if choice == last_pi:
             alternates = ["slam", "flash", "iris", "chroma"]
             choice = next((x for x in alternates if x != last_pi), choice)
@@ -320,24 +294,76 @@ def _assign_interrupts(contracts: list) -> None:
 
 
 # ───────────────────────────────────────────────────────────────────────────
-# COMPOSITION MUTATOR — pick ONE non-critical beat per video to mutate
+# COMPOSITION MUTATOR
 # ───────────────────────────────────────────────────────────────────────────
 
 _MUTATABLE_SCENES = {"insight", "truth", "flip"}
 _MUTATORS = ["crop-low", "tilt", "corner", "sparse"]
 
 def _pick_composition_mutator(contracts: list) -> None:
-    """Apply ONE composition mutator across the whole video for variety."""
     eligible = [
         i for i, c in enumerate(contracts)
         if c["scene"] in _MUTATABLE_SCENES and not c.get("composition")
     ]
     if not eligible:
         return
-    # Deterministic pick: hash-mod across run so the same script reruns identically
     idx = eligible[len(contracts) % len(eligible)]
     mut = _MUTATORS[len(contracts) % len(_MUTATORS)]
     contracts[idx]["composition"] = mut
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ▼▼▼ NEW: DYNAMIC KEYWORD FONT SIZE ▼▼▼
+# ─────────────────────────────────────────────────────────────────────────────
+def _calc_kw_font_size(keyword: str, layout: str, scene: str) -> int:
+    """
+    Calculate the max keyword font size (px) that fits the longest word
+    on a single line within the scene container for the given layout.
+
+    Uses a conservative char-width ratio (0.62em at bold tight-tracked
+    uppercase Space Grotesk) with a 10% safety margin so the longest
+    word never overflows its container and triggers mid-word line breaks.
+
+    Applies to ALL scene types — [class$="-kw"] in capture.js picks it up
+    universally via CSS override, covering hook-kw, truth-kw, climax-kw, etc.
+
+    Examples:
+      "FAKE CONFIDENCE"  right  → 116px  (was sz-hero=168, CONFIDENCE=10 chars)
+      "HIDDEN RESENTMENT" right → 116px  (was 168, RESENTMENT=10 chars)
+      "COLLECTIVE HALLUCINATION" left → 93px (HALLUCINATION=12 chars)
+      "THE GREAT LIE"    left   → 168px  (GREAT=5 chars, fits fine)
+      "SYSTEMIC FRAUD"   full   → 168px  (SYSTEMIC=8 chars, 1000px container)
+    """
+    # Conservative usable container widths per layout (px).
+    # Uses the NARROWEST scene margins within each layout family so the
+    # calculated size is safe for every scene type that can use that layout.
+    #   left:   truth/left  worst case — left+20px, right+60px → 840px usable
+    #   right:  insight/right           — left+100px, right+20px → 800px usable
+    #   center: truth/center            — left=80px, right=80px → 840px usable
+    #   full:   all full-bleed scenes   — left=40px, right=40px → 1000px usable
+    CONTAINER_PX = {
+        'left':   840,
+        'right':  800,
+        'center': 840,
+        'full':  1000,
+    }
+    # Scene-default maximum sizes — matches _base.html --sz-hero / --sz-stat
+    SCENE_MAX_PX = {
+        'hook':    168, 'truth':   168, 'climax':  168,
+        'flip':    168, 'payoff':  168, 'tension': 104,
+        'insight': 104, 'cta':     104,
+    }
+    CHAR_RATIO = 0.62   # effective width per em (bold, -0.055em letter-spacing)
+    SAFETY     = 0.90   # 10% breathing room so chars never crowd the edge
+    MIN_PX     = 56     # floor — below this text becomes unreadable
+
+    container = CONTAINER_PX.get(layout, 840) * SAFETY
+    max_sz    = SCENE_MAX_PX.get(scene, 168)
+    longest   = max(keyword.split(), key=len)
+    max_font  = container / (len(longest) * CHAR_RATIO)
+
+    return max(MIN_PX, min(max_sz, int(max_font)))
+# ▲▲▲ END NEW: DYNAMIC KEYWORD FONT SIZE ▲▲▲
 
 
 def _build_beat_contracts(
@@ -387,15 +413,21 @@ def _build_beat_contracts(
             "composition":     beat.get("composition") or None,
             "pattern_interrupt": beat.get("pattern_interrupt") or None,
             "intensity":       beat["intensity"] if isinstance(beat.get("intensity"), (int, float)) else None,
-            # Whole-video handheld bias from script.global.camera_style.
-            # Read by inject.js step 20 → adds .cam-handheld-layer to .scene.
             "camera_style":    camera_style,
 
             # Transition set after we know prev contract (below)
-            "transition":      beat.get("transition", ""),  # may be empty, filled below
+            "transition":      beat.get("transition", ""),
 
             # entry_vector inherited from previous beat's exit
             "entry_vector":    {"x": 0, "y": 0, "scale": 1.0},
+
+            # ▼▼▼ NEW: keyword font size — prevents mid-word breaks on long words ▼▼▼
+            # Calculated from the longest word in the keyword vs the container
+            # width for this layout. capture.js injects --sz-kw into :root and
+            # applies [class$="-kw"] { font-size: var(--sz-kw) !important; }
+            # covering hook-kw, truth-kw, climax-kw, insight-kw, flip-kw, etc.
+            "sz_kw":           _calc_kw_font_size(beat["keyword"], layout, scene),
+            # ▲▲▲ END NEW ▲▲▲
         }
         contracts.append(contract)
 
@@ -403,11 +435,9 @@ def _build_beat_contracts(
     for i in range(len(contracts)):
         prev = contracts[i - 1] if i > 0 else None
 
-        # Transition: caller-provided wins, else compute from context
         if not contracts[i]["transition"]:
             contracts[i]["transition"] = _transition_for(prev, contracts[i], i) if prev else "cut"
 
-        # entry_vector = previous beat's exit_vector (camera-derived)
         if prev is not None:
             contracts[i]["entry_vector"] = _exit_vector(prev["camera"])
 
@@ -449,11 +479,6 @@ def render_slides(
     theme        = _style_to_theme(global_theme or script_style)
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])
 
-    # Layout is now PER-BEAT inside _build_beat_contracts — we no longer
-    # pin one layout for the entire video. The video-level "layout" field
-    # is kept for back-compat as a hint for the first beat.
-    # Pull global.camera_style so inject.js can apply a whole-video handheld
-    # bias (or any future global motion modifier) per beat.
     global_cam_style = (script.get("global", {}) or {}).get("camera_style", "")
 
     beats_contracts = _build_beat_contracts(
@@ -466,7 +491,7 @@ def render_slides(
     scene_json = {
         "video_id": out_dir.name,
         "theme":    theme,
-        "layout":   beats_contracts[0]["layout"] if beats_contracts else "left",  # legacy hint
+        "layout":   beats_contracts[0]["layout"] if beats_contracts else "left",
         "fps":      cfg["video"]["fps"],
         "width":    cfg["video"]["width"],
         "height":   cfg["video"]["height"],

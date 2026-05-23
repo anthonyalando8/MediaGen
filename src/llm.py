@@ -25,7 +25,7 @@ import pathlib
 import json
 import re
 import sys
-
+from llm_fix_duplicates import _fix_duplicate_word_fragments
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cinematic vocabulary — must match renderer/inject.js + scenes contracts
@@ -119,44 +119,6 @@ def _strip_ansi(s: str) -> str:
     s = re.sub(r"\x1b[O][A-Za-z]", "", s)
     s = re.sub(r"\x1b.", "", s)
     return s
-
-
-def _fix_duplicate_word_fragments(text: str) -> str:
-    """Remove streaming artifacts left by Ollama after ANSI stripping."""
-    tokens = re.split(r'(\s+)', text)
-    result = []
-    i = 0
-    while i < len(tokens):
-        if i % 2 == 0:
-            token = tokens[i]
-            if i + 2 < len(tokens):
-                next_token = tokens[i + 2]
-                token_alpha = re.sub(r"[^A-Za-z']", '', token)
-                next_alpha  = re.sub(r"[^A-Za-z']", '', next_token)
-
-                # Exact duplicate: "word word" or "*word *word*"
-                if (len(token_alpha) >= 2 and len(next_alpha) >= 2
-                        and token_alpha.lower() == next_alpha.lower()):
-                    i += 2
-                    continue
-
-                # Partial prefix: "whis whisper" or "*whis *whisper*"
-                # Guard checks token_alpha (stripped), not raw token — allows
-                # emphasis markers like * around the fragment without blocking.
-                # Minimum 3 chars prevents false-positives on short real words
-                # (articles, prepositions) that aren't Ollama streaming artifacts.
-                if (len(token_alpha) >= 3 and len(next_alpha) >= 2
-                        and re.match(r"^[A-Za-z']+$", token_alpha)
-                        and next_alpha.lower().startswith(token_alpha.lower())
-                        and len(token_alpha) < len(next_alpha)):
-                    i += 2
-                    continue
-
-        result.append(tokens[i])
-        i += 1
-
-    text = "".join(result)
-    return re.sub(r'  +', ' ', text)
 
 
 def _fix_mojibake(text: str) -> str:
