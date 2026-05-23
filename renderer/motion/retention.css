@@ -166,7 +166,19 @@
   transform-origin: 30% 50%;
 }
 
-/* CORNER — push content to bottom-right, right-align */
+/* CORNER — push content to compositional corner, right-align
+   ----------------------------------------------------------------
+   Direction is layout-aware. "Push toward the dominant corner"
+   means different x-axis directions depending on anchor side.
+
+   LEFT (default): push right+down → toward bottom-right quadrant.
+   RIGHT: content already right-anchored → push LEFT+down toward
+          bottom-center. Positive x would push off-canvas.
+   CENTER: small x shift, vertical emphasis.
+   FULL: vertical only — x shift clips full-bleed content.
+   ---------------------------------------------------------------- */
+
+/* Default / left layout */
 .comp-corner [class$="-content"],
 .comp-corner [class$="-kw-wrap"] {
   transform: translate(20%, 60%) !important;
@@ -177,13 +189,95 @@
   text-align: right !important;
 }
 
-/* SPARSE — keyword takes only 40% width, anchored left */
+/* Right layout — flip x to avoid off-canvas bleed */
+.scene[data-layout="right"].comp-corner [class$="-content"],
+.scene[data-layout="right"].comp-corner [class$="-kw-wrap"] {
+  transform: translate(-15%, 60%) !important;
+  text-align: right !important;
+}
+.scene[data-layout="right"].comp-corner [class$="-body"] {
+  transform: translate(-12%, 25%) !important;
+  text-align: right !important;
+}
+
+/* Center layout — reduced x shift, vertical emphasis */
+.scene[data-layout="center"].comp-corner [class$="-content"],
+.scene[data-layout="center"].comp-corner [class$="-kw-wrap"] {
+  transform: translate(8%, 60%) !important;
+  text-align: right !important;
+}
+.scene[data-layout="center"].comp-corner [class$="-body"] {
+  transform: translate(6%, 25%) !important;
+  text-align: right !important;
+}
+
+/* Full layout — vertical only */
+.scene[data-layout="full"].comp-corner [class$="-content"],
+.scene[data-layout="full"].comp-corner [class$="-kw-wrap"] {
+  transform: translate(0%, 60%) !important;
+  text-align: right !important;
+}
+.scene[data-layout="full"].comp-corner [class$="-body"] {
+  transform: translate(0%, 20%) !important;
+  text-align: right !important;
+}
+
+/* SPARSE — keyword takes only 40% width, anchored to layout side
+   ----------------------------------------------------------------
+   max-width alone constrains width but the block sits at the LEFT
+   edge of its container regardless of layout. Layout-aware margin
+   rules ensure the narrowed block stays anchored correctly:
+
+   LEFT (default): left-anchor is natural — no margin needed.
+   CENTER: margin:auto on both sides re-centers the narrowed block.
+   RIGHT: margin-left:auto pushes the narrowed block to the right.
+   FULL: treated same as center — narrowed column centered.
+   ---------------------------------------------------------------- */
+
+/* Default / left layout */
 .comp-sparse [class$="-kw"],
 .comp-sparse [class$="-kw-wrap"] {
   max-width: 42% !important;
 }
 .comp-sparse [class$="-body"] {
   max-width: 55% !important;
+}
+
+/* Center layout — re-center the constrained blocks */
+.scene[data-layout="center"].comp-sparse [class$="-kw"],
+.scene[data-layout="center"].comp-sparse [class$="-kw-wrap"] {
+  max-width: 42% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.scene[data-layout="center"].comp-sparse [class$="-body"] {
+  max-width: 55% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+/* Right layout — push constrained block to right edge */
+.scene[data-layout="right"].comp-sparse [class$="-kw"],
+.scene[data-layout="right"].comp-sparse [class$="-kw-wrap"] {
+  max-width: 42% !important;
+  margin-left: auto !important;
+}
+.scene[data-layout="right"].comp-sparse [class$="-body"] {
+  max-width: 55% !important;
+  margin-left: auto !important;
+}
+
+/* Full layout — center the narrowed column */
+.scene[data-layout="full"].comp-sparse [class$="-kw"],
+.scene[data-layout="full"].comp-sparse [class$="-kw-wrap"] {
+  max-width: 42% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+.scene[data-layout="full"].comp-sparse [class$="-body"] {
+  max-width: 55% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 /* ── EMPHASIS WORD — guaranteed override ─────────────────────────

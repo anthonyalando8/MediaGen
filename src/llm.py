@@ -134,13 +134,19 @@ def _fix_duplicate_word_fragments(text: str) -> str:
                 token_alpha = re.sub(r"[^A-Za-z']", '', token)
                 next_alpha  = re.sub(r"[^A-Za-z']", '', next_token)
 
+                # Exact duplicate: "word word" or "*word *word*"
                 if (len(token_alpha) >= 2 and len(next_alpha) >= 2
                         and token_alpha.lower() == next_alpha.lower()):
                     i += 2
                     continue
 
-                if (len(token_alpha) >= 1 and len(next_alpha) >= 2
-                        and re.match(r"^[A-Za-z']+$", token)
+                # Partial prefix: "whis whisper" or "*whis *whisper*"
+                # Guard checks token_alpha (stripped), not raw token — allows
+                # emphasis markers like * around the fragment without blocking.
+                # Minimum 3 chars prevents false-positives on short real words
+                # (articles, prepositions) that aren't Ollama streaming artifacts.
+                if (len(token_alpha) >= 3 and len(next_alpha) >= 2
+                        and re.match(r"^[A-Za-z']+$", token_alpha)
                         and next_alpha.lower().startswith(token_alpha.lower())
                         and len(token_alpha) < len(next_alpha)):
                     i += 2

@@ -17,7 +17,7 @@
 .scene[data-layout="left"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 80px);
   left: var(--left);
-  right: 0;
+  right: var(--right);
 }
 .scene[data-layout="left"] .hook-kw {
   font-size: var(--sz-hero);
@@ -91,10 +91,10 @@
 .scene[data-layout="full"] .hook-kw-wrap {
   top: calc(var(--safe-top) + 40px);
   left: var(--left);
-  right: 0;
+  right: var(--right);
 }
 .scene[data-layout="full"] .hook-kw {
-  font-size: calc(var(--sz-stat) * 1.15);  /* full bleed — capped to avoid wrapping */
+  font-size: calc(var(--sz-stat) * 1.05);  /* full bleed — capped to avoid wrapping */
   line-height: 0.84;
   animation: titleRevealFull 0.70s cubic-bezier(0.16,1,0.3,1) 0.25s forwards;
 }

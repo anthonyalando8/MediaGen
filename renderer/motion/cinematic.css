@@ -31,11 +31,18 @@
    Wrap scene content in .depth-bg / .depth-mid / .depth-fg.
    The camera classes in camera.css now scale each plane by a
    different factor → real parallax, no JS, fully seek-safe.
+
+   overflow:hidden on every plane is the hard containment boundary.
+   Any child that escapes 1080×1920 due to a camera transform is
+   clipped at the plane level, well before .scene's own clip fires.
+   This absorbs the ~64px bleed that scale(1.060) produces on a
+   1080px frame — content stays fully visible regardless of camera.
    ================================================================ */
 .depth-bg, .depth-mid, .depth-fg {
   position: absolute; inset: 0;
   transform-origin: 50% 50%;
   will-change: transform;
+  overflow: hidden;           /* ← NEW: clip at the plane, not the viewport */
 }
 .depth-bg  { z-index: var(--z-bg);  }
 .depth-mid { z-index: var(--z-mid); }

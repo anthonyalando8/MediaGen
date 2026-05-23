@@ -13,7 +13,7 @@
 .scene[data-layout="left"] .climax-content {
   top: calc(var(--safe-top) + 50px);
   left: calc(var(--left) + 20px);
-  right: 0;
+  right: var(--right);
 }
 .scene[data-layout="left"] .climax-kw {
   animation: titleReveal 0.90s cubic-bezier(0.16,1,0.3,1) 0.60s forwards;
@@ -81,10 +81,10 @@
 .scene[data-layout="full"] .climax-content {
   top: calc(var(--safe-top) + 20px);
   left: var(--left);
-  right: 0;
+  right: var(--right);
 }
 .scene[data-layout="full"] .climax-kw {
-  font-size: calc(var(--sz-hero) * 1.3);
+  font-size: calc(var(--sz-hero) * 1.10);
   animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.50s forwards;
 }
 .scene[data-layout="full"] .climax-body {

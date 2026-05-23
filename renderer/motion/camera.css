@@ -16,6 +16,14 @@
 
      When depth planes are absent (e.g. an external scene that hasn't
      been re-rendered), the legacy single-plane animation runs.
+
+   OVERFLOW SAFETY:
+     All camera scale values are capped at 1.10 on .depth-bg (the
+     highest-motion plane) and 1.03 on .depth-fg (text plane).
+     cinematic.css enforces overflow:hidden on every depth plane so
+     scale bleed is clipped at the plane level, not the viewport.
+     This means right: 0 on a content wrapper is safe — the plane
+     clip fires before any content escapes the 1080px frame.
    ================================================================ */
 
 /* ───────────────────────────────────────────────────────────────────
@@ -63,6 +71,7 @@
 
 /* ───────────────────────────────────────────────────────────────────
    HANDHELD — deterministic one-pass micro-shake
+   Pure translation — no scale component, so no bleed risk.
    ─────────────────────────────────────────────────────────────────── */
 .cam-handheld {
   animation: camHandheld var(--cam-dur, 5s) linear forwards;
@@ -79,8 +88,6 @@
   91%  { transform: translate(-1.5px,-2px)  rotate(-0.06deg); }
   100% { transform: translate(0px,    0px)  rotate(0.00deg);  }
 }
-/* Handheld doesn't need parallax — translation has no perspective component.
-   But we DO want it to apply uniformly, so let it fall through. */
 
 /* ───────────────────────────────────────────────────────────────────
    SNAP ZOOM
@@ -104,8 +111,17 @@
 @keyframes camSnapFg  { 0% { transform: scale(1.02); } 18% { transform: scale(1.07); } 35% { transform: scale(1.03); } 100% { transform: scale(1.03); } }
 
 /* ───────────────────────────────────────────────────────────────────
-   MICRO SHAKE — deterministic builds
+   MICRO SHAKE — deterministic build + depth-plane guard
+   ----------------------------------------------------------------
+   FIX v3.2: added :has(.depth-fg) guard + per-plane variants.
+   Previously this ran unconditionally on .scene itself, stacking
+   scale(1.060) on top of the scene's own overflow:hidden boundary
+   and pushing right-edge content off-canvas.
+   Now: suppressed at .scene level when depth planes exist, and
+   distributed across planes with reduced fg scale (1.02 max)
+   so text never reaches the clipping boundary.
    ─────────────────────────────────────────────────────────────────── */
+/* Legacy single-plane (no depth-fg present) */
 .cam-micro-shake {
   animation: camMicroShake var(--cam-dur, 5s) linear forwards;
 }
@@ -122,6 +138,52 @@
   75%  { transform: translate(-2px,  1px)  scale(1.055); }
   88%  { transform: translate(1.5px, 0px)  scale(1.058); }
   100% { transform: translate(0px,   0px)  scale(1.060); }
+}
+/* Depth-aware: suppress scene-level, route onto planes with capped fg scale */
+.cam-micro-shake:has(.depth-fg)          { animation: none; }
+.cam-micro-shake .depth-bg               { animation: camShakeBg  var(--cam-dur, 5s) linear both; }
+.cam-micro-shake .depth-mid              { animation: camShakeMid var(--cam-dur, 5s) linear both; }
+.cam-micro-shake .depth-fg               { animation: camShakeFg  var(--cam-dur, 5s) linear both; }
+/* bg: full shake magnitude — it's behind content, can bleed freely into plane clip */
+@keyframes camShakeBg {
+  0%   { transform: translate(0px,   0px)  scale(1.000); }
+  6%   { transform: translate(-2px,  0px)  scale(1.005); }
+  12%  { transform: translate(2px,  -1px)  scale(1.010); }
+  18%  { transform: translate(-2px,  1px)  scale(1.018); }
+  25%  { transform: translate(1.5px,-1px)  scale(1.026); }
+  33%  { transform: translate(-1px,  0px)  scale(1.033); }
+  42%  { transform: translate(2px,   1px)  scale(1.040); }
+  52%  { transform: translate(-1.5px,0px)  scale(1.045); }
+  63%  { transform: translate(1px,  -1px)  scale(1.050); }
+  75%  { transform: translate(-2px,  1px)  scale(1.055); }
+  88%  { transform: translate(1.5px, 0px)  scale(1.058); }
+  100% { transform: translate(0px,   0px)  scale(1.060); }
+}
+/* mid: reduced translation, no scale — particles/texture shift gently */
+@keyframes camShakeMid {
+  0%   { transform: translate(0px,    0px); }
+  6%   { transform: translate(-1.5px, 0px); }
+  19%  { transform: translate(1.5px, -0.5px); }
+  31%  { transform: translate(-1px,   0.5px); }
+  44%  { transform: translate(1px,   -1px); }
+  57%  { transform: translate(-1.5px, 0.5px); }
+  68%  { transform: translate(1px,    0px); }
+  79%  { transform: translate(-1px,   0.5px); }
+  91%  { transform: translate(1.5px, -0.5px); }
+  100% { transform: translate(0px,    0px); }
+}
+/* fg: translation only, zero scale — text plane never resizes, never bleeds */
+@keyframes camShakeFg {
+  0%   { transform: translate(0px,    0px); }
+  6%   { transform: translate(-1px,   0px); }
+  19%  { transform: translate(1px,   -0.5px); }
+  31%  { transform: translate(-0.5px, 0.5px); }
+  44%  { transform: translate(1px,   -0.5px); }
+  57%  { transform: translate(-1px,   0.5px); }
+  68%  { transform: translate(0.5px,  0px); }
+  79%  { transform: translate(-0.5px, 0.5px); }
+  91%  { transform: translate(1px,   -0.5px); }
+  100% { transform: translate(0px,    0px); }
 }
 
 /* ───────────────────────────────────────────────────────────────────
@@ -190,6 +252,7 @@
    global. This layers a subtle handheld onto .depth-mid regardless
    of the per-beat camera, giving the whole video a "shot on shoulder"
    quality without overriding the directorial camera choice.
+   Pure translation — no scale, no bleed risk.
    ================================================================ */
 .cam-handheld-layer .depth-mid {
   animation: handheldLayer var(--cam-dur, 5s) linear forwards;

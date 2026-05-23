@@ -78,6 +78,12 @@ html, body {
   height: 1920px;
   overflow: hidden;
   background: var(--bg);
+  /* Hard containment boundary — layout, paint and style are isolated.
+     Any child transform (camera scale, carry-decay, pi-tilt) that would
+     push pixels outside 1080×1920 is clipped here unconditionally.
+     Works in concert with overflow:hidden on .depth-* planes in
+     cinematic.css — two independent clipping layers, belt + braces. */
+  contain: layout style paint;
 }
 
 /* ================================================================

@@ -52,10 +52,10 @@
 .scene[data-layout="full"] .insight-content {
   top: calc(var(--safe-top) + 30px);
   left: var(--left);
-  right: 0;
+  right: var(--right);
 }
 .scene[data-layout="full"] .insight-kw {
-  font-size: calc(var(--sz-stat) * 1.2);
+  font-size: calc(var(--sz-stat) * 1.05);
   animation: titleRevealFull 0.65s cubic-bezier(0.16,1,0.3,1) 0.20s forwards;
 }
 
@@ -71,6 +71,7 @@
   line-height: 0.92;
   color: var(--fg);
   text-transform: uppercase;
+  word-break: break-word;
   opacity: 0;
 }
 .insight-rule {

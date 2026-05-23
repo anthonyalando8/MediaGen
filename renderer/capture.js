@@ -27,10 +27,11 @@ import { fileURLToPath, pathToFileURL } from 'url';
 
 const { values: args } = parseArgs({
   options: {
-    scene: { type: 'string' },
-    out:   { type: 'string', default: 'frames' },
-    fps:   { type: 'string', default: '30' },
-    beats: { type: 'string' },
+    scene:       { type: 'string' },
+    out:         { type: 'string', default: 'frames' },
+    fps:         { type: 'string', default: '30' },
+    beats:       { type: 'string' },
+    concurrency: { type: 'string', default: '2' },
   }
 });
 
@@ -49,7 +50,19 @@ const scenePath  = toAbs(args.scene);
 const sceneJson  = JSON.parse(readFileSync(scenePath, 'utf8'));
 const outDir     = toAbs(args.out);
 const fps        = parseInt(args.fps, 10);
-const beatFilter = args.beats ? args.beats.split(',').map(Number) : null;
+const beatFilter   = args.beats ? args.beats.split(',').map(Number) : null;
+const CONCURRENCY  = parseInt(args.concurrency || '2', 10);
+
+/** Run async tasks in chunks of n. Order of results is preserved. */
+async function runChunked(items, n, fn) {
+  const results = new Array(items.length);
+  for (let i = 0; i < items.length; i += n) {
+    const chunk = items.slice(i, i + n);
+    const out   = await Promise.all(chunk.map((item, j) => fn(item, i + j)));
+    out.forEach((r, j) => { results[i + j] = r; });
+  }
+  return results;
+}
 
 // ── Renderer directory + absolute file:// URL ───────────────────────────────
 // __dir is the location of this capture.js file. RENDERER_URL is the same
@@ -77,8 +90,19 @@ function rewriteAssetUrls(html) {
 }
 
 // ── Unsplash ─────────────────────────────────────────────────────────────────
+// Uses the Access Key (UNSPLASH_API_KEY), not the secret.
+// Set in environment: UNSPLASH_API_KEY=your_access_key
 const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY || '';
 
+/**
+ * Fetch a single contextual image URL from Unsplash for a beat.
+ *
+ * Uses the /photos/random endpoint with portrait orientation so images
+ * are vertical — closer to 9:16 than landscape shots.
+ *
+ * Returns the `urls.regular` URL (1080px wide) or null on any failure.
+ * Never throws — a missing image is a degraded experience, not a crash.
+ */
 async function fetchUnsplashUrl(query) {
   if (!UNSPLASH_KEY) {
     console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
@@ -94,7 +118,7 @@ async function fetchUnsplashUrl(query) {
   try {
     const res = await fetch(url, {
       headers: { 'Accept-Version': 'v1' },
-      signal: AbortSignal.timeout(6000),
+      signal: AbortSignal.timeout(6000),   // 6s hard timeout — never stall render
     });
 
     if (!res.ok) {
@@ -110,6 +134,7 @@ async function fetchUnsplashUrl(query) {
       return null;
     }
 
+    // Log attribution — Unsplash API guidelines require it
     const credit = data?.user?.name || 'unknown';
     console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
     console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
@@ -211,10 +236,14 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
   const beatIdx  = String(beat.beat_index  || '').padStart(2, '0');
   const beatTot  = String(beat.beat_total  || '').padStart(2, '0');
 
+  // Escape URL for CSS — parentheses and quotes need escaping inside url()
   const bgImageValue = imageUrl
     ? `url("${imageUrl.replace(/"/g, '%22')}")`
     : 'none';
 
+  // CSS vars — --bg-image added so _base.html .scene-bg-image can read it.
+  // Theme link uses RENDERER_URL — absolute path, resolves regardless of
+  // where _scene.html is written.
   const cssVars = [
     '<style id="palette-inject">',
     ':root {',
@@ -270,10 +299,14 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
 
 const PAUSE_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
+    // Pause all animations for frame-seek rendering
     const pauseStyle = document.createElement('style');
     pauseStyle.textContent = '*, *::before, *::after { animation-play-state: paused !important; }';
     document.head.appendChild(pauseStyle);
 
+    // Apply Unsplash image directly as .scene background.
+    // Multi-layer: scrim on top keeps text readable, image underneath.
+    // All glows, grain, vignette overlays run above it — no z-index conflicts.
     const bgImage = getComputedStyle(document.documentElement)
       .getPropertyValue('--bg-image').trim();
     if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
@@ -295,11 +328,17 @@ async function seekAnimations(page, t_ms) {
   }, t_ms);
 }
 
-async function renderBeat(browser, beat, beatIdx, palette, brand) {
+/**
+ * renderBeat — fetches Unsplash image before rendering, then captures frames.
+ *
+ * imageUrl is pre-fetched in parallel by main() — no fetch here.
+ * Asset 404s are surfaced via requestfailed / response listeners so path
+ * issues are obvious. After the v3.1 rewrite this should stay silent.
+ */
+async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = null) {
   const beatOutDir = join(outDir, `beat_${beatIdx}`);
   mkdirSync(beatOutDir, { recursive: true });
 
-  const imageUrl = await fetchUnsplashUrl(beat.visual_query || '');
   if (imageUrl) {
     console.log(`[capture] Beat ${beatIdx}: background image applied`);
   } else {
@@ -334,6 +373,9 @@ async function renderBeat(browser, beat, beatIdx, palette, brand) {
     }
   });
 
+  // Wait for the background image to load before we start capturing.
+  // We use 'networkidle' only when there's an image to fetch — otherwise
+  // keep the cheaper 'domcontentloaded' which is fast for local files.
   const waitUntil = imageUrl ? 'networkidle' : 'domcontentloaded';
   await page.goto(`file://${tmpHtml}`, { waitUntil, timeout: 15000 });
   await page.waitForTimeout(80);
@@ -367,18 +409,35 @@ async function main() {
   const { palette, brand, beats } = sceneJson;
   const results = [];
 
-  for (let i = 0; i < beats.length; i++) {
-    if (beatFilter && !beatFilter.includes(i)) continue;
+  // ── Phase 1: fetch all Unsplash images in parallel ──────────────────
+  // All network calls fire at once — saves up to 6s × N beats of waiting.
+  const activeIndices = beats
+    .map((_, i) => i)
+    .filter(i => !beatFilter || beatFilter.includes(i));
+
+  console.log(`[capture] Pre-fetching ${activeIndices.length} images in parallel…`);
+  const imageUrls = await Promise.all(
+    activeIndices.map(i => fetchUnsplashUrl(beats[i].visual_query || ''))
+  );
+
+  // ── Phase 2: render beats in parallel chunks ─────────────────────────
+  // Each beat has its own browser context — isolated, no state leakage.
+  // On failure, attempt 2 restarts the shared browser before retrying,
+  // matching the original single-beat restart behaviour.
+  console.log(`[capture] Rendering ${activeIndices.length} beats (concurrency=${CONCURRENCY})…`);
+  const beatTasks = activeIndices.map((beatIdx, j) => ({ beatIdx, imageUrl: imageUrls[j] }));
+
+  const chunkResults = await runChunked(beatTasks, CONCURRENCY, async ({ beatIdx, imageUrl }) => {
     let result = null, lastErr = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
-        result = await renderBeat(browser, beats[i], i, palette, brand);
+        result = await renderBeat(browser, beats[beatIdx], beatIdx, palette, brand, imageUrl);
         break;
       } catch (err) {
         lastErr = err;
-        console.error(`[capture] Beat ${i} attempt ${attempt} failed: ${err.message}`);
+        console.error(`[capture] Beat ${beatIdx} attempt ${attempt} failed: ${err.message}`);
         if (attempt < 2) {
-          console.log('[capture] Restarting browser...');
+          console.log('[capture] Restarting browser…');
           try { await browser.close(); } catch (_) {}
           browser = await chromium.launch({
             args: ['--disable-gpu', '--disable-dev-shm-usage', '--no-sandbox', '--disable-setuid-sandbox'],
@@ -387,8 +446,10 @@ async function main() {
       }
     }
     if (!result) throw lastErr;
-    results.push(result);
-  }
+    return result;
+  });
+
+  results.push(...chunkResults);
 
   await browser.close();
 
