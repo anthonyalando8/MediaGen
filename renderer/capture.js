@@ -294,7 +294,7 @@ const PAUSE_SCRIPT = `
     if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
       const scene = document.querySelector('.scene');
       if (scene) {
-        const scrim = 'linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.72))';
+        const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';  // was 0.72 — increased to prevent bright Unsplash images from washing out text
         scene.style.backgroundImage    = scrim + ', ' + bgImage;
         scene.style.backgroundSize     = 'cover, cover';
         scene.style.backgroundPosition = 'center center, center center';
@@ -348,7 +348,10 @@ async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = nul
 
   const waitUntil = imageUrl ? 'networkidle' : 'domcontentloaded';
   await page.goto(`file://${tmpHtml}`, { waitUntil, timeout: 15000 });
-  await page.waitForTimeout(80);
+  // Image beats need more time after networkidle for the background to be
+  // painted. 80ms was insufficient — frame 0 captured before backgroundImage
+  // was applied, producing blank grey/white frames at the start of the beat.
+  await page.waitForTimeout(imageUrl ? 500 : 80);
 
   const isLastBeat  = beatIdx === sceneJson.beats.length - 1;
   const gap_ms      = isLastBeat ? 0 : 380;

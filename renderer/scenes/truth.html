@@ -79,7 +79,12 @@
   animation: ruleReveal 0.38s cubic-bezier(0.16,1,0.3,1) 1.05s forwards;
 }
 .scene[data-layout="right"] .truth-body {
-  top: calc(var(--safe-top) + 520px);
+  /* was 520px — increased to 580px to give more clearance between the
+     truth-rule (horizontal accent bar) and the body text start.
+     At 3-line keywords (96px) the rule sits at ~safe-top+617px;
+     520px produced only 163px gap which looked like the rule was
+     cutting into the body. 580px gives 223px = 4.5 body-line gap. */
+  top: calc(var(--safe-top) + 580px);
   left: calc(var(--left) + 60px);
   right: calc(var(--right) + 20px);
   text-align: right;

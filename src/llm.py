@@ -25,7 +25,7 @@ import pathlib
 import json
 import re
 import sys
-from llm_fix_duplicates import _fix_duplicate_word_fragments
+from llm_fix_duplicates import fix_duplicate_word_fragments
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cinematic vocabulary — must match renderer/inject.js + scenes contracts
@@ -141,7 +141,7 @@ def _clean_beat_texts(data: dict) -> dict:
     for beat in data.get("beats", []):
         if "text" in beat:
             beat["text"] = _fix_mojibake(beat["text"])
-            beat["text"] = _fix_duplicate_word_fragments(beat["text"])
+            beat["text"] = fix_duplicate_word_fragments(beat["text"])
     return data
 
 

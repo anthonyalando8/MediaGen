@@ -184,7 +184,10 @@
 /* Default / left layout */
 .comp-corner [class$="-content"],
 .comp-corner [class$="-kw-wrap"] {
-  transform: translate(20%, 15%) !important;
+  /* was translate(20%, 15%) — 20% × 840px = 168px pushed right edge to 1108px,
+     clipping 28px past the 1080px frame boundary on left/default layout.
+     12% × 840px = 101px → right edge = 1041px, safe with 39px to spare. */
+  transform: translate(12%, 15%) !important;
   text-align: right !important;
 }
 .comp-corner [class$="-body"] {
@@ -240,21 +243,22 @@
 /* Default / left layout */
 .comp-sparse [class$="-kw"],
 .comp-sparse [class$="-kw-wrap"] {
-  max-width: 42% !important;
+  max-width: 58% !important;  /* was 42% — 42% × 840px = 353px, too narrow for
+                                  6-char words at 96px (SECRET=397px broke) */
 }
 .comp-sparse [class$="-body"] {
-  max-width: 55% !important;
+  max-width: 68% !important;  /* was 55% — bumped proportionally */
 }
 
 /* Center layout — re-center the constrained blocks */
 .scene[data-layout="center"].comp-sparse [class$="-kw"],
 .scene[data-layout="center"].comp-sparse [class$="-kw-wrap"] {
-  max-width: 42% !important;
+  max-width: 58% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 .scene[data-layout="center"].comp-sparse [class$="-body"] {
-  max-width: 55% !important;
+  max-width: 68% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
@@ -262,23 +266,23 @@
 /* Right layout — push constrained block to right edge */
 .scene[data-layout="right"].comp-sparse [class$="-kw"],
 .scene[data-layout="right"].comp-sparse [class$="-kw-wrap"] {
-  max-width: 42% !important;
+  max-width: 58% !important;
   margin-left: auto !important;
 }
 .scene[data-layout="right"].comp-sparse [class$="-body"] {
-  max-width: 55% !important;
+  max-width: 68% !important;
   margin-left: auto !important;
 }
 
 /* Full layout — center the narrowed column */
 .scene[data-layout="full"].comp-sparse [class$="-kw"],
 .scene[data-layout="full"].comp-sparse [class$="-kw-wrap"] {
-  max-width: 42% !important;
+  max-width: 58% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }
 .scene[data-layout="full"].comp-sparse [class$="-body"] {
-  max-width: 55% !important;
+  max-width: 68% !important;
   margin-left: auto !important;
   margin-right: auto !important;
 }

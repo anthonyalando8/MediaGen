@@ -24,6 +24,8 @@ import subprocess
 import json
 import os
 
+from visuals_calc_word_width import calc_kw_font_size
+
 # ---------------------------------------------------------------------------
 # .env loader
 # ---------------------------------------------------------------------------
@@ -312,78 +314,6 @@ def _pick_composition_mutator(contracts: list) -> None:
     contracts[idx]["composition"] = mut
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ▼▼▼ NEW: DYNAMIC KEYWORD FONT SIZE ▼▼▼
-# ─────────────────────────────────────────────────────────────────────────────
-def _calc_kw_font_size(keyword: str, layout: str, scene: str) -> int:
-    """
-    Calculate the max keyword font size (px) that fits the longest word
-    on a single line within the scene container for the given layout.
-
-    Uses a conservative char-width ratio (0.62em at bold tight-tracked
-    uppercase Space Grotesk) with a 10% safety margin so the longest
-    word never overflows its container and triggers mid-word line breaks.
-
-    Applies to ALL scene types — [class$="-kw"] in capture.js picks it up
-    universally via CSS override, covering hook-kw, truth-kw, climax-kw, etc.
-
-    Examples:
-      "FAKE CONFIDENCE"  right  → 116px  (was sz-hero=168, CONFIDENCE=10 chars)
-      "HIDDEN RESENTMENT" right → 116px  (was 168, RESENTMENT=10 chars)
-      "COLLECTIVE HALLUCINATION" left → 93px (HALLUCINATION=12 chars)
-      "THE GREAT LIE"    left   → 168px  (GREAT=5 chars, fits fine)
-      "SYSTEMIC FRAUD"   full   → 168px  (SYSTEMIC=8 chars, 1000px container)
-    """
-    # Conservative usable container widths per layout (px).
-    # Uses the NARROWEST scene margins within each layout family so the
-    # calculated size is safe for every scene type that can use that layout.
-    #   left:   truth/left  worst case — left+20px, right+60px → 840px usable
-    #   right:  insight/right           — left+100px, right+20px → 800px usable
-    #   center: truth/center            — left=80px, right=80px → 840px usable
-    #   full:   all full-bleed scenes   — left=40px, right=40px → 1000px usable
-    CONTAINER_PX = {
-        'left':   840,
-        'right':  800,
-        'center': 840,
-        'full':  1000,
-    }
-    # Scene-default maximum sizes — matches _base.html --sz-hero / --sz-stat
-    SCENE_MAX_PX = {
-        'hook':    168, 'truth':   168, 'climax':  168,
-        'flip':    168, 'payoff':  168, 'tension': 104,
-        'insight': 104, 'cta':     104,
-    }
-    CHAR_RATIO = 0.69   # effective width per em (bold uppercase Space Grotesk)
-    # Empirically derived: CONFIDENCE(10) at 168px breaks in 840px  → ratio > 0.50
-    # IRREPLACEABLE(13) at 111px (ratio=0.62 calc) still breaks in 1000px → ratio > 0.693
-    # Bracket: 0.69 fits all known breaking cases with 8% safety margin below.
-    SAFETY     = 0.92   # 8% breathing room — more accurate ratio needs less margin
-    MIN_PX     = 56     # floor — below this text becomes unreadable
-
-    container = CONTAINER_PX.get(layout, 840) * SAFETY
-    max_sz    = SCENE_MAX_PX.get(scene, 168)
-    words     = keyword.split()
-
-    # Constraint 1: longest single word must fit on one line
-    single = max(len(w) for w in words)
-
-    # Constraint 2: for 3+ word keywords, the widest adjacent pair must also
-    # fit on one line — this guarantees max 2 lines of wrapping and prevents
-    # the 3-line overflow that causes body text overlap (e.g. "THE HIDDEN PATH"
-    # at sz-hero wraps to 3 separate lines, pushing content into the body zone).
-    # 2-word keywords are intentionally left unconstrained: each word gets its
-    # own line at large sizes, which is the cinematic 2-line look (see "SILENT GRIND").
-    if len(words) >= 3:
-        pair_widths = [len(words[i]) + 1 + len(words[i + 1])
-                       for i in range(len(words) - 1)]
-        single = max(single, max(pair_widths))
-
-    max_font  = container / (single * CHAR_RATIO)
-
-    return max(MIN_PX, min(max_sz, int(max_font)))
-# ▲▲▲ END NEW: DYNAMIC KEYWORD FONT SIZE ▲▲▲
-
-
 def _build_beat_contracts(
     beats: list,
     beat_durations_ms: list = None,
@@ -444,7 +374,7 @@ def _build_beat_contracts(
             # width for this layout. capture.js injects --sz-kw into :root and
             # applies [class$="-kw"] { font-size: var(--sz-kw) !important; }
             # covering hook-kw, truth-kw, climax-kw, insight-kw, flip-kw, etc.
-            "sz_kw":           _calc_kw_font_size(beat["keyword"], layout, scene),
+            "sz_kw":           calc_kw_font_size(beat["keyword"], layout, scene),
             # ▲▲▲ END NEW ▲▲▲
         }
         contracts.append(contract)
