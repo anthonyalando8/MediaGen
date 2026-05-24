@@ -292,13 +292,30 @@ const PAUSE_SCRIPT = `
     const bgImage = getComputedStyle(document.documentElement)
       .getPropertyValue('--bg-image').trim();
     if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
-      const scene = document.querySelector('.scene');
-      if (scene) {
-        const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';  // was 0.72 — increased to prevent bright Unsplash images from washing out text
+      // Extract the raw URL from url("…") — handles both quoted and unquoted forms.
+      const match = bgImage.match(/^url\\(["']?(.+?)["']?\\)$/);
+      const src   = match ? match[1] : null;
+
+      const applyBg = () => {
+        const scene = document.querySelector('.scene');
+        if (!scene) return;
+        const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';
         scene.style.backgroundImage    = scrim + ', ' + bgImage;
         scene.style.backgroundSize     = 'cover, cover';
         scene.style.backgroundPosition = 'center center, center center';
         console.log('[PAUSE_SCRIPT] background image applied to .scene');
+      };
+
+      if (src) {
+        // Pre-decode the image before applying it so the first paint
+        // already has the texture — avoids a blank frame if the CSS
+        // background and the decode race each other.
+        const img = new Image();
+        img.onload  = applyBg;
+        img.onerror = applyBg; // apply even on error (shows scrim only)
+        img.src = src;
+      } else {
+        applyBg();
       }
     }
   }, { once: true });
@@ -346,12 +363,41 @@ async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = nul
     }
   });
 
-  const waitUntil = imageUrl ? 'networkidle' : 'domcontentloaded';
-  await page.goto(`file://${tmpHtml}`, { waitUntil, timeout: 15000 });
-  // Image beats need more time after networkidle for the background to be
-  // painted. 80ms was insufficient — frame 0 captured before backgroundImage
-  // was applied, producing blank grey/white frames at the start of the beat.
-  await page.waitForTimeout(imageUrl ? 500 : 80);
+await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+
+if (imageUrl) {
+  // Wait until the browser has fully decoded AND painted the background image.
+  //
+  // Strategy: inject a probe <img> with the same src as the CSS background.
+  // img.complete + img.naturalWidth > 0 guarantees the image is decoded into
+  // the GPU texture cache, so the next CSS background paint is synchronous.
+  // Then requestAnimationFrame confirms the compositor has actually painted
+  // at least one frame with the background visible before we screenshot.
+  //
+  // This replaces the flat 500ms guess which was insufficient for large
+  // Unsplash JPEGs (~300-800KB) on variable network conditions.
+  try {
+    await page.waitForFunction(
+      (src) => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload  = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+          img.onerror = () => resolve(false); // don't hang on a broken image
+          img.src = src;
+        });
+      },
+      imageUrl,
+      { timeout: 12000 }
+    );
+  } catch (err) {
+    // Timeout or network error — log and continue, the frame will just lack
+    // the background rather than crashing the entire beat.
+    console.warn(`[capture] Beat ${beatIdx}: bg image wait timed out (${err.message}) — proceeding without background`);
+  }
+} else {
+  // No image: one rAF is enough to ensure the initial paint is committed.
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
 
   const isLastBeat  = beatIdx === sceneJson.beats.length - 1;
   const gap_ms      = isLastBeat ? 0 : 380;
