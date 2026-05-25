@@ -113,7 +113,7 @@
   pointer-events: none; z-index: var(--z-flash, 99);
   background: oklch(1 0 0 / .85);
   opacity: 0;                              /* hidden until animation fires */
-  animation: piFlash .08s steps(1) var(--pi-delay, 2s) both;
+  animation: piFlash .08s steps(1) var(--pi-delay, 2s) forwards;  /* NOT 'both' — 'both' applies 0%{opacity:1} backwards = white screen until pi-delay */
 }
 @keyframes piFlash {
   0%   { opacity: 1; }
