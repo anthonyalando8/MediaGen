@@ -1,77 +1,111 @@
 /* ================================================================
-   camera.css  --  Camera movement system (depth-aware, v2)
+   camera.css  --  Camera movement system (depth-aware, v3)
    ================================================================
-   Every animation here must be deterministic at any seek time:
-   - NO infinite alternating — non-deterministic under seek.
-   - All animations use `both` or `forwards` fill mode.
-   - cam-static produces exactly 0 transform.
-
-   --cam-dur is set in capture.js's CSS vars block so it is available
-   from frame 0, before inject.js runs. Default fallback: 5s.
-
-   DEPTH PLANES:
-     When inject.js wraps scene content in .depth-bg/.depth-mid/.depth-fg
-     (which it always does, v2 onward), the :has(.depth-fg) selectors
-     below kick in. Each plane scales at a different rate → real parallax.
-
-     When depth planes are absent (e.g. an external scene that hasn't
-     been re-rendered), the legacy single-plane animation runs.
+   CHANGES v3:
+   - Doubled bg/mid scale magnitudes (6%→12-15% travel)
+   - Widened parallax ratio: bg moves ~8× more than fg (was ~3.4×)
+   - Replaced ease-glide with fast-start/slow-settle easing on all
+     camera moves — gives the "camera breathes" deceleration at end
+   - Added cam-static depth drift (was completely empty)
+   - cam-static: slow ambient drift on bg only, fg locked
+   - All overflow safety maintained via cinematic.css depth plane clips
 
    OVERFLOW SAFETY:
-     All camera scale values are capped at 1.10 on .depth-bg (the
-     highest-motion plane) and 1.03 on .depth-fg (text plane).
-     cinematic.css enforces overflow:hidden on every depth plane so
-     scale bleed is clipped at the plane level, not the viewport.
-     This means right: 0 on a content wrapper is safe — the plane
-     clip fires before any content escapes the 1080px frame.
+     cinematic.css enforces overflow:hidden on every depth plane.
+     Bleed is clipped at plane level before it reaches the viewport.
+     bg plane can safely run up to ~scale(1.20) on a 1080px frame.
    ================================================================ */
 
-/* ───────────────────────────────────────────────────────────────────
-   STATIC — no transform. Default for inject.js fallback.
-   ─────────────────────────────────────────────────────────────────── */
-.cam-static { /* deliberately empty */ }
+/* ── EASING: fast-start / slow-settle ───────────────────────────
+   Replaces the old ease-glide (0.25,.46,.45,.94) which was nearly
+   linear. This curve accelerates hard in the first 20% of the beat
+   then decelerates into the settle — the "camera breathes" feel.  */
+:root {
+  --ease-cam: cubic-bezier(0.12, 0.40, 0.00, 1.00);
+}
 
 /* ───────────────────────────────────────────────────────────────────
-   PUSH IN
+   STATIC — slow ambient depth drift on bg, fg fully locked.
+   Gives life to static beats (insight/truth/cta with camera=static)
+   without reading as a camera move. Bg drifts ~6% over beat duration;
+   fg never moves so text stays razor sharp.
    ─────────────────────────────────────────────────────────────────── */
-/* Legacy single-plane (used when depth-fg absent) */
+.cam-static .depth-bg  {
+  animation: camStaticDrift var(--cam-dur, 5s) var(--ease-cam) both;
+}
+.cam-static .depth-mid {
+  animation: camStaticMid var(--cam-dur, 5s) var(--ease-cam) both;
+}
+/* fg deliberately empty — text stays locked */
+@keyframes camStaticDrift {
+  0%   { transform: scale(1.00) translateY(0px);   }
+  50%  { transform: scale(1.04) translateY(-5px);  }
+  100% { transform: scale(1.07) translateY(-10px); }
+}
+@keyframes camStaticMid {
+  0%   { transform: scale(1.00) translateY(0px); }
+  100% { transform: scale(1.02) translateY(-4px); }
+}
+
+/* ───────────────────────────────────────────────────────────────────
+   PUSH IN — zoom toward subject
+   bg: 12% scale travel + 14px upward drift
+   fg: 3% max — text breathes but never blurs
+   ─────────────────────────────────────────────────────────────────── */
 .cam-push-in {
-  animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+  animation: camPushIn var(--cam-dur, 5s) var(--ease-cam) both;
 }
 @keyframes camPushIn {
-  from { transform: scale(1.020) translateY(-4px);  }
-  to   { transform: scale(1.060) translateY(-14px); }
+  from { transform: scale(1.040) translateY(-4px);  }
+  to   { transform: scale(1.090) translateY(-18px); }
 }
-/* Depth-aware variant — bg moves more, fg less = parallax */
-.cam-push-in:has(.depth-fg)            { animation: none; }
-.cam-push-in .depth-bg                 { animation: camPushBg  var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-.cam-push-in .depth-mid                { animation: camPushMid var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-.cam-push-in .depth-fg                 { animation: camPushFg  var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-@keyframes camPushBg  { from { transform: scale(1.04) translateY(-2px); }  to { transform: scale(1.10) translateY(-14px); } }
-@keyframes camPushMid { from { transform: scale(1.02) translateY(0);    }  to { transform: scale(1.06) translateY(-8px);  } }
-@keyframes camPushFg  { from { transform: scale(1.01) translateY(0);    }  to { transform: scale(1.03) translateY(-4px);  } }
+.cam-push-in:has(.depth-fg)  { animation: none; }
+.cam-push-in .depth-bg  { animation: camPushBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-push-in .depth-mid { animation: camPushMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-push-in .depth-fg  { animation: camPushFg  var(--cam-dur, 5s) var(--ease-cam) both; }
+@keyframes camPushBg  {
+  from { transform: scale(1.06) translateY(-4px);  }
+  to   { transform: scale(1.18) translateY(-20px); }
+}
+@keyframes camPushMid {
+  from { transform: scale(1.03) translateY(-2px); }
+  to   { transform: scale(1.10) translateY(-10px); }
+}
+@keyframes camPushFg  {
+  from { transform: scale(1.00) translateY(0);    }
+  to   { transform: scale(1.03) translateY(-4px); }
+}
 
 /* ───────────────────────────────────────────────────────────────────
-   PULL OUT
+   PULL OUT — reveal / zoom away
    ─────────────────────────────────────────────────────────────────── */
 .cam-pull-out {
-  animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+  animation: camPullOut var(--cam-dur, 5s) var(--ease-cam) both;
 }
 @keyframes camPullOut {
-  from { transform: scale(1.055) translateY(-12px); }
-  to   { transform: scale(1.010) translateY(-2px);  }
+  from { transform: scale(1.090) translateY(-18px); }
+  to   { transform: scale(1.020) translateY(-2px);  }
 }
-.cam-pull-out:has(.depth-fg)            { animation: none; }
-.cam-pull-out .depth-bg                 { animation: camPullBg  var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-.cam-pull-out .depth-mid                { animation: camPullMid var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-.cam-pull-out .depth-fg                 { animation: camPullFg  var(--cam-dur, 5s) var(--ease-glide, cubic-bezier(0.25,.46,.45,.94)) both; }
-@keyframes camPullBg  { from { transform: scale(1.10) translateY(-14px); }  to { transform: scale(1.02) translateY(0);    } }
-@keyframes camPullMid { from { transform: scale(1.06) translateY(-8px);  }  to { transform: scale(1.01) translateY(0);    } }
-@keyframes camPullFg  { from { transform: scale(1.03) translateY(-4px);  }  to { transform: scale(1.00) translateY(0);    } }
+.cam-pull-out:has(.depth-fg)  { animation: none; }
+.cam-pull-out .depth-bg  { animation: camPullBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-pull-out .depth-mid { animation: camPullMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-pull-out .depth-fg  { animation: camPullFg  var(--cam-dur, 5s) var(--ease-cam) both; }
+@keyframes camPullBg  {
+  from { transform: scale(1.18) translateY(-20px); }
+  to   { transform: scale(1.04) translateY(0);     }
+}
+@keyframes camPullMid {
+  from { transform: scale(1.10) translateY(-10px); }
+  to   { transform: scale(1.02) translateY(0);     }
+}
+@keyframes camPullFg  {
+  from { transform: scale(1.03) translateY(-4px); }
+  to   { transform: scale(1.00) translateY(0);    }
+}
 
 /* ───────────────────────────────────────────────────────────────────
-   HANDHELD — deterministic one-pass micro-shake
-   Pure translation — no scale component, so no bleed risk.
+   HANDHELD — deterministic one-pass micro-shake (translation only)
+   No scale component so no bleed risk. Pure organic camera sway.
    ─────────────────────────────────────────────────────────────────── */
 .cam-handheld {
   animation: camHandheld var(--cam-dur, 5s) linear forwards;
@@ -90,76 +124,86 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────
-   SNAP ZOOM
+   SNAP ZOOM — climax punch: hard fast zoom with overshoot settle
+   Uses ease-overshoot so bg snaps past target then breathes back.
    ─────────────────────────────────────────────────────────────────── */
 .cam-snap-zoom {
   animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes camSnapZoom {
-  0%   { transform: scale(1.035); }
-  18%  { transform: scale(1.100); }
-  35%  { transform: scale(1.060); }
-  60%  { transform: scale(1.065); }
-  100% { transform: scale(1.065); }
+  0%   { transform: scale(1.040); }
+  18%  { transform: scale(1.140); }
+  35%  { transform: scale(1.085); }
+  60%  { transform: scale(1.090); }
+  100% { transform: scale(1.090); }
 }
-.cam-snap-zoom:has(.depth-fg)           { animation: none; }
-.cam-snap-zoom .depth-bg                { animation: camSnapBg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
-.cam-snap-zoom .depth-mid               { animation: camSnapMid var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
-.cam-snap-zoom .depth-fg                { animation: camSnapFg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
-@keyframes camSnapBg  { 0% { transform: scale(1.06); } 18% { transform: scale(1.16); } 35% { transform: scale(1.10); } 100% { transform: scale(1.10); } }
-@keyframes camSnapMid { 0% { transform: scale(1.04); } 18% { transform: scale(1.12); } 35% { transform: scale(1.07); } 100% { transform: scale(1.07); } }
-@keyframes camSnapFg  { 0% { transform: scale(1.02); } 18% { transform: scale(1.07); } 35% { transform: scale(1.03); } 100% { transform: scale(1.03); } }
+.cam-snap-zoom:has(.depth-fg)  { animation: none; }
+.cam-snap-zoom .depth-bg  {
+  animation: camSnapBg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
+.cam-snap-zoom .depth-mid {
+  animation: camSnapMid var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
+.cam-snap-zoom .depth-fg  {
+  animation: camSnapFg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
+@keyframes camSnapBg  {
+  0%   { transform: scale(1.06); }
+  18%  { transform: scale(1.22); }
+  35%  { transform: scale(1.14); }
+  100% { transform: scale(1.16); }
+}
+@keyframes camSnapMid {
+  0%   { transform: scale(1.04); }
+  18%  { transform: scale(1.15); }
+  35%  { transform: scale(1.09); }
+  100% { transform: scale(1.10); }
+}
+@keyframes camSnapFg  {
+  0%   { transform: scale(1.01); }
+  18%  { transform: scale(1.06); }
+  35%  { transform: scale(1.03); }
+  100% { transform: scale(1.03); }
+}
 
 /* ───────────────────────────────────────────────────────────────────
-   MICRO SHAKE — deterministic build + depth-plane guard
-   ----------------------------------------------------------------
-   FIX v3.2: added :has(.depth-fg) guard + per-plane variants.
-   Previously this ran unconditionally on .scene itself, stacking
-   scale(1.060) on top of the scene's own overflow:hidden boundary
-   and pushing right-edge content off-canvas.
-   Now: suppressed at .scene level when depth planes exist, and
-   distributed across planes with reduced fg scale (1.02 max)
-   so text never reaches the clipping boundary.
+   MICRO SHAKE — buildupscale + translate jitter
    ─────────────────────────────────────────────────────────────────── */
-/* Legacy single-plane (no depth-fg present) */
 .cam-micro-shake {
   animation: camMicroShake var(--cam-dur, 5s) linear forwards;
 }
 @keyframes camMicroShake {
   0%   { transform: translate(0px,   0px)  scale(1.000); }
-  6%   { transform: translate(-2px,  0px)  scale(1.005); }
-  12%  { transform: translate(2px,  -1px)  scale(1.010); }
-  18%  { transform: translate(-2px,  1px)  scale(1.018); }
-  25%  { transform: translate(1.5px,-1px)  scale(1.026); }
-  33%  { transform: translate(-1px,  0px)  scale(1.033); }
-  42%  { transform: translate(2px,   1px)  scale(1.040); }
-  52%  { transform: translate(-1.5px,0px)  scale(1.045); }
-  63%  { transform: translate(1px,  -1px)  scale(1.050); }
-  75%  { transform: translate(-2px,  1px)  scale(1.055); }
-  88%  { transform: translate(1.5px, 0px)  scale(1.058); }
-  100% { transform: translate(0px,   0px)  scale(1.060); }
+  6%   { transform: translate(-2px,  0px)  scale(1.008); }
+  12%  { transform: translate(2px,  -1px)  scale(1.016); }
+  18%  { transform: translate(-2px,  1px)  scale(1.026); }
+  25%  { transform: translate(1.5px,-1px)  scale(1.036); }
+  33%  { transform: translate(-1px,  0px)  scale(1.046); }
+  42%  { transform: translate(2px,   1px)  scale(1.055); }
+  52%  { transform: translate(-1.5px,0px)  scale(1.062); }
+  63%  { transform: translate(1px,  -1px)  scale(1.068); }
+  75%  { transform: translate(-2px,  1px)  scale(1.073); }
+  88%  { transform: translate(1.5px, 0px)  scale(1.077); }
+  100% { transform: translate(0px,   0px)  scale(1.080); }
 }
-/* Depth-aware: suppress scene-level, route onto planes with capped fg scale */
-.cam-micro-shake:has(.depth-fg)          { animation: none; }
-.cam-micro-shake .depth-bg               { animation: camShakeBg  var(--cam-dur, 5s) linear both; }
-.cam-micro-shake .depth-mid              { animation: camShakeMid var(--cam-dur, 5s) linear both; }
-.cam-micro-shake .depth-fg               { animation: camShakeFg  var(--cam-dur, 5s) linear both; }
-/* bg: full shake magnitude — it's behind content, can bleed freely into plane clip */
+.cam-micro-shake:has(.depth-fg)   { animation: none; }
+.cam-micro-shake .depth-bg  { animation: camShakeBg  var(--cam-dur, 5s) linear both; }
+.cam-micro-shake .depth-mid { animation: camShakeMid var(--cam-dur, 5s) linear both; }
+.cam-micro-shake .depth-fg  { animation: camShakeFg  var(--cam-dur, 5s) linear both; }
 @keyframes camShakeBg {
   0%   { transform: translate(0px,   0px)  scale(1.000); }
-  6%   { transform: translate(-2px,  0px)  scale(1.005); }
-  12%  { transform: translate(2px,  -1px)  scale(1.010); }
-  18%  { transform: translate(-2px,  1px)  scale(1.018); }
-  25%  { transform: translate(1.5px,-1px)  scale(1.026); }
-  33%  { transform: translate(-1px,  0px)  scale(1.033); }
-  42%  { transform: translate(2px,   1px)  scale(1.040); }
-  52%  { transform: translate(-1.5px,0px)  scale(1.045); }
-  63%  { transform: translate(1px,  -1px)  scale(1.050); }
-  75%  { transform: translate(-2px,  1px)  scale(1.055); }
-  88%  { transform: translate(1.5px, 0px)  scale(1.058); }
-  100% { transform: translate(0px,   0px)  scale(1.060); }
+  6%   { transform: translate(-2px,  0px)  scale(1.008); }
+  12%  { transform: translate(2px,  -1px)  scale(1.016); }
+  18%  { transform: translate(-2px,  1px)  scale(1.026); }
+  25%  { transform: translate(1.5px,-1px)  scale(1.036); }
+  33%  { transform: translate(-1px,  0px)  scale(1.046); }
+  42%  { transform: translate(2px,   1px)  scale(1.055); }
+  52%  { transform: translate(-1.5px,0px)  scale(1.062); }
+  63%  { transform: translate(1px,  -1px)  scale(1.068); }
+  75%  { transform: translate(-2px,  1px)  scale(1.073); }
+  88%  { transform: translate(1.5px, 0px)  scale(1.077); }
+  100% { transform: translate(0px,   0px)  scale(1.080); }
 }
-/* mid: reduced translation, no scale — particles/texture shift gently */
 @keyframes camShakeMid {
   0%   { transform: translate(0px,    0px); }
   6%   { transform: translate(-1.5px, 0px); }
@@ -172,7 +216,6 @@
   91%  { transform: translate(1.5px, -0.5px); }
   100% { transform: translate(0px,    0px); }
 }
-/* fg: translation only, zero scale — text plane never resizes, never bleeds */
 @keyframes camShakeFg {
   0%   { transform: translate(0px,    0px); }
   6%   { transform: translate(-1px,   0px); }
@@ -187,72 +230,73 @@
 }
 
 /* ───────────────────────────────────────────────────────────────────
-   TILT UP
+   TILT UP — vertical pan upward
    ─────────────────────────────────────────────────────────────────── */
 .cam-tilt-up {
-  animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both;
+  animation: camTiltUp var(--cam-dur, 5s) var(--ease-cam) both;
 }
 @keyframes camTiltUp {
-  from { transform: translateY(14px) scale(1.020); }
-  to   { transform: translateY(-4px) scale(1.005); }
+  from { transform: translateY(18px) scale(1.030); }
+  to   { transform: translateY(-6px) scale(1.010); }
 }
-.cam-tilt-up:has(.depth-fg)             { animation: none; }
-.cam-tilt-up .depth-bg                  { animation: camTiltBg  var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
-.cam-tilt-up .depth-mid                 { animation: camTiltMid var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
-.cam-tilt-up .depth-fg                  { animation: camTiltFg  var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
-@keyframes camTiltBg  { from { transform: translateY(22px) scale(1.05); } to { transform: translateY(-8px) scale(1.02); } }
-@keyframes camTiltMid { from { transform: translateY(14px) scale(1.03); } to { transform: translateY(-4px) scale(1.01); } }
-@keyframes camTiltFg  { from { transform: translateY(8px)  scale(1.02); } to { transform: translateY(-2px) scale(1.00); } }
+.cam-tilt-up:has(.depth-fg)  { animation: none; }
+.cam-tilt-up .depth-bg  { animation: camTiltBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-tilt-up .depth-mid { animation: camTiltMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.cam-tilt-up .depth-fg  { animation: camTiltFg  var(--cam-dur, 5s) var(--ease-cam) both; }
+@keyframes camTiltBg  {
+  from { transform: translateY(32px) scale(1.08); }
+  to   { transform: translateY(-10px) scale(1.04); }
+}
+@keyframes camTiltMid {
+  from { transform: translateY(20px) scale(1.05); }
+  to   { transform: translateY(-6px) scale(1.02); }
+}
+@keyframes camTiltFg  {
+  from { transform: translateY(8px)  scale(1.02); }
+  to   { transform: translateY(-2px) scale(1.00); }
+}
 
 /* ================================================================
    PER-SCENE CAMERA DEFAULTS
-   ----------------------------------------------------------------
-   These fire automatically based on scene type. inject.js adds .cam-*
-   classes that override these when beat.camera differs.
-
-   Each :has(.depth-fg) guard suppresses the scene-level animation
-   when depth planes exist, so only the per-plane animations run.
    ================================================================ */
-
-.hook-scene { animation: camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both; }
+.hook-scene { animation: camPushIn var(--cam-dur, 5s) var(--ease-cam) both; }
 .hook-scene:has(.depth-fg) { animation: none; }
-.hook-scene:has(.depth-fg) .depth-bg  { animation: camPushBg  var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
-.hook-scene:has(.depth-fg) .depth-mid { animation: camPushMid var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
-.hook-scene:has(.depth-fg) .depth-fg  { animation: camPushFg  var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
+.hook-scene:has(.depth-fg) .depth-bg  { animation: camPushBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.hook-scene:has(.depth-fg) .depth-mid { animation: camPushMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.hook-scene:has(.depth-fg) .depth-fg  { animation: camPushFg  var(--cam-dur, 5s) var(--ease-cam) both; }
 
-/* Hook left-layout had a cameraSettle animation. We layer settle on the
-   .scene (which then propagates upward) plus push on depth planes. */
 .hook-scene[data-layout="left"]:not(:has(.depth-fg)) {
   animation:
     cameraSettle 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards,
-    camPushIn var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both;
+    camPushIn var(--cam-dur, 5s) var(--ease-cam) both;
 }
 
 .climax-scene { animation: camSnapZoom var(--cam-dur, 4s) cubic-bezier(0.16, 1, 0.3, 1) both; }
 .climax-scene:has(.depth-fg) { animation: none; }
-.climax-scene:has(.depth-fg) .depth-bg  { animation: camSnapBg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
-.climax-scene:has(.depth-fg) .depth-mid { animation: camSnapMid var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
-.climax-scene:has(.depth-fg) .depth-fg  { animation: camSnapFg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both; }
+.climax-scene:has(.depth-fg) .depth-bg  {
+  animation: camSnapBg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
+.climax-scene:has(.depth-fg) .depth-mid {
+  animation: camSnapMid var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
+.climax-scene:has(.depth-fg) .depth-fg  {
+  animation: camSnapFg  var(--cam-dur, 4s) var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1)) both;
+}
 
-.payoff-scene { animation: camPullOut var(--cam-dur, 5s) cubic-bezier(0.25, 0, 0.4, 1) both; }
+.payoff-scene { animation: camPullOut var(--cam-dur, 5s) var(--ease-cam) both; }
 .payoff-scene:has(.depth-fg) { animation: none; }
-.payoff-scene:has(.depth-fg) .depth-bg  { animation: camPullBg  var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
-.payoff-scene:has(.depth-fg) .depth-mid { animation: camPullMid var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
-.payoff-scene:has(.depth-fg) .depth-fg  { animation: camPullFg  var(--cam-dur, 5s) cubic-bezier(0.25,0,0.4,1) both; }
+.payoff-scene:has(.depth-fg) .depth-bg  { animation: camPullBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.payoff-scene:has(.depth-fg) .depth-mid { animation: camPullMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.payoff-scene:has(.depth-fg) .depth-fg  { animation: camPullFg  var(--cam-dur, 5s) var(--ease-cam) both; }
 
-.tension-scene { animation: camTiltUp var(--cam-dur, 5s) cubic-bezier(0.25, 0.1, 0.3, 1) both; }
+.tension-scene { animation: camTiltUp var(--cam-dur, 5s) var(--ease-cam) both; }
 .tension-scene:has(.depth-fg) { animation: none; }
-.tension-scene:has(.depth-fg) .depth-bg  { animation: camTiltBg  var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
-.tension-scene:has(.depth-fg) .depth-mid { animation: camTiltMid var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
-.tension-scene:has(.depth-fg) .depth-fg  { animation: camTiltFg  var(--cam-dur, 5s) cubic-bezier(0.25,0.1,0.3,1) both; }
+.tension-scene:has(.depth-fg) .depth-bg  { animation: camTiltBg  var(--cam-dur, 5s) var(--ease-cam) both; }
+.tension-scene:has(.depth-fg) .depth-mid { animation: camTiltMid var(--cam-dur, 5s) var(--ease-cam) both; }
+.tension-scene:has(.depth-fg) .depth-fg  { animation: camTiltFg  var(--cam-dur, 5s) var(--ease-cam) both; }
 
 /* ================================================================
-   HANDHELD LAYER — applied additively when camera_style=handheld
-   inject.js adds .cam-handheld-layer to .scene based on the script
-   global. This layers a subtle handheld onto .depth-mid regardless
-   of the per-beat camera, giving the whole video a "shot on shoulder"
-   quality without overriding the directorial camera choice.
-   Pure translation — no scale, no bleed risk.
+   HANDHELD LAYER — additive shoulder-cam on depth-mid
    ================================================================ */
 .cam-handheld-layer .depth-mid {
   animation: handheldLayer var(--cam-dur, 5s) linear forwards;
@@ -267,8 +311,7 @@
 }
 
 /* ================================================================
-   GOD-RAY SWEEP — used when inject.js adds .ambient-ray
-   One motivated lighting event per beat. Pass at ~28–58% of beat.
+   GOD-RAY SWEEP
    ================================================================ */
 .ambient-ray {
   position: absolute; inset: -200px;

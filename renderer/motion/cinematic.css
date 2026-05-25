@@ -1,58 +1,50 @@
 /* ================================================================
    cinematic.css  --  Easing kit, depth planes, motion carry
    Load AFTER camera.css, BEFORE scene-specific overrides.
+   ================================================================
+   CHANGES v3:
+   - settle-drift moved from entries.css body-line chain (broken)
+     to scene content CONTAINERS here — fires after entry, never
+     conflicts with span-level reveal animations
    ================================================================ */
 :root {
-  /* ── EASING KIT — one curve per job ─────────────────── */
-  --ease-cinema-out: cubic-bezier(.05,.9,.1,1);     /* explosive start → soft settle (default entry) */
-  --ease-cinema-in:  cubic-bezier(.6,.04,.98,.34);   /* slow start → fast finish (exits) */
-  --ease-anticipate: cubic-bezier(.7,-.4,.4,1.4);     /* pull-back then power (climax) */
-  --ease-overshoot:  cubic-bezier(.34,1.32,.64,1);    /* small overshoot (keyword punch) */
-  --ease-overshoot-x:cubic-bezier(.22,1.6,.36,1);     /* hard overshoot (slam, full layout) */
-  --ease-settle:     cubic-bezier(.16,1,.05,1);       /* long settle (rule wipes) */
-  --ease-stomp:      cubic-bezier(.9,0,.95,.4);       /* hard down (dip black) */
-  --ease-glide:      cubic-bezier(.25,.46,.45,.94);    /* neutral travel (body lines, camera drift) */
+  /* ── EASING KIT ──────────────────────────────────────── */
+  --ease-cinema-out: cubic-bezier(.05,.9,.1,1);
+  --ease-cinema-in:  cubic-bezier(.6,.04,.98,.34);
+  --ease-anticipate: cubic-bezier(.7,-.4,.4,1.4);
+  --ease-overshoot:  cubic-bezier(.34,1.32,.64,1);
+  --ease-overshoot-x:cubic-bezier(.22,1.6,.36,1);
+  --ease-settle:     cubic-bezier(.16,1,.05,1);
+  --ease-stomp:      cubic-bezier(.9,0,.95,.4);
+  --ease-glide:      cubic-bezier(.25,.46,.45,.94);
 
-  /* ── MOTION CARRY — set by inject.js from prev beat ──── */
+  /* ── MOTION CARRY ────────────────────────────────────── */
   --carry-x: 0px;
   --carry-y: 0px;
   --carry-scale: 1;
 
-  /* ── OVERSHOOT MAGNITUDE by pace ─────────────────────── */
-  --overshoot-y: -8px;  /* mid pace default */
+  /* ── OVERSHOOT MAGNITUDE ─────────────────────────────── */
+  --overshoot-y: -8px;
 }
-.scene[data-pace="slow"]       { --overshoot-y: -5px;  }
-.scene[data-pace="fast"]       { --overshoot-y: -12px; }
-.scene[data-pace="explosive"]  { --overshoot-y: -18px; }
+.scene[data-pace="slow"]      { --overshoot-y: -5px;  }
+.scene[data-pace="fast"]      { --overshoot-y: -12px; }
+.scene[data-pace="explosive"] { --overshoot-y: -18px; }
 
 /* ================================================================
-   DEPTH PLANES — minimum 3-layer parallax
-   ----------------------------------------------------------------
-   Wrap scene content in .depth-bg / .depth-mid / .depth-fg.
-   The camera classes in camera.css now scale each plane by a
-   different factor → real parallax, no JS, fully seek-safe.
-
-   overflow:hidden on every plane is the hard containment boundary.
-   Any child that escapes 1080×1920 due to a camera transform is
-   clipped at the plane level, well before .scene's own clip fires.
-   This absorbs the ~64px bleed that scale(1.060) produces on a
-   1080px frame — content stays fully visible regardless of camera.
+   DEPTH PLANES
    ================================================================ */
 .depth-bg, .depth-mid, .depth-fg {
   position: absolute; inset: 0;
   transform-origin: 50% 50%;
   will-change: transform;
-  overflow: hidden;           /* ← NEW: clip at the plane, not the viewport */
+  overflow: hidden;
 }
 .depth-bg  { z-index: var(--z-bg);  }
 .depth-mid { z-index: var(--z-mid); }
 .depth-fg  { z-index: var(--z-fg);  }
 
 /* ================================================================
-   ENTRY HAND-OFF — opening pose reads from --carry-*
-   inject.js sets --carry-x/--carry-y from the previous beat's
-   computed exit pose. The scene wrapper starts pre-offset by that
-   amount and decays it to zero across the first 240ms.
+   ENTRY HAND-OFF
    ================================================================ */
 .scene.with-carry {
   animation: carryDecay .36s var(--ease-cinema-out) forwards;
@@ -63,12 +55,49 @@
 }
 
 /* ================================================================
-   SETTLE-DRIFT — applied to every text block after entry
-   The most important new primitive. After settle, every text
-   element gets a long-period 2px drift. The frame never freezes.
+   SETTLE-DRIFT — applied to scene CONTENT CONTAINERS, not spans
+   ----------------------------------------------------------------
+   Fires 1.4s after beat start (after keyword entry completes).
+   The 2px drift is imperceptible as layout shift but reads as
+   "alive" vs "frozen". Runs on position:absolute containers so
+   there is zero risk of reflow or scrollbar triggering.
+
+   Targets every scene content wrapper and body container.
+   The per-span entry animations (.body-line kwWordPunch etc.) are
+   unaffected because they run on child elements, not the container.
+
+   infinite + both is seek-safe: at time T, currentTime = T % 9s.
+   The 1.4s delay means it starts after text has settled into place.
    ================================================================ */
-.settle-drift { animation: settleDrift 8s var(--ease-glide) infinite both; }
 @keyframes settleDrift {
-  0%,100% { transform: translate(0,0); }
-  50%     { transform: translate(2px,-1.5px); }
+  0%   { transform: translate(0px,    0px);   }
+  25%  { transform: translate(1.5px, -1px);   }
+  50%  { transform: translate(2px,   -1.5px); }
+  75%  { transform: translate(0.5px, -2px);   }
+  100% { transform: translate(0px,    0px);   }
+}
+
+/* Apply to all scene content containers and body blocks.
+   The selector list mirrors the comp-mutator targets so we know
+   every scene type is covered without touching individual spans. */
+[class$="-content"],
+[class$="-kw-wrap"],
+[class$="-body"]:not(.body-line) {
+  animation: settleDrift 9s var(--ease-glide) 1.4s infinite both;
+}
+
+/* Composition mutators use !important transforms — those override
+   settleDrift anyway, so no conflict there. The drift is a secondary
+   animation; it loses to any explicit transform from comp-corner etc.
+   We prevent the conflict explicitly for comp beats: */
+.comp-corner [class$="-content"],
+.comp-corner [class$="-kw-wrap"],
+.comp-corner [class$="-body"],
+.comp-tilt   [class$="-content"],
+.comp-tilt   [class$="-kw-wrap"],
+.comp-tilt   [class$="-body"],
+.comp-crop-low [class$="-content"],
+.comp-crop-low [class$="-kw-wrap"],
+.comp-crop-low [class$="-body"] {
+  animation: none;  /* comp mutators use static !important transforms */
 }

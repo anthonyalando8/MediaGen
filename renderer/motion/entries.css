@@ -1,28 +1,22 @@
 /* ================================================================
    entries.css  --  Element entry animations
    ================================================================
-   These are the "punch motion" animations. Every text element
-   enters with intention — not just a fade.
-
-   Design rules:
-   - Keywords: ALWAYS translate + fade. Never just fade.
-   - Body text: softer, slower, arrives after keyword settles.
-   - Rules/lines: scale from 0, fast, after keyword lands.
-   - Labels: slide in from their anchor direction.
-   - Explosive pace: larger displacement, harder easing.
-   - Slow pace:  smaller displacement, longer ease.
-
-   Pace scaling is handled at runtime by inject.js.
-   The keyframes here are calibrated for pace=mid.
+   CHANGES v3:
+   - Removed conflicting .kw-word block — kw-word animation lives
+     only in _base.html; having it here caused triple-definition
+     conflicts with scene inline styles
+   - kwIdlePulse range increased 1.003 → 1.008 (now visible)
+   - pi-slam peak increased 1.22 → 1.45 (unmissable at 30fps)
+   - settleDrift removed from .body-line chain (moved to cinematic.css
+     where it applies to containers, not spans)
+   - .body-line keeps clean single-animation entry
    ================================================================ */
 
-/* ── KEYWORD ENTRIES ─────────────────────────────────────────────
-   Used by hook-kw, insight-kw, climax-kw, cta-kw.
-   Each layout variant has its own direction in the scene files. */
+/* ── KEYWORD ENTRIES ─────────────────────────────────────────── */
 
 @keyframes kwPunchUp {
-  0%   { opacity: 0;  transform: translateY(8px)  scaleY(1.02); }  /* anticipate: down + stretch */
-  14%  { opacity: 0;  transform: translateY(44px) scaleY(0.92); }  /* pull-back position before launch */
+  0%   { opacity: 0;  transform: translateY(8px)  scaleY(1.02); }
+  14%  { opacity: 0;  transform: translateY(44px) scaleY(0.92); }
   55%  { opacity: 1;  transform: translateY(var(--overshoot-y, -8px)) scaleY(1.02); }
   75%  { opacity: 1;  transform: translateY(2px)   scaleY(0.99); }
   100% { opacity: 1;  transform: translateY(0)     scaleY(1);    }
@@ -48,61 +42,14 @@
 }
 
 /* ── KEYWORD IDLE PULSE ──────────────────────────────────────────
-   After the keyword finishes entering, it breathes very subtly.
-   Applied to all keyword elements via their scene's animation-delay.
-   The pulse starts at var(--kw-settle-delay, 1.2s) — after entry.
-   Scale range: 1.000 → 1.003 — imperceptible as movement, but
-   keeps the eye anchored to the most important element on screen.
-   Uses forwards fill so it doesn't reset between iterations.     */
-
+   Range increased from 1.000→1.003 to 1.000→1.008.
+   At 0.3% the pulse was completely invisible.
+   At 0.8% it reads as a gentle breath without distorting text.   */
 @keyframes kwIdlePulse {
   0%, 100% { transform: scale(1.000); }
-  50%      { transform: scale(1.003); }
+  50%      { transform: scale(1.008); }
 }
 
-/* ── PER-WORD KINETIC TYPE (NEW) ─────────────────────────
-   inject.js sets --word-index on each .kw-word.
-   We use it to drive a fibonacci-ish stagger that feels
-   organic instead of linear. */
-.kw-word {
-  opacity: 0;
-  transform: translateY(48px) scaleY(0.94);
-  animation: kwWordPunch .78s var(--ease-overshoot) forwards;
-  animation-delay: calc(
-    var(--kw-entry-base, .42s)
-    + var(--word-index, 0) * .13s      /* 130ms golden offset */
-  );
-}
-@keyframes kwWordPunch {
-  0%   { opacity: 0; transform: translateY(48px)  scaleY(0.94); filter: blur(3px); }
-  55%  { opacity: 1; transform: translateY(-7px)  scaleY(1.02); filter: blur(0);   }
-  75%  { opacity: 1; transform: translateY(2px)   scaleY(0.99); }
-  100% { opacity: 1; transform: translateY(0)     scaleY(1); }
-}
-
-
-/* ── LATE UNDERLINE (TWEAK existing kwWordUnderline) ─────
-   Slow the curve to --ease-cinema-out, add a 60ms scaled
-   blur-out for motion implication. */
-.kw-word::after {
-  animation: kwWordUnderline .42s var(--ease-cinema-out) forwards;
-}
-@keyframes kwWordUnderline {
-  from { transform: scaleX(0);   filter: blur(2px); }
-  to   { transform: scaleX(1);   filter: blur(0); }
-}
-
-.body-line {
-  /* existing animation runs first, then settle-drift takes over */
-  animation:
-    bodyLineReveal .55s var(--ease-cinema-out) forwards,
-    settleDrift   9s  var(--ease-glide) var(--body-line-1-delay, 1.1s) infinite both;
-}
-
-
-
-/* Applied to keyword wrappers in each scene via chained animation.
-   Scenes add this as a second animation after their entry animation. */
 .kw-pulse {
   animation-name: kwIdlePulse;
   animation-duration: 3.2s;
@@ -112,7 +59,35 @@
   animation-fill-mode: both;
 }
 
-/* ── BODY TEXT ENTRIES ───────────────────────────────────────────*/
+/* ── KEYWORD UNDERLINE ───────────────────────────────────────────
+   Slow blur-out for motion implication. Applied to kw-word::after
+   which is already defined in _base.html; this overrides the easing
+   and adds the blur sweep. */
+.kw-word::after {
+  animation: kwWordUnderline .42s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) forwards;
+}
+@keyframes kwWordUnderline {
+  from { transform: scaleX(0);   filter: blur(2px); }
+  to   { transform: scaleX(1);   filter: blur(0); }
+}
+
+/* ── BODY TEXT ENTRIES ───────────────────────────────────────────
+   Single clean animation — no chaining with settleDrift.
+   settleDrift is applied by cinematic.css to the *-body container,
+   which starts drifting after the spans have all revealed.          */
+.body-line {
+  display: block;
+  opacity: 0;
+  animation: bodyLineReveal .55s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) forwards;
+}
+.body-line:nth-child(1) { animation-delay: var(--body-line-1-delay, 1.1s); }
+.body-line:nth-child(2) { animation-delay: var(--body-line-2-delay, 1.2s); }
+.body-line:nth-child(3) { animation-delay: var(--body-line-3-delay, 1.3s); }
+
+@keyframes bodyLineReveal {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0px);  }
+}
 
 @keyframes bodySlide {
   0%   { opacity: 0; transform: translateY(18px); }
@@ -125,34 +100,28 @@
 }
 
 /* ── RULE / LINE ENTRIES ─────────────────────────────────────────*/
-
 @keyframes ruleExpand {
   from { transform: scaleX(0); transform-origin: left center; }
   to   { transform: scaleX(1); transform-origin: left center; }
 }
-
 @keyframes ruleExpandCenter {
   from { transform: scaleX(0); transform-origin: center center; }
   to   { transform: scaleX(1); transform-origin: center center; }
 }
-
 @keyframes ruleExpandRight {
   from { transform: scaleX(0); transform-origin: right center; }
   to   { transform: scaleX(1); transform-origin: right center; }
 }
 
 /* ── LABEL ENTRIES ───────────────────────────────────────────────*/
-
 @keyframes labelSlideLeft {
   from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes labelSlideRight {
   from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
-
 @keyframes labelFade {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -167,15 +136,7 @@
   animation: accentLinePulse 2.2s ease-in-out infinite;
 }
 
-/* ── STAGGER UTILITIES ───────────────────────────────────────────*/
-.stagger-2 > *:nth-child(1) { animation-delay-extra: 0ms;   }
-.stagger-2 > *:nth-child(2) { animation-delay-extra: 120ms; }
-.stagger-3 > *:nth-child(1) { animation-delay-extra: 0ms;   }
-.stagger-3 > *:nth-child(2) { animation-delay-extra: 100ms; }
-.stagger-3 > *:nth-child(3) { animation-delay-extra: 200ms; }
-
-/* ── TRANSITION FLASH OVERLAY ────────────────────────────────────
-   Applied by inject.js for slam_cut / flash transitions. */
+/* ── TRANSITION OVERLAYS ─────────────────────────────────────────*/
 @keyframes transFlash {
   0%   { opacity: 1; }
   12%  { opacity: 0; }
@@ -204,18 +165,6 @@
   animation-delay: calc(var(--beat-dur, 4000ms) - 350ms);
 }
 
-/* ── CHROMATIC ABERRATION FLASH ──────────────────────────────────
-   Applied by inject.js when beat.transition is slam_cut or flash.
-   Creates a 3-frame RGB-split impact effect at beat start.
-   The .trans-chroma class is added to .scene by inject.js.
-
-   Mechanism: three pseudo-element-like layers via a single ::before.
-   We simulate channel separation with a CSS filter sequence:
-   saturate(2) + hue-rotate gives a vivid colour-split feel without
-   needing three actual elements. Duration: 180ms — felt, not seen.
-
-   Sits at --z-flash (99) — above everything including vignette.     */
-
 @keyframes chromaAberration {
   0%   {
     opacity: 1;
@@ -238,17 +187,19 @@
     transform: translate(0px, 0) scaleX(1.000);
   }
 }
-
 .trans-chroma::before {
   content: '';
   position: fixed; inset: 0;
-  /* Transparent overlay — the filter is applied to the entire ::before
-     which composites over the scene content underneath. */
   background: transparent;
   pointer-events: none;
   z-index: var(--z-flash, 99);
   animation: chromaAberration 0.18s ease-out forwards;
-  /* Mix-blend-mode screen lets the RGB-split feel additive,
-     not like an opaque white flash. */
   mix-blend-mode: screen;
 }
+
+/* ── STAGGER UTILITIES ───────────────────────────────────────────*/
+.stagger-2 > *:nth-child(1) { animation-delay-extra: 0ms;   }
+.stagger-2 > *:nth-child(2) { animation-delay-extra: 120ms; }
+.stagger-3 > *:nth-child(1) { animation-delay-extra: 0ms;   }
+.stagger-3 > *:nth-child(2) { animation-delay-extra: 100ms; }
+.stagger-3 > *:nth-child(3) { animation-delay-extra: 200ms; }

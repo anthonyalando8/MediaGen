@@ -17,6 +17,19 @@
   opacity: calc(.7 + var(--intensity) * .3);
 }
 
+/* Vignette pulse on high-intensity PI beats — darkens/snaps at pi-delay
+   to reinforce the slam/chroma effect even when scale is subtle.     */
+.pi-slam .vignette,
+.pi-chroma .vignette {
+  animation: vignettePulse 0.55s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1))
+             var(--pi-delay, 2s) forwards;
+}
+@keyframes vignettePulse {
+  0%   { opacity: calc(.7 + var(--intensity) * .3); }
+  25%  { opacity: 1.0; }
+  100% { opacity: calc(.7 + var(--intensity) * .3); }
+}
+
 /* Particle density / brightness scales */
 .ambient-particles {
   opacity: calc(.45 + var(--intensity) * .55);
@@ -36,9 +49,11 @@
   animation: piSlam .36s var(--ease-slam, cubic-bezier(.22,1.6,.36,1)) var(--pi-delay, 2s) forwards;
 }
 @keyframes piSlam {
+  /* Peak increased 1.22 → 1.45 — must be unmissable at 30fps
+     (only 2-3 frames land in the 360ms window) */
   0%   { transform: scale(1); }
-  35%  { transform: scale(1.22) translateY(-4px); }
-  55%  { transform: scale(.97); }
+  35%  { transform: scale(1.45) translateY(-6px); }
+  55%  { transform: scale(0.96); }
   100% { transform: scale(1); }
 }
 
