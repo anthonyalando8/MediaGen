@@ -17,6 +17,18 @@
  *
  * A bonus requestfailed listener logs any remaining 404s so we can verify
  * the fix worked at runtime.
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * BACKGROUND IMAGE FIX (v3.2)
+ * ────────────────────────────────────────────────────────────────────
+ * Previously, PAUSE_SCRIPT applied backgroundImage to .scene.
+ * camera.css animates .depth-bg (a child of .scene), not .scene itself.
+ * Scaling an empty transparent .depth-bg does nothing visible — the
+ * background image on .scene shows through unchanged, so the camera
+ * motion was real in the DOM but invisible on screen.
+ *
+ * Fix: apply backgroundImage to .depth-bg instead. Now when camera.css
+ * runs camPushBg { scale(1.06)→scale(1.18) }, the image actually zooms.
  */
 
 import { chromium } from 'playwright';
@@ -192,11 +204,6 @@ function wrapBodyLines(body) {
 
 /**
  * injectVariables — bake palette + beat data + theme link into HTML.
- *
- * The theme stylesheet is injected here (not in the static _base.html)
- * because the theme name comes from scene.json. We use RENDERER_URL so
- * the absolute file:// path is correct regardless of where _scene.html
- * ends up being written.
  */
 function injectVariables(html, beat, palette, brand, imageUrl) {
   const layout   = beat.layout || sceneJson.layout || 'left';
@@ -208,17 +215,7 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
     ? `url("${imageUrl.replace(/"/g, '%22')}")`
     : 'none';
 
-  // ▼▼▼ NEW: read sz_kw from beat contract ▼▼▼
-  // visuals.py calculates sz_kw per beat using _calc_kw_font_size().
-  // When present, inject as --sz-kw CSS variable into :root AND add a
-  // one-line global override rule that forces ALL keyword elements
-  // ([class$="-kw"] covers hook-kw, truth-kw, climax-kw, insight-kw,
-  // flip-kw, tension-kw, payoff-kw, cta-kw) to use the calculated size.
-  // !important beats scene-specific font-size rules including full-layout
-  // upscaling (e.g. calc(var(--sz-hero)*1.10) in climax/flip/hook).
-  // When sz_kw equals the scene default the override is a no-op.
   const szKw = (beat.sz_kw ? beat.sz_kw + 'px' : null);
-  // ▲▲▲ END NEW ▲▲▲
 
   const cssVars = [
     '<style id="palette-inject">',
@@ -230,19 +227,13 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
     '  --beat-dur: ' + beat.duration_ms + 'ms;',
     '  --cam-dur:  ' + camDur + ';',
     '  --bg-image: ' + bgImageValue + ';',
-    // ▼▼▼ NEW: inject --sz-kw when a reduced size was calculated ▼▼▼
     ...(szKw ? ['  --sz-kw:    ' + szKw + ';'] : []),
-    // ▲▲▲ END NEW ▲▲▲
     '}',
-    // ▼▼▼ NEW: global kw font-size override — applies to all scene types ▼▼▼
-    // Injected only when sz_kw is set (i.e. longest word would overflow at
-    // the scene default size). Silent no-op for short keywords.
     ...(szKw ? [
       '</style>',
       '<style id="sz-kw-override">',
       '[class$="-kw"] { font-size: var(--sz-kw) !important; }',
     ] : []),
-    // ▲▲▲ END NEW ▲▲▲
     '</style>',
   ].join('\n');
 
@@ -283,6 +274,22 @@ function injectVariables(html, beat, palette, brand, imageUrl) {
   return html;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PAUSE_SCRIPT — injected via addInitScript, runs before page load.
+//
+// KEY CHANGE v3.2: background image applied to .depth-bg, not .scene.
+//
+// Why this matters:
+//   camera.css animates .depth-bg with scale/translate transforms.
+//   If backgroundImage lives on .scene, the animated .depth-bg is an
+//   empty transparent div — scaling it changes nothing visible.
+//   Moving the image to .depth-bg means the CSS scale(1.06→1.18) directly
+//   zooms the image, producing real visible camera motion on screen.
+//
+//   inject.js creates .depth-bg synchronously as an inline <script>
+//   in <body>, which runs before DOMContentLoaded. So .depth-bg
+//   always exists when this listener fires.
+// ─────────────────────────────────────────────────────────────────────────────
 const PAUSE_SCRIPT = `
   document.addEventListener('DOMContentLoaded', () => {
     const pauseStyle = document.createElement('style');
@@ -292,27 +299,38 @@ const PAUSE_SCRIPT = `
     const bgImage = getComputedStyle(document.documentElement)
       .getPropertyValue('--bg-image').trim();
     if (bgImage && bgImage !== 'none' && bgImage.startsWith('url(')) {
-      // Extract the raw URL from url("…") — handles both quoted and unquoted forms.
       const match = bgImage.match(/^url\\(["']?(.+?)["']?\\)$/);
       const src   = match ? match[1] : null;
 
       const applyBg = () => {
         const scene = document.querySelector('.scene');
         if (!scene) return;
+
+        // ── v3.2 FIX: target .depth-bg, not .scene ──────────────────────
+        // camera.css runs scale/translate on .depth-bg. The background must
+        // live on the same element that animates, otherwise the camera motion
+        // scales an empty transparent div and nothing visible moves.
+        //
+        // inject.js creates .depth-bg before DOMContentLoaded so it always
+        // exists here. Fall back to .scene only if depth planes are absent.
+        const depthBg = scene.querySelector('.depth-bg') || scene;
+
         const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';
-        scene.style.backgroundImage    = scrim + ', ' + bgImage;
-        scene.style.backgroundSize     = 'cover, cover';
-        scene.style.backgroundPosition = 'center center, center center';
-        console.log('[PAUSE_SCRIPT] background image applied to .scene');
+        depthBg.style.backgroundImage    = scrim + ', ' + bgImage;
+        depthBg.style.backgroundSize     = 'cover, cover';
+        depthBg.style.backgroundPosition = 'center center, center center';
+
+        // Ensure .scene shows its theme background-color on beats without
+        // an image, and as the base colour visible around any scale overflow.
+        scene.style.backgroundColor = 'var(--bg, #09090b)';
+
+        console.log('[PAUSE_SCRIPT] background image applied to .depth-bg');
       };
 
       if (src) {
-        // Pre-decode the image before applying it so the first paint
-        // already has the texture — avoids a blank frame if the CSS
-        // background and the decode race each other.
         const img = new Image();
         img.onload  = applyBg;
-        img.onerror = applyBg; // apply even on error (shows scrim only)
+        img.onerror = applyBg;
         img.src = src;
       } else {
         applyBg();
@@ -363,41 +381,28 @@ async function renderBeat(browser, beat, beatIdx, palette, brand, imageUrl = nul
     }
   });
 
-await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await page.goto(`file://${tmpHtml}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-if (imageUrl) {
-  // Wait until the browser has fully decoded AND painted the background image.
-  //
-  // Strategy: inject a probe <img> with the same src as the CSS background.
-  // img.complete + img.naturalWidth > 0 guarantees the image is decoded into
-  // the GPU texture cache, so the next CSS background paint is synchronous.
-  // Then requestAnimationFrame confirms the compositor has actually painted
-  // at least one frame with the background visible before we screenshot.
-  //
-  // This replaces the flat 500ms guess which was insufficient for large
-  // Unsplash JPEGs (~300-800KB) on variable network conditions.
-  try {
-    await page.waitForFunction(
-      (src) => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload  = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
-          img.onerror = () => resolve(false); // don't hang on a broken image
-          img.src = src;
-        });
-      },
-      imageUrl,
-      { timeout: 12000 }
-    );
-  } catch (err) {
-    // Timeout or network error — log and continue, the frame will just lack
-    // the background rather than crashing the entire beat.
-    console.warn(`[capture] Beat ${beatIdx}: bg image wait timed out (${err.message}) — proceeding without background`);
+  if (imageUrl) {
+    try {
+      await page.waitForFunction(
+        (src) => {
+          return new Promise((resolve) => {
+            const img = new Image();
+            img.onload  = () => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+            img.onerror = () => resolve(false);
+            img.src = src;
+          });
+        },
+        imageUrl,
+        { timeout: 12000 }
+      );
+    } catch (err) {
+      console.warn(`[capture] Beat ${beatIdx}: bg image wait timed out (${err.message}) — proceeding without background`);
+    }
+  } else {
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   }
-} else {
-  // No image: one rAF is enough to ensure the initial paint is committed.
-  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
-}
 
   const isLastBeat  = beatIdx === sceneJson.beats.length - 1;
   const gap_ms      = isLastBeat ? 0 : 380;

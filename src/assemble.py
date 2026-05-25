@@ -130,33 +130,40 @@ def _load_scene_json(beat_dirs) -> dict | None:
 
 def _build_xfade_chain(beat_videos, transitions, work, cfg):
     """
-    Build a single output video by chaining beat MP4s with per-beat
-    xfade filters where needed, and plain concat everywhere else.
+    Assemble beat MP4s into a single output video using a uniform xfade
+    filter_complex.
 
-    Returns path to the assembled video.
+    All beat pairs — even CSS-handled transitions (cut, slam_cut, etc.) —
+    go through xfade. CSS transitions use duration=0.001s (1 frame at 30fps),
+    which is a visually invisible passthrough that keeps the entire chain as
+    uniform xfade nodes.
+
+    This avoids the concat=n=2 approach which breaks when mixed with xfade
+    nodes in the same filter_complex (audio/video stream count mismatch).
+
+    Transition durations:
+      blur_wipe   → xfade fade       0.25 s
+      fade        → xfade fade       0.40 s
+      whip_pan    → xfade slideleft  0.20 s
+      everything else → xfade fade   0.001 s  (invisible passthrough)
     """
+    PASSTHROUGH = ("fade", 0.001)  # 1-frame invisible, keeps chain uniform
+
     fps    = cfg["video"]["fps"]
     preset = cfg["video"]["preset"]
     crf    = str(cfg["video"]["crf"])
+    n      = len(beat_videos)
 
-    # Split beat_videos into runs separated by xfade boundaries.
-    # A run is a list of consecutive videos that will be plain-concat'd,
-    # then each run is joined to the next via xfade.
-    #
-    # transitions[i] = transition ENTERING beat i (from beat i-1 → beat i).
-    # Index 0 is the first beat — no incoming transition.
+    # Get durations of each beat
+    durs = [_video_duration(v) for v in beat_videos]
 
-    n = len(beat_videos)
-
-    # Build segments: list of (video_path, incoming_xfade | None)
-    segments = []
-    for i, v in enumerate(beat_videos):
-        t = transitions[i] if i < len(transitions) else "cut"
-        xfade = _XFADE_MAP.get(t)   # None for CSS-handled transitions
-        segments.append((v, xfade))
-
-    # If no xfade transitions at all, plain concat is fastest
-    if not any(xf for _, xf in segments[1:]):
+    # If ALL transitions are CSS-handled, skip filter_complex entirely
+    # (pure concat is faster and avoids re-encoding)
+    needs_xfade = any(
+        _XFADE_MAP.get(transitions[i] if i < len(transitions) else "cut")
+        for i in range(1, n)
+    )
+    if not needs_xfade:
         concat_file = work / "concat_beats.txt"
         concat_file.write_text(
             "\n".join(f"file '{p.resolve().as_posix()}'" for p in beat_videos),
@@ -172,63 +179,40 @@ def _build_xfade_chain(beat_videos, transitions, work, cfg):
         ], "Concat beat videos (no xfade transitions)")
         return out
 
-    # ── Build one big filter_complex ────────────────────────────────
-    # We process beats left-to-right. Each step either uses concat
-    # (for CSS transitions) or xfade (for ffmpeg transitions).
-    #
-    # Approach: build a running "accumulated" video by processing
-    # pairs sequentially. For each pair (accumulated, next_beat):
-    #   - CSS transition  → concat them (extend the accumulation)
-    #   - xfade           → apply xfade, track cumulative offset
+    # ── Build uniform xfade filter_complex ───────────────────────────
+    print(f"[assemble] Building xfade chain across {n} beats…")
 
-    print(f"[assemble] Building transition chain across {n} beats…")
-
-    # Get all durations up front
-    durs = [_video_duration(v) for v in beat_videos]
-
-    # We'll build the filter_complex incrementally.
     inputs = []
     for v in beat_videos:
         inputs += ["-i", str(v)]
 
     filter_parts = []
-    label_idx    = 0
     prev_label   = "[0:v]"
-    cumulative_s = durs[0]  # duration of what prev_label represents
+    cumulative_s = durs[0]
+    label_idx    = 0
 
     for i in range(1, n):
+        t = transitions[i] if i < len(transitions) else "cut"
+        xf_name, xf_dur = _XFADE_MAP.get(t, PASSTHROUGH)
+
+        offset     = max(0.0, cumulative_s - xf_dur)
         next_label = f"[{i}:v]"
-        t          = transitions[i] if i < len(transitions) else "cut"
-        xfade      = _XFADE_MAP.get(t)
+        out_label  = f"xf{label_idx}"
 
-        if xfade:
-            xf_name, xf_dur = xfade
-            # Offset = cumulative duration MINUS xfade duration
-            # (xfade starts this many seconds from the beginning of
-            #  the accumulated stream, overlapping the last xf_dur
-            #  seconds of beat i-1 with the first xf_dur seconds of beat i)
-            offset = max(0.0, cumulative_s - xf_dur)
-            out_label = f"xf{label_idx}"
-            filter_parts.append(
-                f"{prev_label}{next_label}"
-                f"xfade=transition={xf_name}"
-                f":duration={xf_dur:.3f}"
-                f":offset={offset:.3f}"
-                f"[{out_label}]"
-            )
-            print(f"[assemble]   Beat {i} ({t}): xfade={xf_name} "
-                  f"dur={xf_dur}s offset={offset:.2f}s")
-            cumulative_s += durs[i] - xf_dur
-        else:
-            # Plain concat: extend accumulated stream
-            out_label = f"ct{label_idx}"
-            filter_parts.append(
-                f"{prev_label}{next_label}concat=n=2:v=1:a=0[{out_label}]"
-            )
-            cumulative_s += durs[i]
+        filter_parts.append(
+            f"{prev_label}{next_label}"
+            f"xfade=transition={xf_name}"
+            f":duration={xf_dur:.4f}"
+            f":offset={offset:.4f}"
+            f"[{out_label}]"
+        )
 
-        prev_label = f"[{out_label}]"
-        label_idx += 1
+        kind = t if t in _XFADE_MAP else f"{t} (passthrough)"
+        print(f"[assemble]   Beat {i}→{i+1}: {kind}  offset={offset:.3f}s")
+
+        prev_label    = f"[{out_label}]"
+        label_idx    += 1
+        cumulative_s += durs[i] - xf_dur
 
     out = work / "assembled.mp4"
     _run(
@@ -241,7 +225,7 @@ def _build_xfade_chain(beat_videos, transitions, work, cfg):
             "-pix_fmt", "yuv420p",
             str(out),
         ],
-        f"Assemble with {sum(1 for _, xf in segments if xf)} xfade transition(s)"
+        f"Assemble {n} beats with xfade chain"
     )
     return out
 
