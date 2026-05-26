@@ -127,7 +127,8 @@ async function fetchUnsplashUrl(query) {
     const credit = data?.user?.name || 'unknown';
     console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
     console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
-    return imageUrl;
+    //return imageUrl;
+    return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
 
   } catch (err) {
     console.warn(`[capture] Unsplash fetch failed for "${query}": ${err.message}`);
@@ -315,7 +316,8 @@ const PAUSE_SCRIPT = `
         // exists here. Fall back to .scene only if depth planes are absent.
         const depthBg = scene.querySelector('.depth-bg') || scene;
 
-        const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';
+        //const scrim = 'linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.85))';
+        const scrim = 'linear-gradient(rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.80) 40%, rgba(0,0,0,0.80) 60%, rgba(0,0,0,0.92) 100%)';
         depthBg.style.backgroundImage    = scrim + ', ' + bgImage;
         depthBg.style.backgroundSize     = 'cover, cover';
         depthBg.style.backgroundPosition = 'center center, center center';

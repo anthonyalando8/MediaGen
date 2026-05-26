@@ -264,3 +264,13 @@
 .tint-serious     .ambient-particles {
   opacity: 0.45;
 }
+
+.depth-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 1;
+}
