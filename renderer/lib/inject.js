@@ -190,7 +190,12 @@
     hook:'1.1s', insight:'0.9s', climax:'1.4s', tension:'1.5s',
     truth:'0.9s', flip:'1.6s', payoff:'1.4s', cta:'0.9s',
   };
+  var KW_ENTRY_BASE = {
+    hook:'0.28s', insight:'0.35s', climax:'0.20s', tension:'0.40s',
+    truth:'0.32s', flip:'0.30s', payoff:'0.38s', cta:'0.28s',
+  };
   scene.style.setProperty('--kw-settle-delay', SETTLE_DELAYS[beat.scene] || '1.2s');
+  scene.style.setProperty('--kw-entry-base',   KW_ENTRY_BASE[beat.scene]  || '0.42s');
 
   var KW_SELECTORS = [
     '.hook-kw', '.insight-kw', '.climax-kw', '.cta-kw',
@@ -284,17 +289,33 @@
   if (beat.pace) scene.dataset.pace = beat.pace;
 
   // ── 17. Per-element micro-stagger ────────────────────────────────
-  // Adds a fibonacci-ish 0-40ms jitter so three sibling animations
-  // never land on the exact same frame. Deterministic from index.
+  // Adds a fibonacci-ish 0-40ms jitter so sibling animations never
+  // land on the exact same frame. Deterministic from index.
+  //
+  // SEEK-SAFE: .kw-word uses duration-based stagger (not delay).
+  // Setting animationDelay on .kw-word would put it in IDLE state,
+  // causing document.getAnimations() to skip it and seekAnimations()
+  // to never advance it → invisible keyword.
+  //
+  // For .kw-word: add micro-stagger to animationDuration instead.
+  // For .body-line: animationDelay is safe (body-line doesn't use
+  // opacity:0 as a base style, so IDLE state shows opacity:1 → visible).
   function microStagger(idx) {
     return [0, 13, 21, 34, 28][idx % 5] / 1000;
   }
-  ['.kw-word', '.body-line'].forEach(function (sel) {
-    scene.querySelectorAll(sel).forEach(function (el, i) {
-      var cs   = window.getComputedStyle(el);
-      var base = parseFloat(cs.animationDelay) || 0;
-      el.style.animationDelay = (base + microStagger(i)).toFixed(3) + 's';
-    });
+
+  // .kw-word: stagger via duration (delay=0 stays, Active state preserved)
+  scene.querySelectorAll('.kw-word').forEach(function (el, i) {
+    var cs  = window.getComputedStyle(el);
+    var dur = parseFloat(cs.animationDuration) || 0.78;
+    el.style.animationDuration = (dur + microStagger(i)).toFixed(3) + 's';
+  });
+
+  // .body-line: delay-based stagger is safe (no opacity:0 base state issue)
+  scene.querySelectorAll('.body-line').forEach(function (el, i) {
+    var cs   = window.getComputedStyle(el);
+    var base = parseFloat(cs.animationDelay) || 0;
+    el.style.animationDelay = (base + microStagger(i)).toFixed(3) + 's';
   });
 
   // ── 18. Emit exit_vector for next beat's entry_vector ────────────

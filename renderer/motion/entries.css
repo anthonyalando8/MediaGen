@@ -46,23 +46,56 @@
    At 0.3% the pulse was completely invisible.
    At 0.8% it reads as a gentle breath without distorting text.   */
 @keyframes kwIdlePulse {
-  0%, 100% { transform: scale(1.000); }
-  50%      { transform: scale(1.008); }
+  0%, 100% { transform: scale(1.000); opacity: 1;}
+  50%      { transform: scale(1.008); opacity: 1; }
 }
 
 .kw-pulse {
-  animation-name: kwIdlePulse;
-  animation-duration: 3.2s;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-delay: var(--kw-settle-delay, 1.2s);
-  animation-fill-mode: both;
+  animation: kwIdlePulse 3.2s ease-in-out var(--kw-settle-delay, 1.2s) infinite both;
 }
 
 /* ── KEYWORD UNDERLINE ───────────────────────────────────────────
    Slow blur-out for motion implication. Applied to kw-word::after
    which is already defined in _base.html; this overrides the easing
    and adds the blur sweep. */
+/* ── PER-WORD KINETIC TYPE ───────────────────────────────────────
+   Base state: opacity:0 !important ensures keyword is hidden before
+   animation fires (at t=80ms seek). CSS animations override !important
+   during playback — keyword punches in at delay (~0.42s+).
+   fill-mode:both = backward-fill opacity:0 before delay fires.        */
+.kw-word {
+  /* opacity:0 as base — fill-mode:both backward-fills the 0% keyframe
+     (also opacity:0), so keyword is hidden at t=0. Animation overrides
+     this once it reaches the 55%+ keyframe where opacity becomes 1.     */
+  opacity: 0;
+  display: inline-block;
+  transform: translateY(48px) scaleY(0.94);
+
+  /* SEEK-SAFE STAGGER — use duration, NOT animation-delay.
+     Animations with delay > 0 are IDLE before delay elapses.
+     document.getAnimations() skips IDLE animations → seekAnimations()
+     never advances them → keywords stay invisible forever.
+     
+     Fix: delay = 0 (animation starts immediately → Active state → seekable).
+     Stagger is encoded via duration: each word takes 130ms longer.
+     The 55% keyframe fires at: duration × 0.55
+       word 0: 0.78s × 0.55 = 429ms
+       word 1: 0.91s × 0.55 = 501ms
+       word 2: 1.04s × 0.55 = 572ms
+     Natural stagger without any animation-delay.                          */
+  animation: kwWordPunch
+             calc(0.78s + var(--word-index, 0) * 0.13s)
+             var(--ease-overshoot, cubic-bezier(.34,1.32,.64,1))
+             both;
+  /* NO animation-delay — any delay > 0 creates IDLE state, skipped by seek */
+}
+@keyframes kwWordPunch {
+  0%   { opacity: 0; transform: translateY(48px)  scaleY(0.94); filter: blur(3px); }
+  55%  { opacity: 1; transform: translateY(-7px)  scaleY(1.02); filter: blur(0);   }
+  75%  { opacity: 1; transform: translateY(2px)   scaleY(0.99); }
+  100% { opacity: 1; transform: translateY(0)     scaleY(1); }
+}
+
 .kw-word::after {
   animation: kwWordUnderline .42s var(--ease-cinema-out, cubic-bezier(.05,.9,.1,1)) forwards;
 }
@@ -165,36 +198,46 @@
   animation-delay: calc(var(--beat-dur, 4000ms) - 350ms);
 }
 
-@keyframes chromaAberration {
-  0%   {
-    opacity: 1;
-    filter: saturate(3) hue-rotate(-15deg) blur(0.5px);
-    transform: translate(-3px, 0) scaleX(1.004);
-  }
-  18%  {
-    opacity: 0.85;
-    filter: saturate(4) hue-rotate(15deg) blur(0px);
-    transform: translate(3px, 0) scaleX(0.998);
-  }
-  40%  {
-    opacity: 0.4;
-    filter: saturate(2) hue-rotate(-5deg) blur(0.3px);
-    transform: translate(-1px, 0) scaleX(1.001);
-  }
-  100% {
-    opacity: 0;
-    filter: saturate(1) hue-rotate(0deg) blur(0px);
-    transform: translate(0px, 0) scaleX(1.000);
-  }
-}
+/* chromaAberration keyframe moved into .trans-chroma block above */
+/* ── CHROMATIC ABERRATION FLASH ─────────────────────────────────────
+   FIX v3.3: The original used background:transparent with mix-blend-mode:screen.
+   A transparent element composited with screen = nothing visible.
+   
+   Fix: ::before uses a real red→blue colour flash (additive screen blend
+   = brightens scene tint without obscuring content).
+   .depth-fg gets a simultaneous X-translate to simulate channel offset
+   (the visual "RGB split" look of a real chroma glitch).
+   
+   Total duration 220ms = 6-7 frames at 30fps.
+   Visible on screen, brief enough to feel like a cut artifact.    */
 .trans-chroma::before {
   content: '';
   position: fixed; inset: 0;
-  background: transparent;
+  background: oklch(0.6 0.25 15 / 0.30);   /* red-orange base tint */
   pointer-events: none;
   z-index: var(--z-flash, 99);
-  animation: chromaAberration 0.18s ease-out forwards;
-  mix-blend-mode: screen;
+  mix-blend-mode: screen;                    /* additive: adds tint without hiding content */
+  animation: chromaAberration 0.22s ease-out forwards;
+}
+@keyframes chromaAberration {
+  0%   { opacity: 1.0; background: oklch(0.6 0.28 15  / 0.30); transform: translate(-4px, 0); }
+  30%  { opacity: 0.8; background: oklch(0.6 0.28 240 / 0.25); transform: translate( 4px, 0); }
+  65%  { opacity: 0.3; background: oklch(0.5 0.15 200 / 0.12); transform: translate(-1px, 0); }
+  100% { opacity: 0;   background: transparent;                 transform: translate( 0,  0); }
+}
+
+/* Channel-offset shift on .depth-fg (text plane) — the actual "split" visual.
+   Camera CSS may also have an animation on depth-fg; this runs additively
+   for only 220ms then exits cleanly. fill-mode:forwards holds translate(0,0)
+   so it doesn't interfere with the camera's long-running animation.        */
+.trans-chroma .depth-fg {
+  animation: chromaFgShift 0.22s ease-out forwards;
+}
+@keyframes chromaFgShift {
+  0%   { transform: translate(-3px, 0) scaleX(1.004); filter: blur(0.5px); }
+  30%  { transform: translate( 3px, 0) scaleX(0.997); filter: blur(0px);   }
+  65%  { transform: translate(-1px, 0) scaleX(1.001); filter: blur(0px);   }
+  100% { transform: translate( 0,   0) scaleX(1.000); filter: blur(0px);   }
 }
 
 /* ── STAGGER UTILITIES ───────────────────────────────────────────*/

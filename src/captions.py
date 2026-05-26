@@ -2,37 +2,34 @@
 captions.py  —  Word-level captions via whisper-timestamped → ASS format.
 
 Caption styles (set via config.yaml  subs.style):
-  auto         NEW v2 — picks a style from script.style / global.voice_style
-  karaoke      White text, yellow active word, semi-transparent box (TikTok classic)
-  glow         Light-cyan glow halo on active word, no box
-  neon         Dark box, electric cyan active word, aggressive glow
-  minimal      Clean white text, no box, subtle cyan accent shift
+  auto         picks a style from script.style / global.voice_style
+  karaoke      White text, yellow active word (native \\kf fill)
+  glow         Light-cyan glow halo on active word
+  neon         Dark box, electric cyan active word
+  minimal      Clean white text, no box, subtle accent on active word
   bold_drop    Large bold, heavy drop shadow, bright yellow active
+  documentary  White/grey text, single-word highlight, no glow (NEW — editorial)
 
 ────────────────────────────────────────────────────────────────────
-v2 — AUTO-STYLE
+v3 — PER-WORD DIALOGUE ENGINE
 ────────────────────────────────────────────────────────────────────
-When config.yaml sets subs.style: "auto", the style is derived from the
-script so every video gets captions that match its emotional register:
+Replaces the broken \\kf inline-tag approach with per-word Dialogue events.
 
-  contrarian / builder       → bold_drop  (punchy, max readability)
-  intense                    → neon       (aggressive)
-  cinematic                  → minimal    (editorial restraint)
-  calm / analytical          → minimal    (refined)
-  humorous                   → glow       (bright, friendly)
+The old approach put active_tag AFTER \\kf in the same Dialogue line:
+  {dim}{\\kf100}{active_tag}{word}{\\r}
+This applied active_tag immediately to ALL words (ASS override tags
+apply to all following text in the same event). Every word appeared
+at full brightness from frame 1 regardless of timing.
 
-Explicit config values still win — only "auto" triggers the mapping.
+The new approach (industry standard — matches CapCut/TikTok):
+  One Dialogue event per word, timed to its exact start/end.
+  A context window of ±CONTEXT_WORDS words is shown simultaneously.
+  - Active word:  bright accent colour, slightly larger
+  - Past words:   full white (already spoken)
+  - Future words: dim (50% white, upcoming)
 
-────────────────────────────────────────────────────────────────────
-KARAOKE DIRECTION FIX
-────────────────────────────────────────────────────────────────────
-Unspoken words now render DIM (50% white) until spoken, then flash to
-the active style (cyan/yellow/etc), then settle to full white once past.
-This matches the standard TikTok/Instagram karaoke expectation:
-  dim (upcoming) → bright/colored (now) → white (done)
-
-Previously all unspoken words were bright white, making the active word
-look like it was highlighting a word already in the past.
+This eliminates all \\kf timing ambiguity and works reliably with
+ffmpeg's libass renderer.
 """
 
 import pathlib
@@ -42,174 +39,189 @@ import json
 # ─────────────────────────────────────────────────────────────────────────────
 # ASS colour helpers
 # ─────────────────────────────────────────────────────────────────────────────
-# ASS colour format: &HAABBGGRR  (alpha, blue, green, red)
-# Alpha: 00 = opaque, FF = transparent
-
 def _rgba(r: int, g: int, b: int, a: int = 0) -> str:
+    """ASS colour: &HAABBGGRR  (alpha 00=opaque, FF=transparent)"""
     return f"&H{a:02X}{b:02X}{g:02X}{r:02X}"
 
-_WHITE      = _rgba(255, 255, 255)
-_BLACK      = _rgba(0,   0,   0  )
-_YELLOW     = _rgba(255, 255, 0  )
-_CYAN_LIGHT = _rgba(180, 240, 255)
-_CYAN_HOT   = _rgba(80,  220, 255)
-_CYAN_NEON  = _rgba(0,   255, 240)
-_TRANS      = _rgba(0,   0,   0, 255)
-_BOX_DARK   = _rgba(0,   0,   0, 96)
-_BOX_NEON   = _rgba(0,   0,   0, 140)
-
-# Dim/unspoken state — 50% transparent white, style-agnostic.
-# Applied as the pre-active override on every word so unspoken words
-# appear visually dim, making the active (bright/colored) word stand out.
-# After a word is spoken, {\r} resets to Base style (full white).
-#
-# Three-state karaoke sequence per word:
-#   1. Unspoken  → DIM_UNSPOKEN (50% white — upcoming)
-#   2. Speaking  → active_tag   (bright/colored — now)
-#   3. Spoken    → Base style   (full white — done)
-_DIM_UNSPOKEN = r"{\1c&H80FFFFFF}"
+_WHITE       = _rgba(255, 255, 255)
+_WHITE_DIM   = _rgba(255, 255, 255, 128)   # 50% alpha — unspoken words
+_BLACK       = _rgba(0,   0,   0  )
+_YELLOW      = _rgba(255, 255, 0  )
+_CYAN_LIGHT  = _rgba(180, 240, 255)
+_CYAN_HOT    = _rgba(80,  220, 255)
+_CYAN_NEON   = _rgba(0,   255, 240)
+_TRANS       = _rgba(0,   0,   0,  255)
+_BOX_DARK    = _rgba(0,   0,   0,  96 )
+_GREY_MID    = _rgba(160, 160, 160)        # documentary past-word colour
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AUTO-STYLE MAPPING — script.style → caption style
+# AUTO-STYLE MAPPING
 # ─────────────────────────────────────────────────────────────────────────────
 
 _CAPTION_BY_SCRIPT_STYLE = {
     "contrarian":  "bold_drop",
     "builder":     "bold_drop",
-    "intense":     "neon",
-    "cinematic":   "minimal",
+    "intense":     "documentary",    # was "neon" — too garish for editorial
+    "cinematic":   "documentary",
     "calm":        "minimal",
     "analytical":  "minimal",
     "humorous":    "glow",
 }
 
-# Voice-style fallback for cases where script.style is missing/unknown
 _CAPTION_BY_VOICE_STYLE = {
-    "calm_intense": "minimal",
+    "calm_intense": "documentary",
     "storyteller":  "glow",
     "aggressive":   "bold_drop",
-    "documentary":  "minimal",
-    "dramatic":     "neon",
+    "documentary":  "documentary",
+    "dramatic":     "documentary",
     "analytical":   "minimal",
     "comedic":      "glow",
 }
 
-_FALLBACK_STYLE = "karaoke"
+_FALLBACK_STYLE = "documentary"     # was "karaoke" — documentary is a better default
 
 
 def _auto_style_for_script(script: dict | None) -> str:
-    """Pick a caption style based on the script's style + voice_style."""
     if not script:
         return _FALLBACK_STYLE
-
     script_style = (script.get("style", "") or "").strip().lower()
     if script_style in _CAPTION_BY_SCRIPT_STYLE:
         return _CAPTION_BY_SCRIPT_STYLE[script_style]
-
     voice_style = (script.get("global", {}) or {}).get("voice_style", "").strip().lower()
     if voice_style in _CAPTION_BY_VOICE_STYLE:
         return _CAPTION_BY_VOICE_STYLE[voice_style]
-
     return _FALLBACK_STYLE
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Style definitions
 # ─────────────────────────────────────────────────────────────────────────────
+# Each style returns a dict with:
+#   ass_style_line   — single ASS Style: line used for ALL words
+#   active_colour    — &HBBGGRR for the speaking word
+#   past_colour      — colour for already-spoken words
+#   future_colour    — colour for upcoming words
+#   active_bold      — True/False
+#   active_size_add  — pixels added to font_size for active word
+#   outline          — outline width
+#   shadow           — shadow depth
+#   border_style     — 1=outline+shadow  3=opaque box
+#   back_colour      — box/shadow background colour
 
-def _get_style_def(style: str, fs: int, fs_hi: int) -> dict:
-    """Return ASS Style + per-line override tags for one caption style."""
+def _get_style_def(style: str, fs: int) -> dict:
 
-    if style == "glow":
-        return {
-            "header_base": (
-                f"Style: Base,Space Grotesk,{fs},"
-                f"{_WHITE},{_TRANS},{_rgba(0,0,0,200)},{_TRANS},"
-                f"1,0,0,0,100,100,0,0,1,1.5,0,2,80,80,220,1"
+    if style == "documentary":
+        # ── Clean editorial: white past, accent active, dim future ──
+        # No glow, no box — matches the cinematic scene aesthetic.
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
+                f"{_WHITE},{_TRANS},{_rgba(0,0,0,180)},{_TRANS},"
+                f"0,0,0,0,100,100,0,0,1,1.5,0,2,80,80,160,1"
             ),
-            "header_active": (
-                f"Style: Active,Space Grotesk,{fs_hi},"
-                f"{_CYAN_LIGHT},{_TRANS},{_CYAN_HOT},{_TRANS},"
-                f"1,0,0,0,100,100,0,0,1,5,0,2,80,80,220,1"
-            ),
-            "base_tag":   r"{\blur0}",
-            "active_tag": r"{\1c" + _CYAN_LIGHT + r"\3c" + _CYAN_HOT + r"\bord6\blur8\fs" + str(fs_hi) + r"}",
-            "dim_tag":    _DIM_UNSPOKEN,
-        }
-
-    elif style == "neon":
-        return {
-            "header_base": (
-                f"Style: Base,Space Grotesk,{fs},"
-                f"{_WHITE},{_TRANS},{_BLACK},{_BOX_NEON},"
-                f"1,0,0,0,100,100,0,0,1,2,0,2,80,80,220,1"
-            ),
-            "header_active": (
-                f"Style: Active,Space Grotesk,{fs_hi},"
-                f"{_CYAN_NEON},{_TRANS},{_CYAN_NEON},{_BOX_NEON},"
-                f"1,0,0,0,100,100,0,0,1,6,0,2,80,80,220,1"
-            ),
-            "base_tag":   r"{\blur0}",
-            "active_tag": r"{\1c" + _CYAN_NEON + r"\3c" + _CYAN_NEON + r"\bord8\blur12\fs" + str(fs_hi) + r"}",
-            "dim_tag":    _DIM_UNSPOKEN,
-        }
+            active_colour  = _CYAN_LIGHT,
+            past_colour    = _WHITE,
+            future_colour  = _WHITE_DIM,
+            active_bold    = True,
+            active_size_add= 4,
+            outline        = 1.5,
+            shadow         = 0,
+            border_style   = 1,
+            back_colour    = _TRANS,
+        )
 
     elif style == "minimal":
-        return {
-            "header_base": (
-                f"Style: Base,Space Grotesk,{fs},"
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
                 f"{_WHITE},{_TRANS},{_rgba(0,0,0,160)},{_TRANS},"
-                f"0,0,0,0,100,100,0,0,1,1,0,2,80,80,220,1"
+                f"0,0,0,0,100,100,0,0,1,1,0,2,80,80,160,1"
             ),
-            "header_active": (
-                f"Style: Active,Space Grotesk,{fs_hi},"
-                f"{_CYAN_LIGHT},{_TRANS},{_rgba(0,0,0,180)},{_TRANS},"
-                f"0,0,0,0,100,100,0,0,1,1,0,2,80,80,220,1"
-            ),
-            "base_tag":   r"{\blur0}",
-            "active_tag": r"{\1c" + _CYAN_LIGHT + r"\bord1\blur0\fs" + str(fs_hi) + r"}",
-            "dim_tag":    _DIM_UNSPOKEN,
-        }
+            active_colour  = _CYAN_LIGHT,
+            past_colour    = _WHITE,
+            future_colour  = _WHITE_DIM,
+            active_bold    = False,
+            active_size_add= 2,
+            outline        = 1,
+            shadow         = 0,
+            border_style   = 1,
+            back_colour    = _TRANS,
+        )
 
     elif style == "bold_drop":
         _SHADOW_COL = _rgba(0, 0, 0, 40)
-        return {
-            "header_base": (
-                f"Style: Base,Space Grotesk,{fs},"
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
                 f"{_WHITE},{_TRANS},{_BLACK},{_SHADOW_COL},"
-                f"1,0,0,0,100,100,0,0,1,2,4,2,80,80,220,1"
+                f"1,0,0,0,100,100,0,0,1,2,4,2,80,80,160,1"
             ),
-            "header_active": (
-                f"Style: Active,Space Grotesk,{fs_hi},"
-                f"{_YELLOW},{_TRANS},{_BLACK},{_SHADOW_COL},"
-                f"1,0,0,0,100,100,0,0,1,2,4,2,80,80,220,1"
+            active_colour  = _YELLOW,
+            past_colour    = _WHITE,
+            future_colour  = _WHITE_DIM,
+            active_bold    = True,
+            active_size_add= 6,
+            outline        = 2,
+            shadow         = 4,
+            border_style   = 1,
+            back_colour    = _SHADOW_COL,
+        )
+
+    elif style == "glow":
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
+                f"{_WHITE},{_TRANS},{_rgba(0,0,0,200)},{_TRANS},"
+                f"1,0,0,0,100,100,0,0,1,1.5,0,2,80,80,160,1"
             ),
-            "base_tag":   r"{\blur0\shad4}",
-            "active_tag": r"{\1c" + _YELLOW + r"\shad5\bord2\blur0\fs" + str(fs_hi) + r"}",
-            "dim_tag":    _DIM_UNSPOKEN,
-        }
+            active_colour  = _CYAN_LIGHT,
+            past_colour    = _WHITE,
+            future_colour  = _WHITE_DIM,
+            active_bold    = True,
+            active_size_add= 4,
+            outline        = 5,      # glow via thick outline
+            shadow         = 0,
+            border_style   = 1,
+            back_colour    = _TRANS,
+        )
+
+    elif style == "neon":
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
+                f"{_WHITE},{_TRANS},{_BLACK},{_BOX_DARK},"
+                f"1,0,0,0,100,100,0,0,1,2,0,2,80,80,160,1"
+            ),
+            active_colour  = _CYAN_NEON,
+            past_colour    = _WHITE,
+            future_colour  = _WHITE_DIM,
+            active_bold    = True,
+            active_size_add= 4,
+            outline        = 2,
+            shadow         = 0,
+            border_style   = 1,
+            back_colour    = _BOX_DARK,
+        )
 
     else:
-        # ── KARAOKE (default) ─────────────────────────────────────
-        # Karaoke uses native \kf fill — dim_tag is unused (active_tag=None)
-        hi   = "&H0000FFFF"
-        back = "&H60000000"
-        return {
-            "header_base": (
-                f"Style: Base,Space Grotesk,{fs},"
-                f"&H00FFFFFF,&H000000FF,&H00000000,{back},"
-                f"1,0,0,0,100,100,1,0,1,4,2,2,80,80,220,1"
+        # karaoke — native \kf, no per-word engine
+        return dict(
+            ass_style_line=(
+                f"Style: Cap,Space Grotesk,{fs},"
+                f"&H00FFFFFF,&H000000FF,&H00000000,&H60000000,"
+                f"1,0,0,0,100,100,1,0,1,4,2,2,80,80,160,1"
             ),
-            "header_active": (
-                f"Style: Active,Space Grotesk,{fs_hi},"
-                f"{hi},&H000000FF,&H00000000,{back},"
-                f"1,0,0,0,100,100,1,0,1,4,2,2,80,80,220,1"
-            ),
-            "base_tag":   r"{\k0}",
-            "active_tag": None,
-            "dim_tag":    None,   # native \kf handles timing — no dim needed
-        }
+            active_colour  = None,   # sentinel: use legacy \kf path
+            past_colour    = _WHITE,
+            future_colour  = None,
+            active_bold    = False,
+            active_size_add= 0,
+            outline        = 4,
+            shadow         = 2,
+            border_style   = 1,
+            back_colour    = _rgba(0,0,0,96),
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -225,16 +237,16 @@ ScaledBorderAndShadow: yes
 WrapStyle: 0
 
 [V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginV, MarginL, MarginR, Encoding
-{style_base}
-{style_active}
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+{style_line}
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
-_MAX_WORDS_PER_LINE = 6
-_LINE_LINGER        = 0.18
+# Fixed-line karaoke config
+_MAX_PER_LINE   = 5      # words per line — fits 1080px at 58px font
+_LINE_LINGER    = 0.12   # seconds last word in chunk stays visible
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -249,35 +261,103 @@ def _ts(sec: float) -> str:
     return f"{h}:{m:02d}:{int(s):02d}.{cs:02d}"
 
 
-def _karaoke_line(words: list[dict], active_tag: str | None, dim_tag: str | None) -> str:
+def _colour_tag(colour: str) -> str:
+    return "{\\1c" + colour + "}"
+
+
+def _bold_tag(on: bool) -> str:
+    return "{\\b1}" if on else "{\\b0}"
+
+
+def _size_tag(fs: int) -> str:
+    return "{\\fs" + str(fs) + "}"
+
+
+def _reset_tag() -> str:
+    return "{\\r}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-word Dialogue engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _build_per_word_events(
+    words:     list[dict],
+    sdef:      dict,
+    fs:        int,
+    fs_active: int,
+) -> list[str]:
     """
-    Build the inline-tagged text for one caption line.
+    Fixed-line karaoke engine (v4).
 
-    Three-state sequence per word (when active_tag and dim_tag are set):
-      dim_tag   → unspoken words appear at 50% white (upcoming)
-      \\kf{N}   → marks the word's active window (N centiseconds)
-      active_tag → bright/colored style during the active window
-      word text
-      {\\r}      → resets to Base style = full white (already spoken)
+    Words are grouped into fixed chunks of _MAX_PER_LINE.
+    For each active word position within a chunk, ONE Dialogue event is
+    emitted. The line text is identical across all events in the chunk —
+    only the colour tags change. The caption line stays visually static
+    (no words sliding in/out) — reader tracks the highlight, not the text.
 
-    This produces the standard TikTok karaoke direction:
-      DIM → BRIGHT → WHITE  (upcoming → now → past)
-
-    For the native karaoke style (active_tag=None), standard \\kf fill is
-    used without color overrides — the Base/Active styles handle everything.
+    This matches TikTok/CapCut rendering.
     """
-    parts = []
-    for w in words:
-        dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
-        word   = w["text"].strip()
-        if active_tag is None:
-            # Native karaoke: \kf timing only, no color overrides
-            parts.append(f"{{\\kf{dur_cs}}}{word} ")
-        else:
-            # dim → active window → bright → reset to white
-            dim = dim_tag or ""
-            parts.append(f"{dim}{{\\kf{dur_cs}}}{active_tag}{word}{{\\r}} ")
-    return "".join(parts).rstrip()
+    events = []
+    n      = len(words)
+
+    for chunk_start in range(0, n, _MAX_PER_LINE):
+        chunk          = words[chunk_start: chunk_start + _MAX_PER_LINE]
+        chunk_end_time = chunk[-1]["end"] + _LINE_LINGER
+
+        for local_i, w in enumerate(chunk):
+            t_start = w["start"]
+
+            # End = next word start (no gap, no overlap within chunk)
+            if local_i + 1 < len(chunk):
+                t_end = chunk[local_i + 1]["start"]
+            else:
+                # Last word: linger, but clamp to next chunk start
+                next_start = words[chunk_start + _MAX_PER_LINE]["start"] \
+                    if chunk_start + _MAX_PER_LINE < n else float("inf")
+                t_end = min(chunk_end_time, next_start)
+
+            # Build line — ALL words in chunk visible, colours differ only
+            parts = []
+            for j, ctx_word in enumerate(chunk):
+                text = ctx_word["text"].strip()
+                if not text:
+                    continue
+                if j == local_i:
+                    tag = (
+                        _reset_tag()
+                        + _colour_tag(sdef["active_colour"])
+                        + (_bold_tag(True) if sdef["active_bold"] else "")
+                        + _size_tag(fs_active)
+                    )
+                elif j < local_i:
+                    tag = _reset_tag() + _colour_tag(sdef["past_colour"])
+                else:
+                    tag = _reset_tag() + _colour_tag(sdef["future_colour"])
+                parts.append(f"{tag}{text}")
+
+            events.append(
+                f"Dialogue: 0,{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{' '.join(parts)}"
+            )
+
+    return events
+
+
+def _build_legacy_karaoke_events(words: list[dict]) -> list[str]:
+    """Native \\kf karaoke — only used for style='karaoke'."""
+    events = []
+    for chunk_i in range(0, len(words), _MAX_WORDS_PER_LINE):
+        chunk  = words[chunk_i: chunk_i + _MAX_WORDS_PER_LINE]
+        t_in   = chunk[0]["start"]
+        t_out  = chunk[-1]["end"] + 0.18
+        parts  = []
+        for w in chunk:
+            dur_cs = max(1, int(round((w["end"] - w["start"]) * 100)))
+            parts.append(f"{{\\kf{dur_cs}}}{w['text'].strip()} ")
+        events.append(
+            f"Dialogue: 0,{_ts(t_in)},{_ts(t_out)},Cap,,0,0,0,,{''.join(parts).rstrip()}"
+        )
+    return events
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -290,51 +370,47 @@ def _build_ass(
     cfg:        dict,
     script:     dict | None = None,
 ) -> pathlib.Path:
-    sc      = cfg["subs"]
-    vid     = cfg["video"]
-    fs      = sc["font_size"]
-    fs_hi   = sc["font_size_active"]
+    sc  = cfg["subs"]
+    vid = cfg["video"]
+    fs      = sc.get("font_size",        58)   # reduced from ~80 → cleaner
+    fs_hi   = sc.get("font_size_active", 66)   # active word slightly larger
 
-    raw_style = (sc.get("style", "karaoke") or "karaoke").strip().lower()
+    raw_style = (sc.get("style", "auto") or "auto").strip().lower()
     if raw_style == "auto":
         style = _auto_style_for_script(script)
-        print(f"[captions] subs.style='auto' → resolved to '{style}' "
-              f"(script.style='{(script or {}).get('style','')}')")
+        print(f"[captions] subs.style='auto' → resolved to '{style}'")
     else:
         style = raw_style
         print(f"[captions] Caption style: {style}")
 
-    sdef = _get_style_def(style, fs, fs_hi)
+    sdef = _get_style_def(style, fs)
 
     header = _HEADER_TMPL.format(
         w=vid["width"],
         h=vid["height"],
-        style_base=sdef["header_base"],
-        style_active=sdef["header_active"],
+        style_line=sdef["ass_style_line"],
     )
 
-    active_tag      = sdef["active_tag"]
-    dim_tag         = sdef["dim_tag"]
-    base_tag_prefix = sdef["base_tag"]
-    dialogue_lines: list[str] = []
-
+    all_words: list[dict] = []
     for seg in transcript.get("segments", []):
         words = seg.get("words", [])
         if not words:
+            # No word-level timestamps — treat segment as single word
             words = [{"text": seg["text"], "start": seg["start"], "end": seg["end"]}]
+        all_words.extend(words)
 
-        for chunk_i in range(0, len(words), _MAX_WORDS_PER_LINE):
-            chunk  = words[chunk_i: chunk_i + _MAX_WORDS_PER_LINE]
-            t_in   = chunk[0]["start"]
-            t_out  = chunk[-1]["end"] + _LINE_LINGER
-            kline  = _karaoke_line(chunk, active_tag, dim_tag)
-            dialogue_lines.append(
-                f"Dialogue: 0,{_ts(t_in)},{_ts(t_out)},Base,,0,0,0,,{base_tag_prefix}{kline}"
-            )
+    # Build Dialogue events
+    if sdef["active_colour"] is None:
+        # Legacy karaoke path
+        dialogue_lines = _build_legacy_karaoke_events(all_words)
+    else:
+        # Per-word engine (all other styles)
+        dialogue_lines = _build_per_word_events(all_words, sdef, fs, fs_hi)
 
     content = header + "\n".join(dialogue_lines) + "\n"
     out_path.write_text(content, encoding="utf-8")
-    print(f"[captions] ✓ captions.ass — {len(dialogue_lines)} lines  [{style}]")
+    print(f"[captions] ✓ captions.ass — {len(dialogue_lines)} events  [{style}]  "
+          f"fs={fs}/{fs_hi}")
     return out_path
 
 
@@ -351,10 +427,8 @@ def generate_captions(
     """
     Transcribe voice.wav and write captions.ass.
 
-    script (optional) — when provided AND cfg.subs.style == "auto",
+    script (optional) — when provided AND cfg.subs.style == 'auto',
     the caption style is derived from script.style / global.voice_style.
-
-    Returns path to .ass file.
     """
     sc = cfg["subs"]
     transcript = _transcribe(wav_path, sc["whisper_model"], sc["language"])
