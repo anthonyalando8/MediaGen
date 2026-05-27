@@ -57,7 +57,7 @@ def calc_kw_font_size(keyword: str, layout: str, scene: str) -> int:
         'flip':   168, 'payoff': 168,
         'tension':104, 'insight':104, 'cta':    104,
     }
-    SAFETY:  float = 0.85   # was 0.90 — combined with Chromium scale gives safe margin
+    SAFETY:  float = 0.82   # empirically calibrated: 0.85 still clips 'D' on OUTSMARTED
     MIN_PX:  int   = 56
 
     usable  = LAYOUT_CONTAINER_PX.get(layout, 920) * SAFETY
@@ -81,17 +81,17 @@ def calc_kw_font_size(keyword: str, layout: str, scene: str) -> int:
 # ── Self-test ─────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
     cases = [
-        ("FAKE CONFIDENCE",            "right",  "hook",    128),
+        ("FAKE CONFIDENCE",            "right",  "hook", 124),
         ("HIDDEN RESENTMENT",          "right",  "tension", 104),
         ("COLLECTIVE HALLUCINATION",   "left",   "insight", 104),
-        ("THE GREAT LIE",              "left",   "truth",   168),
+        ("THE GREAT LIE",              "left",   "truth", 164),
         ("SYSTEMIC FRAUD",             "full",   "hook",    168),
-        ("MOMENTUM",                   "left",   "truth",   146),
-        ("IRREPLACEABLE",              "full",   "climax",  130),
-        ("DISAPPOINTMENT",             "left",   "truth",   105),
+        ("MOMENTUM",                   "left",   "truth", 141),
+        ("IRREPLACEABLE",              "full",   "climax", 125),
+        ("DISAPPOINTMENT",             "left",   "truth", 102),
         ("OVERWHELMED",                "right",  "tension", 104),
-        ("WILLPOWER",                  "left",   "climax",  156),
-        ("YOU\'RE OUTSMARTED",          "left",   "hook",    136),
+        ("WILLPOWER",                  "left",   "climax", 150),
+        ("YOU\'RE OUTSMARTED",          "left",   "hook", 131),
         ("BEGINNER FOREVER",           "left",   "truth",   168),
         ("UNTRAINED MUSCLE",           "full",   "climax",  168),
         ("ONE FINISHED WIN",           "center", "cta",     104),
