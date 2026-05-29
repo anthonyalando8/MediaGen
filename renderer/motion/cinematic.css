@@ -71,19 +71,18 @@
    ================================================================ */
 @keyframes settleDrift {
   0%   { transform: translate(0px, 0px) scale(1.000); }
-  25%  { transform: translate(calc(var(--life-amp,1) * 2px), calc(var(--life-amp,1) * -1.5px)) scale(1.003); }
-  50%  { transform: translate(calc(var(--life-amp,1) * 3px), calc(var(--life-amp,1) * -2.5px)) scale(1.005); }
-  75%  { transform: translate(calc(var(--life-amp,1) * 1px), calc(var(--life-amp,1) * -3px))   scale(1.003); }
+  50%  { transform: translate(calc(var(--life-amp,1) * 7px), calc(var(--life-amp,1) * -6px)) scale(calc(1 + var(--life-amp,1) * 0.012)); }
   100% { transform: translate(0px, 0px) scale(1.000); }
 }
 
-/* Apply to all scene content containers and body blocks.
-   The selector list mirrors the comp-mutator targets so we know
-   every scene type is covered without touching individual spans. */
+/* v5: applied to the BODY block only (not the kw-wrap — the title breathes
+   via kwIdlePulse). This is the body's INDEPENDENT secondary motion: it runs
+   on a different period (~6.5s) from the foreground group drift (~13s), so
+   body and title never move in lockstep — that desync is the "layered, not
+   synchronized" feel. linear timing keeps a constant, seek-safe velocity. */
 [class$="-content"],
-[class$="-kw-wrap"],
 [class$="-body"]:not(.body-line) {
-  animation: settleDrift var(--settle-dur, 10s) var(--ease-glide)
+  animation: settleDrift var(--settle-dur, 6.5s) linear
              var(--settle-delay, -4s) infinite both;
 }
 

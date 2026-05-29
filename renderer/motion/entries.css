@@ -47,8 +47,8 @@
    At 0.8% it reads as a gentle breath without distorting text.   */
 @keyframes kwIdlePulse {
   0%, 100% { transform: translateY(0) scale(1.000); }
-  50%      { transform: translateY(calc(var(--life-amp,1) * -1.5px))
-                        scale(calc(1 + 0.012 * var(--life-amp,1))); }
+  50%      { transform: translateY(calc(var(--life-amp,1) * -2.5px))
+                        scale(calc(1 + 0.018 * var(--life-amp,1))); }
 }
 
 /* v4: delay 0->negative (positive delay = idle before-phase the seek

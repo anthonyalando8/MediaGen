@@ -54,13 +54,13 @@
 }
 /* fg deliberately empty — text stays locked */
 @keyframes camStaticDrift {
-  0%   { transform: scale(1.00) translateY(0px);   }
-  50%  { transform: scale(1.04) translateY(-5px);  }
-  100% { transform: scale(1.07) translateY(-10px); }
+  0%   { transform: scale(1.02) translate(0px, 0px);    }
+  50%  { transform: scale(1.07) translate(-6px, -7px);  }
+  100% { transform: scale(1.12) translate(4px, -14px);  }
 }
 @keyframes camStaticMid {
-  0%   { transform: scale(1.00) translateY(0px); }
-  100% { transform: scale(1.02) translateY(-4px); }
+  0%   { transform: scale(1.00) translate(0px, 0px);  }
+  100% { transform: scale(1.04) translate(3px, -6px); }
 }
 
 /* ───────────────────────────────────────────────────────────────────

@@ -35,7 +35,8 @@
   if (!scene) return;
 
   /* Global dial — raise/lower the whole perpetual system at once.
-     1.0 == the tuned default (≈ "5/10 boldness"). */
+     1.0 == the v5 tuned default (≈ "7/10 boldness" — clearly alive,
+     still premium). Drop to 0.7 for restraint, push to 1.3 for more. */
   var LIFE_CEILING = 1.0;
 
   // ── 25. WRAP EACH PLANE'S CHILDREN IN .life-layer ────────────────
@@ -73,13 +74,15 @@
   // ── 27. EMOTIONAL COUPLING → amplitude / character / speed ───────
   var pace = beat.pace || 'mid';
 
-  // amplitude by pace, then nudged by intensity, then global ceiling
-  var AMP_BY_PACE = { slow: 0.75, mid: 1.00, fast: 1.20, explosive: 1.55 };
-  var ampBase = AMP_BY_PACE[pace] != null ? AMP_BY_PACE[pace] : 1.0;
-  var amp = ampBase * (0.80 + intensity * 0.50) * LIFE_CEILING;
+  // amplitude by pace, then nudged by intensity, then global ceiling.
+  // v5: floor raised so even calm/slow beats are unmistakably alive.
+  var AMP_BY_PACE = { slow: 0.85, mid: 1.05, fast: 1.30, explosive: 1.70 };
+  var ampBase = AMP_BY_PACE[pace] != null ? AMP_BY_PACE[pace] : 1.05;
+  var amp = ampBase * (0.88 + intensity * 0.34) * LIFE_CEILING;
 
-  // duration multiplier by pace (calm = slower/longer periods)
-  var DUR_BY_PACE = { slow: 1.30, mid: 1.00, fast: 0.82, explosive: 0.66 };
+  // duration multiplier by pace (calm = slower/longer periods). Kept modest
+  // so periods stay ~2-2.5x the beat → continuous in-beat travel.
+  var DUR_BY_PACE = { slow: 1.20, mid: 1.00, fast: 0.86, explosive: 0.72 };
   var dm = DUR_BY_PACE[pace] != null ? DUR_BY_PACE[pace] : 1.0;
 
   // rotation character by emotion — taut/nervous scenes rotate more,
@@ -94,14 +97,28 @@
   scene.style.setProperty('--life-amp', amp.toFixed(3));
   scene.style.setProperty('--life-rot-mult', rot.toFixed(2));
 
-  // final periods (seconds) — base × pace multiplier
-  var bgDur    = 19 * dm;
-  var midDur   = 13 * dm;
-  var fgDur    = 17 * dm;
-  var hazeDur  = 31 * dm;
-  var breathDur= 11 * dm;
-  var settleDur= 10 * dm;
+  // final periods (seconds) — base × pace multiplier.
+  // v5: periods are ~2-2.5x a 5s beat so each beat shows continuous travel.
+  var bgDur    = 11 * dm;
+  var midDur   = 9.5 * dm;
+  var fgDur    = 13 * dm;
+  var hazeDur  = 17 * dm;
+  var breathDur= 7.5 * dm;
+  var settleDur= 6.5 * dm;
   var kwDur    = 4.6 * dm;
+
+  // ── PER-BEAT DIRECTION FLIP ────────────────────────────────────
+  // Flip the drift bias per beat so consecutive scenes lean different
+  // ways (kills the "every scene moves the same" predictability). The
+  // negative-delay phase shift below adds further variety on top.
+  var bgSx = (bi % 2 === 0) ? 1 : -1;
+  var bgSy = (bi % 4 < 2)   ? -1 : 1;
+  var fgSx = (bi % 3 === 0) ? -1 : 1;
+  var fgSy = ((bi + 1) % 2 === 0) ? -1 : 1;
+  scene.style.setProperty('--bg-dx', String(bgSx));
+  scene.style.setProperty('--bg-dy', String(bgSy));
+  scene.style.setProperty('--fg-dx', String(fgSx));
+  scene.style.setProperty('--fg-dy', String(fgSy));
 
   scene.style.setProperty('--life-bg-dur',  bgDur.toFixed(1) + 's');
   scene.style.setProperty('--life-mid-dur', midDur.toFixed(1) + 's');
