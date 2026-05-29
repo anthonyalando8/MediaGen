@@ -1,0 +1,220 @@
+/* ================================================================
+   ambient-life.css  --  PERPETUAL MOTION SYSTEM (v4)
+   Load AFTER camera.css + cinematic.css, BEFORE retention.css.
+   Add the <link> in scenes/_base.html (see note at bottom).
+   ================================================================
+   WHY THIS EXISTS
+   ---------------------------------------------------------------
+   The old runtime animated elements IN, then they settled and the
+   frame reached zero velocity. Two causes:
+     1. every camera ease decelerated to a dead stop (fixed in camera.css)
+     2. the only "perpetual" loops sat behind a positive animation-delay
+        (kwIdlePulse +1.2s, settleDrift +1.4s) — the exact pattern the
+        seek-renderer handles unreliably — and were sub-perceptual anyway.
+
+   THE PRIMITIVE
+   ---------------------------------------------------------------
+   Under capture.js the ONLY motion that survives is a WAAPI animation
+   that document.getAnimations() returns and that is seekable by
+   currentTime. The bullet-proof, always-Active, always-seekable shape is:
+
+        animation: <name> <dur> linear <NEGATIVE-or-0 delay> infinite both;
+
+   - infinite  → at any currentTime t the engine shows phase (t/dur)%1.
+                 The loop NEVER ends → the frame NEVER freezes.
+   - delay = 0 or NEGATIVE → the "before phase" is empty, so the animation
+                 is in the Active state at t=0 and is always returned by
+                 getAnimations() and advanced by seek. (A POSITIVE delay
+                 creates an idle before-phase — avoid it for perpetual loops.)
+   - negative delay is also our DESYNC tool: it only phase-shifts the loop,
+                 so inject.js can offset every layer / every beat so nothing
+                 moves in lockstep. 100% seek-safe.
+
+   COMPOSITION (no transform conflicts)
+   ---------------------------------------------------------------
+   camera.css animates the depth PLANES (.depth-bg/.depth-mid/.depth-fg).
+   Two animations writing `transform` on one element do NOT compose — the
+   later one wins outright. So we never touch the planes here. inject.js
+   wraps each plane's children in an inner `.life-layer`; the camera moves
+   the plane, the perpetual loop moves the inner layer, and because they
+   are separate elements the transforms multiply cleanly. Parallax for free.
+
+   EMOTIONAL COUPLING (inject.js sets these per beat)
+   ---------------------------------------------------------------
+     --life-amp      master amplitude   (calm .7  → explosive 1.6)
+     --life-rot-mult rotation character (calm 0   → tense ~1.4)
+     --life-bg-dur / --life-mid-dur / --life-fg-dur / --haze-dur
+                     final periods, already multiplied by pace
+     --life-*-delay  negative phase offsets (desync, per beat)
+   Same keyframes everywhere; the three knobs make calm scenes drift wide
+   and slow, tense scenes feel taut and nervous, explosive scenes push hard.
+   ================================================================ */
+
+:root {
+  /* Safe neutral defaults — render fine even if inject.js never runs. */
+  --life-amp:       1;
+  --life-rot-mult:  0.5;
+
+  --life-bg-dur:   19s;
+  --life-mid-dur:  13s;
+  --life-fg-dur:   17s;
+  --haze-dur:      31s;
+  --breath-dur:    11s;
+
+  --life-bg-delay:  -3s;
+  --life-mid-delay: -7s;
+  --life-fg-delay:  -5s;
+  --haze-delay:    -12s;
+}
+
+/* The inner layer fills its plane exactly so child absolute-positioning
+   (scene CSS targets .{scene}-content etc. through it) is unchanged. */
+.life-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  will-change: transform;
+  /* No overflow here — the parent .depth-* already clips (cinematic.css). */
+}
+
+/* ── BACKGROUND — biggest, slowest mover (deep parallax) ─────────── */
+.depth-bg > .life-layer {
+  animation: lifeDriftBg var(--life-bg-dur, 19s) linear
+             var(--life-bg-delay, -3s) infinite both;
+}
+@keyframes lifeDriftBg {
+  0%   { transform: translate(calc(var(--life-amp) *  0px), calc(var(--life-amp) *  0px))
+                    scale(1.000) rotate(calc(var(--life-rot-mult) *  0.00deg)); }
+  25%  { transform: translate(calc(var(--life-amp) *  9px), calc(var(--life-amp) * -7px))
+                    scale(1.012) rotate(calc(var(--life-rot-mult) *  0.10deg)); }
+  50%  { transform: translate(calc(var(--life-amp) * 13px), calc(var(--life-amp) *  6px))
+                    scale(1.018) rotate(calc(var(--life-rot-mult) * -0.06deg)); }
+  75%  { transform: translate(calc(var(--life-amp) * -6px), calc(var(--life-amp) * 10px))
+                    scale(1.010) rotate(calc(var(--life-rot-mult) *  0.08deg)); }
+  100% { transform: translate(calc(var(--life-amp) *  0px), calc(var(--life-amp) *  0px))
+                    scale(1.000) rotate(calc(var(--life-rot-mult) *  0.00deg)); }
+}
+
+/* ── MID — medium, opposes bg slightly so planes separate ───────── */
+.depth-mid > .life-layer {
+  animation: lifeDriftMid var(--life-mid-dur, 13s) linear
+             var(--life-mid-delay, -7s) infinite both;
+}
+@keyframes lifeDriftMid {
+  0%   { transform: translate(calc(var(--life-amp) *   0px), calc(var(--life-amp) *  0px)); }
+  30%  { transform: translate(calc(var(--life-amp) *  -7px), calc(var(--life-amp) *  5px)); }
+  60%  { transform: translate(calc(var(--life-amp) *   6px), calc(var(--life-amp) *  8px)); }
+  100% { transform: translate(calc(var(--life-amp) *   0px), calc(var(--life-amp) *  0px)); }
+}
+
+/* ── FOREGROUND — smallest mover; text stays sharp + readable ───── */
+.depth-fg > .life-layer {
+  animation: lifeDriftFg var(--life-fg-dur, 17s) linear
+             var(--life-fg-delay, -5s) infinite both;
+}
+@keyframes lifeDriftFg {
+  0%   { transform: translate(calc(var(--life-amp) *  0px), calc(var(--life-amp) *  0px))
+                    scale(1.000) rotate(calc(var(--life-rot-mult) *  0.00deg)); }
+  33%  { transform: translate(calc(var(--life-amp) *  2.5px), calc(var(--life-amp) * -2px))
+                    scale(1.004) rotate(calc(var(--life-rot-mult) *  0.03deg)); }
+  66%  { transform: translate(calc(var(--life-amp) * -2px),  calc(var(--life-amp) *  2.5px))
+                    scale(1.006) rotate(calc(var(--life-rot-mult) * -0.025deg)); }
+  100% { transform: translate(calc(var(--life-amp) *  0px), calc(var(--life-amp) *  0px))
+                    scale(1.000) rotate(calc(var(--life-rot-mult) *  0.00deg)); }
+}
+
+/* ================================================================
+   ATMOSPHERIC HAZE — a slow soft light that crosses the frame.
+   inject.js inserts <div class="atmos-haze"> into the mid life-layer.
+   Pure additive light (screen blend), very low opacity. The "air moves".
+   ================================================================ */
+.atmos-haze {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    42% 38% at 30% 35%,
+    oklch(from var(--acc) 0.72 0.10 h / calc(0.10 * var(--life-amp))) 0%,
+    transparent 70%);
+  opacity: calc(0.6 + var(--intensity, .65) * 0.4);
+  animation: hazeRoam var(--haze-dur, 31s) linear var(--haze-delay, -12s) infinite both;
+}
+@keyframes hazeRoam {
+  0%   { transform: translate(-8%, -4%) scale(1.00); opacity: calc(0.45 + var(--intensity, .65) * 0.35); }
+  25%  { transform: translate( 6%,  5%) scale(1.10); opacity: calc(0.70 + var(--intensity, .65) * 0.30); }
+  50%  { transform: translate(10%, -3%) scale(1.04); opacity: calc(0.55 + var(--intensity, .65) * 0.35); }
+  75%  { transform: translate(-4%,  6%) scale(1.12); opacity: calc(0.72 + var(--intensity, .65) * 0.28); }
+  100% { transform: translate(-8%, -4%) scale(1.00); opacity: calc(0.45 + var(--intensity, .65) * 0.35); }
+}
+
+/* ================================================================
+   AMBIENT-GLOW REVIVAL
+   ---------------------------------------------------------------
+   The scene files set their *-ambient-glow / *-glow / *-light layers
+   to a STATIC opacity with a comment: "infinite alternate is invisible
+   under seek". That was true for `alternate` (its midpoint depends on
+   iteration parity, which seek can't resolve). A plain `infinite both`
+   loop with NO alternate IS seek-safe — so we can finally let the light
+   breathe. We drive opacity + a hair of scale on the glow's own box;
+   these layers don't carry the camera transform, so no conflict.
+   ================================================================ */
+[class$="-ambient-glow"],
+[class$="-light"] {
+  animation: glowBreathe var(--breath-dur, 11s) ease-in-out
+             var(--life-bg-delay, -3s) infinite both !important;
+  transform-origin: 50% 50%;
+}
+@keyframes glowBreathe {
+  0%   { opacity: 0.62; transform: scale(1.00); }
+  50%  { opacity: 0.92; transform: scale(calc(1 + 0.02 * var(--life-amp))); }
+  100% { opacity: 0.62; transform: scale(1.00); }
+}
+
+/* ================================================================
+   PARTICLE LIFE — add a third, slower axis so the box-shadow field
+   reads as a living swarm instead of two-axis ping-pong. overlays.css
+   already gives it 18s + 24s; we layer a 37s slow scale-bob on top via
+   the mid life-layer it now lives inside. (Particles are appended into
+   .depth-mid > .life-layer by inject.js, so they already inherit mid
+   parallax; this just adds gentle individual bob.)
+   ================================================================ */
+.ambient-particles {
+  animation:
+    particleDriftA 18s ease-in-out -2s infinite alternate,
+    particleDriftB 24s ease-in-out -9s infinite alternate-reverse,
+    particleBob    37s ease-in-out -5s infinite both !important;
+}
+@keyframes particleBob {
+  0%   { scale: 1.00; }
+  50%  { scale: calc(1 + 0.05 * var(--life-amp)); }
+  100% { scale: 1.00; }
+}
+
+/* ================================================================
+   REDUCED-MOTION ESCAPE HATCH (optional)
+   If a beat is explicitly a held dramatic beat, inject.js can add
+   .life-still to freeze the perpetual layers (keeps entries intact).
+   ================================================================ */
+.life-still .life-layer,
+.life-still .atmos-haze,
+.life-still [class$="-ambient-glow"],
+.life-still [class$="-light"] { animation: none !important; }
+
+/* ================================================================
+   INTEGRATION NOTE
+   ---------------------------------------------------------------
+   1. scenes/_base.html — add AFTER cinematic.css, BEFORE retention.css:
+        <link rel="stylesheet" href="../motion/ambient-life.css">
+   2. lib/inject.js — apply the v4 patch (steps 25–28): builds .life-layer
+      wrappers, inserts .atmos-haze, and sets the --life-* vars per beat.
+   3. (optional, capture.js PAUSE_SCRIPT) to give the BACKGROUND IMAGE
+      perpetual parallax too, change the bg-image target from
+        const depthBg = scene.querySelector('.depth-bg') || scene;
+      to
+        const depthBg = scene.querySelector('.depth-bg > .life-layer')
+                     || scene.querySelector('.depth-bg') || scene;
+      Without this the bg image still moves (camera, now non-freezing);
+      with it, it also gets the slow perpetual drift. Degrades gracefully.
+   ================================================================ */

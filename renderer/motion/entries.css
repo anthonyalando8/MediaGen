@@ -46,12 +46,17 @@
    At 0.3% the pulse was completely invisible.
    At 0.8% it reads as a gentle breath without distorting text.   */
 @keyframes kwIdlePulse {
-  0%, 100% { transform: scale(1.000); opacity: 1;}
-  50%      { transform: scale(1.008); opacity: 1; }
+  0%, 100% { transform: translateY(0) scale(1.000); }
+  50%      { transform: translateY(calc(var(--life-amp,1) * -1.5px))
+                        scale(calc(1 + 0.012 * var(--life-amp,1))); }
 }
 
+/* v4: delay 0->negative (positive delay = idle before-phase the seek
+   renderer advances unreliably; the keyword breath often never rendered).
+   Slower 4.6s period reads as a calm breath, not a throb; magnitude now
+   couples to --life-amp so tense/explosive keywords pulse harder. */
 .kw-pulse {
-  animation: kwIdlePulse 3.2s ease-in-out var(--kw-settle-delay, 1.2s) infinite both;
+  animation: kwIdlePulse 4.6s ease-in-out var(--kw-pulse-delay, -1.6s) infinite both;
 }
 
 /* ── KEYWORD UNDERLINE ───────────────────────────────────────────

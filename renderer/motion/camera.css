@@ -16,12 +16,28 @@
      bg plane can safely run up to ~scale(1.20) on a 1080px frame.
    ================================================================ */
 
-/* ── EASING: fast-start / slow-settle ───────────────────────────
-   Replaces the old ease-glide (0.25,.46,.45,.94) which was nearly
-   linear. This curve accelerates hard in the first 20% of the beat
-   then decelerates into the settle — the "camera breathes" feel.  */
+/* ── EASING: fast-start / NEVER-settle ──────────────────────────
+   v4 CHANGE — the single biggest fix for "arrives then freezes".
+
+   OLD: cubic-bezier(0.12, 0.40, 0.00, 1.00)
+        End control point (0.00,1.00) forces dy/dx → 0 at x=1, i.e.
+        ZERO terminal velocity. Combined with the fast front-load, the
+        camera completed ~90% of its travel in the first ~1.5s of a
+        4-5s beat and then sat mathematically frozen for 2-3 seconds.
+        That dead tail is what read as "stiff / animated poster".
+
+   NEW: cubic-bezier(0.10, 0.55, 0.62, 0.92)
+        - P1 (0.10,0.55): hard early acceleration (slope ~5.5) — still
+          "breathes in" fast, keeps the cinematic snap.
+        - P2 (0.62,0.92): end tangent toward (1,1) is (0.38,0.08),
+          slope ~0.21 — a gentle but NON-ZERO terminal velocity. The
+          camera keeps creeping all the way to the cut. No frozen tail.
+        Monotonic 0→1, no overshoot — safe for bg scale bleed.
+
+   Net effect: the back half of every beat now has continuous slow
+   push/drift instead of a held still. Travel ranges unchanged.       */
 :root {
-  --ease-cam: cubic-bezier(0.12, 0.40, 0.00, 1.00);
+  --ease-cam: cubic-bezier(0.10, 0.55, 0.62, 0.92);
 }
 
 /* ───────────────────────────────────────────────────────────────────

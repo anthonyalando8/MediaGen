@@ -70,11 +70,11 @@
    The 1.4s delay means it starts after text has settled into place.
    ================================================================ */
 @keyframes settleDrift {
-  0%   { transform: translate(0px,    0px);   }
-  25%  { transform: translate(1.5px, -1px);   }
-  50%  { transform: translate(2px,   -1.5px); }
-  75%  { transform: translate(0.5px, -2px);   }
-  100% { transform: translate(0px,    0px);   }
+  0%   { transform: translate(0px, 0px) scale(1.000); }
+  25%  { transform: translate(calc(var(--life-amp,1) * 2px), calc(var(--life-amp,1) * -1.5px)) scale(1.003); }
+  50%  { transform: translate(calc(var(--life-amp,1) * 3px), calc(var(--life-amp,1) * -2.5px)) scale(1.005); }
+  75%  { transform: translate(calc(var(--life-amp,1) * 1px), calc(var(--life-amp,1) * -3px))   scale(1.003); }
+  100% { transform: translate(0px, 0px) scale(1.000); }
 }
 
 /* Apply to all scene content containers and body blocks.
@@ -83,7 +83,8 @@
 [class$="-content"],
 [class$="-kw-wrap"],
 [class$="-body"]:not(.body-line) {
-  animation: settleDrift 9s var(--ease-glide) 1.4s infinite both;
+  animation: settleDrift var(--settle-dur, 10s) var(--ease-glide)
+             var(--settle-delay, -4s) infinite both;
 }
 
 /* Composition mutators use !important transforms — those override

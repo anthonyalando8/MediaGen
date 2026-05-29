@@ -8,28 +8,6 @@
  *   animations at DOMContentLoaded. inject.js runs SYNCHRONOUSLY before
  *   DOMContentLoaded (inline <script> in <body>), so styles set here
  *   apply before any animation runs.
- *
- * Steps:
- *   1.  Camera class + --cam-dur
- *   2.  Background variant class
- *   3.  Emotion tint class
- *   4.  Transition classes
- *   5.  Pace scaling
- *   6.  Spike accent override (deferred to step 13)
- *   7.  Ambient particles + god-ray injection
- *   8.  Keyword idle pulse delay + .kw-pulse class
- *   9.  Keyword word-index vars
- *   10. Body line stagger delays + parent animation suppression
- *   11. Energy-driven vignette intensity
- *   12. Pace-driven keyword letter-spacing
- *   13. Scene-type accent identity (filter)
- *   14. Emotion-driven grain opacity
- *   15. [NEW v2] Motion-carry entry_vector
- *   16. [NEW v2] data-pace attr (drives overshoot magnitude)
- *   17. [NEW v2] Per-element micro-stagger
- *   18. [NEW v2] Emit exit_vector for next beat
- *   19. [NEW v2] Auto-wrap into depth planes (.depth-bg/mid/fg)
- *   20. [NEW v2] Camera-style global (handheld layer for whole video)
  */
 
 (function () {
@@ -39,22 +17,7 @@
   var scene = document.querySelector('.scene');
   if (!scene) return;
 
-  // ── 19. AUTO-WRAP INTO DEPTH PLANES (runs FIRST so all later steps
-  //       can target .depth-mid / .depth-fg directly) ──────────────────
-  //
-  // The scene HTML files keep their existing flat structure. We restructure
-  // them at runtime so authoring stays simple. The wrap order matters —
-  // depth-bg → depth-mid → depth-fg → chrome — so z-index works.
-  //
-  // Classification rules:
-  //   - bg layer:   class ends in -bg / -light / -ambient-glow / -glow
-  //   - chrome:     rule-left, scene-label, brand, beat-counter, grain,
-  //                 vignette, tension-stress, ambient-particles, ambient-ray
-  //                 → stays at .scene level (z-index baked in)
-  //   - everything else → .depth-fg (text, content blocks)
-  //
-  // .depth-mid is created empty here. Particles + god-ray are inserted
-  // into it by step 7 below.
+  // ── 19. AUTO-WRAP INTO DEPTH PLANES ──────────────────────────────
   (function autoWrapDepth() {
     if (scene.querySelector('.depth-fg')) return;  // already wrapped, skip
 
@@ -79,7 +42,6 @@
       else                                         depthFg.appendChild(child);
     });
 
-    // Insert in z-order: bg first, then mid (empty), then fg
     scene.insertBefore(depthFg,  scene.firstChild);
     scene.insertBefore(depthMid, scene.firstChild);
     scene.insertBefore(depthBg,  scene.firstChild);
@@ -174,8 +136,6 @@
     midLayer.appendChild(p);
   }
 
-  // God-ray sweep: only for high-energy beats (motivated lighting).
-  // One pass per beat, deterministic — see motion/camera.css.
   if (beat.energy === 'high' || beat.pace === 'explosive' || beat.scene === 'climax') {
     if (!scene.querySelector('.ambient-ray')) {
       var r = document.createElement('div');
@@ -217,7 +177,7 @@
     truth:1.15, flip:1.55, payoff:1.65, cta:0.95,
   };
   var baseDelay = (BODY_BASE_DELAYS[beat.scene] || 1.1) * mult;
-  var staggerMs = 0.16 * mult;        // bumped from 0.08 → 0.16 for better readability
+  var staggerMs = 0.16 * mult;
   scene.style.setProperty('--body-line-1-delay', baseDelay.toFixed(3) + 's');
   scene.style.setProperty('--body-line-2-delay', (baseDelay + staggerMs).toFixed(3) + 's');
   scene.style.setProperty('--body-line-3-delay', (baseDelay + staggerMs * 2).toFixed(3) + 's');
@@ -285,33 +245,20 @@
     scene.classList.add('with-carry');
   }
 
-  // ── 16. Pace data-attr (CSS reads it to scale overshoot magnitude) ─
+  // ── 16. Pace data-attr ───────────────────────────────────────────
   if (beat.pace) scene.dataset.pace = beat.pace;
 
   // ── 17. Per-element micro-stagger ────────────────────────────────
-  // Adds a fibonacci-ish 0-40ms jitter so sibling animations never
-  // land on the exact same frame. Deterministic from index.
-  //
-  // SEEK-SAFE: .kw-word uses duration-based stagger (not delay).
-  // Setting animationDelay on .kw-word would put it in IDLE state,
-  // causing document.getAnimations() to skip it and seekAnimations()
-  // to never advance it → invisible keyword.
-  //
-  // For .kw-word: add micro-stagger to animationDuration instead.
-  // For .body-line: animationDelay is safe (body-line doesn't use
-  // opacity:0 as a base style, so IDLE state shows opacity:1 → visible).
   function microStagger(idx) {
     return [0, 13, 21, 34, 28][idx % 5] / 1000;
   }
 
-  // .kw-word: stagger via duration (delay=0 stays, Active state preserved)
   scene.querySelectorAll('.kw-word').forEach(function (el, i) {
     var cs  = window.getComputedStyle(el);
     var dur = parseFloat(cs.animationDuration) || 0.78;
     el.style.animationDuration = (dur + microStagger(i)).toFixed(3) + 's';
   });
 
-  // .body-line: delay-based stagger is safe (no opacity:0 base state issue)
   scene.querySelectorAll('.body-line').forEach(function (el, i) {
     var cs   = window.getComputedStyle(el);
     var base = parseFloat(cs.animationDelay) || 0;
@@ -327,71 +274,53 @@
   document.body.dataset.exitVector = JSON.stringify(exitVec);
 
   // ── 20. Camera-style global (whole-video bias) ───────────────────
-  // window.__BEAT__.camera_style is the script's global.camera_style.
-  // Adds a body data attribute the runtime can hook into for global
-  // handheld layering or extra dynamic motion on every beat.
   if (beat.camera_style) {
     document.body.dataset.cameraStyle = beat.camera_style;
-    // For "handheld": layer micro-shake onto .depth-mid additively
-    // regardless of the per-beat camera (subtle, not stacked too hard).
     if (beat.camera_style === 'handheld') {
       scene.classList.add('cam-handheld-layer');
     }
   }
 
-
   // ── 21. INTENSITY — master magnitude dial ──────────────────────
-// beat.intensity ∈ [0, 1]. Sets a CSS var every retention rule reads.
-// Default 0.65 if missing — neutral, doesn't accidentally amp anything.
-var intensity = typeof beat.intensity === 'number'
-  ? Math.max(0, Math.min(1, beat.intensity))
-  : 0.65;
-scene.style.setProperty('--intensity', intensity.toFixed(3));
-if (intensity < 0.60) scene.classList.add('breath');
+  var intensity = typeof beat.intensity === 'number'
+    ? Math.max(0, Math.min(1, beat.intensity))
+    : 0.65;
+  scene.style.setProperty('--intensity', intensity.toFixed(3));
+  if (intensity < 0.60) scene.classList.add('breath');
 
-// ── 22. PATTERN INTERRUPT — one per beat, eligible at intensity > .80
-// OR explicit beat.pattern_interrupt. inject.js picks the type and
-// schedules it at 45-65% of beat duration (peak attention window). */
-var PI_TYPES = ['slam', 'chroma', 'iris', 'tilt', 'flash', 'freeze', 'invert'];
-var PI_BY_SCENE = {
-  hook:    'slam',
-  climax:  'chroma',
-  tension: 'iris',
-  truth:   'iris',
-  flip:    'invert',
-  payoff:  'flash',
-  cta:     'slam',
-};
-var pi = beat.pattern_interrupt
-  || (intensity >= 0.80 ? PI_BY_SCENE[beat.scene] || 'slam' : null);
-if (pi && PI_TYPES.indexOf(pi) !== -1) {
-  scene.classList.add('pi-' + pi);
-  // Delay = 50% of beat (peak attention window).
-  var piDelay = (beat.duration_ms || 5000) * 0.5 / 1000;
-  scene.style.setProperty('--pi-delay', piDelay.toFixed(2) + 's');
-}
+  // ── 22. PATTERN INTERRUPT ────────────────────────────────────────
+  var PI_TYPES = ['slam', 'chroma', 'iris', 'tilt', 'flash', 'freeze', 'invert'];
+  var PI_BY_SCENE = {
+    hook:    'slam',
+    climax:  'chroma',
+    tension: 'iris',
+    truth:   'iris',
+    flip:    'invert',
+    payoff:  'flash',
+    cta:     'slam',
+  };
+  var pi = beat.pattern_interrupt
+    || (intensity >= 0.80 ? PI_BY_SCENE[beat.scene] || 'slam' : null);
+  if (pi && PI_TYPES.indexOf(pi) !== -1) {
+    scene.classList.add('pi-' + pi);
+    var piDelay = (beat.duration_ms || 5000) * 0.5 / 1000;
+    scene.style.setProperty('--pi-delay', piDelay.toFixed(2) + 's');
+  }
 
-// ── 23. EMPHASIS WORDS — time per-word punch to body line entry
-// capture.js wraps *foo* as <span class="em">foo</span>.
-// Each .em gets a CSS var --em-delay = body line entry + 0.42s,
-// so the punch lands on the spoken word (≈ syllable 2 of the line). */
-scene.querySelectorAll('.body-line').forEach(function (line, i) {
-  var ems = line.querySelectorAll('.em');
-  if (!ems.length) return;
-  var base = parseFloat(getComputedStyle(line).animationDelay) || 1.1;
-  // Punch on second-syllable timing ≈ 420ms after line entry */
-  var emDelay = base + 0.42;
-  ems.forEach(function (em, j) {
-    // Stagger if multiple emphasis words in the same line. */
-    em.style.setProperty('--em-delay', (emDelay + j * 0.25).toFixed(3) + 's');
+  // ── 23. EMPHASIS WORDS ───────────────────────────────────────────
+  scene.querySelectorAll('.body-line').forEach(function (line, i) {
+    var ems = line.querySelectorAll('.em');
+    if (!ems.length) return;
+    var base = parseFloat(getComputedStyle(line).animationDelay) || 1.1;
+    var emDelay = base + 0.42;
+    ems.forEach(function (em, j) {
+      em.style.setProperty('--em-delay', (emDelay + j * 0.25).toFixed(3) + 's');
+    });
   });
-});
 
-// ── 24. COMPOSITION MUTATOR — optional, opt-in via beat field ──
-// beat.composition ∈ ['crop-low', 'tilt', 'corner', 'sparse']
-// Applied as .comp-{name} class. CSS handles the override. */
-if (beat.composition) {
-  scene.classList.add('comp-' + beat.composition);
-}
+  // ── 24. COMPOSITION MUTATOR ──────────────────────────────────────
+  if (beat.composition) {
+    scene.classList.add('comp-' + beat.composition);
+  }
 
 })();
