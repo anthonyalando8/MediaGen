@@ -96,25 +96,63 @@
   // Reflective drift reads better as a slow front-to-back cascade with
   // widening gaps; everything else cascades evenly.
   Array.prototype.forEach.call(words, function (w, i) {
+    // Split each word: inner .kw-ink carries the REVEAL, outer .kw-word
+    // carries PERPETUAL LIFE. Two transform contexts → they compose, so the
+    // word keeps breathing after it lands instead of freezing.
+    var ink = w.querySelector('.kw-ink');
+    if (!ink) {
+      ink = document.createElement('span');
+      ink.className = 'kw-ink';
+      while (w.firstChild) ink.appendChild(w.firstChild);
+      w.appendChild(ink);
+    }
+
     var dur, name = spec.name, ease = spec.ease;
 
     if (payoffLast && i === nWords - 1) {
       name = 'kwSlamPunch';            // internal 52% hold → late fast slam
       dur  = 1.20 + jitter(i);
       ease = 'cubic-bezier(.2,.9,.25,1)';
-    } else if (mode === 'drift') {
-      dur = spec.base + i * spec.inc + jitter(i);     // big growing gaps
     } else {
-      dur = spec.base + i * spec.inc + jitter(i);
+      dur = spec.base + i * spec.inc + jitter(i);     // even / growing cascade
     }
 
-    // INLINE longhands win the cascade and pin delay:0 (seek-safe).
-    w.style.animationName           = name;
-    w.style.animationDuration       = dur.toFixed(3) + 's';
-    w.style.animationTimingFunction = ease;
-    w.style.animationFillMode       = 'both';
-    w.style.animationDelay          = '0s';
-    w.style.animationIterationCount = '1';
+    // REVEAL on the ink — INLINE longhands win the cascade and pin delay:0
+    // (the only seek-safe way: any "late" feel is baked into the keyframe).
+    ink.style.animationName           = name;
+    ink.style.animationDuration       = dur.toFixed(3) + 's';
+    ink.style.animationTimingFunction = ease;
+    ink.style.animationFillMode       = 'both';
+    ink.style.animationDelay          = '0s';
+    ink.style.animationIterationCount = '1';
+
+    // PERPETUAL LIFE on the word — infinite, per-word negative-delay desync
+    // so each word floats on its own phase (shimmer, not a moving block).
+    var lifeDur   = 4.6 + (i % 3) * 0.7;             // 4.6 / 5.3 / 6.0s
+    var lifeDelay = -((i * 0.83) % lifeDur);          // negative phase per word
+    w.style.setProperty('--wl-dir',  (i % 2) ? '-1' : '1');          // alt vertical
+    w.style.setProperty('--wl-xdir', String((i % 3) - 1));           // -1/0/1 horiz
+    w.style.animation = 'wordLife ' + lifeDur.toFixed(2) + 's ease-in-out '
+                      + lifeDelay.toFixed(2) + 's infinite both';
+  });
+
+  // ── T3b. BODY LINE perpetual life (stop the body freezing too) ───
+  // Wrap each line's content in .body-ink; the line keeps its delay-based
+  // entrance (on .body-line), the inner ink carries a slow infinite float.
+  var bodyLines = scene.querySelectorAll('.body-line');
+  Array.prototype.forEach.call(bodyLines, function (line, i) {
+    var ink = line.querySelector('.body-ink');
+    if (!ink) {
+      ink = document.createElement('span');
+      ink.className = 'body-ink';
+      while (line.firstChild) ink.appendChild(line.firstChild);
+      line.appendChild(ink);
+    }
+    var dur   = 6.5 + (i % 2) * 0.9;                 // 6.5 / 7.4s
+    var delay = -((i * 1.4) % dur);
+    ink.style.setProperty('--bl-xdir', (i % 2) ? '-1' : '1');
+    ink.style.animation = 'bodyLineLife ' + dur.toFixed(2) + 's ease-in-out '
+                        + delay.toFixed(2) + 's infinite both';
   });
 
   // ── T4. emotion-flavoured perpetual keyword breath ───────────────

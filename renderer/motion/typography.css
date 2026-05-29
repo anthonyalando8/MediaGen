@@ -40,6 +40,41 @@
 .kw-host { perspective: 1400px; transform-style: preserve-3d; }
 .kw-word { backface-visibility: hidden; }
 
+/* TWO-LAYER WORD ARCHITECTURE (the fix for "text reveals then freezes")
+   ---------------------------------------------------------------
+   inject-type.js wraps each word's glyphs in an inner .kw-ink:
+       <span class="kw-word"><span class="kw-ink">WORD</span></span>
+   - .kw-ink  carries the REVEAL (iteration 1, fill both) — opacity, blur,
+              clip-path, the dramatic entrance transform.
+   - .kw-word carries PERPETUAL LIFE (wordLife, infinite) — a slow, per-word
+              desynced float so the word keeps breathing AFTER it lands.
+   Two elements → their transforms multiply → reveal + life compose with zero
+   conflict (same trick as the depth-plane life-layers). Both are seek-safe:
+   reveal delay = 0, life delay <= 0, both infinite/Active under currentTime. */
+.kw-ink {
+  display: inline-block;
+  will-change: transform, opacity, filter;
+}
+
+/* PERPETUAL WORD LIFE — the words never fully settle. Per-word direction
+   (--wl-dir / --wl-xdir) + per-word negative delay (set inline by
+   inject-type.js) means each word floats on its own phase → the keyword
+   shimmers like it's alive, not a frozen block. Magnitude couples to
+   --life-amp so calm scenes barely move, explosive scenes breathe harder. */
+@keyframes wordLife {
+  0%   { opacity: 1; transform: translate(0px, 0px) scale(1) rotate(0deg); }
+  50%  { opacity: 1; transform: translate(calc(var(--wl-xdir, 0) * 3px * var(--life-amp, 1)),
+                              calc(var(--wl-dir, 1) * -5px * var(--life-amp, 1)))
+                    scale(calc(1 + 0.010 * var(--life-amp, 1)))
+                    rotate(calc(var(--wl-dir, 1) * 0.28deg)); }
+  100% { opacity: 1; transform: translate(0px, 0px) scale(1) rotate(0deg); }
+}
+
+/* The outer word must not sit at the entries.css opacity:0 base once the
+   perpetual loop owns it (the reveal now lives on .kw-ink). Belt-and-braces
+   in case wordLife hasn't been stamped yet. */
+.kw-host .kw-word { opacity: 1; }
+
 /* ================================================================
    REVEAL MODE :: SLAM   (urgent / angry / climax / cta)
    Heavy, fast, overshoots and recoils. Reads as IMPACT.
@@ -118,11 +153,11 @@
 /* ================================================================
    PERPETUAL TYPOGRAPHY EVOLUTION
    ---------------------------------------------------------------
-   The keyword keeps breathing after it lands, FLAVOURED by emotion via
-   --kw-pulse-dur (inject-type sets it: tense≈3.2s nervous, reflective≈6.5s
-   slow, aggressive≈4s). Magnitude couples to --life-amp (set by inject-life).
-   Seek-safe: infinite, ease-in-out, negative delay (set by inject-life).
-   This overrides the fixed period in entries.css via the variable.
+   GROUP breath on the whole keyword (gentle scale, set period by emotion
+   via --kw-pulse-dur). The per-WORD wordLife above does the drift; this
+   adds a subtle cohesive "the whole title is breathing" scale on top.
+   They run on different periods → never lockstep. Both seek-safe (infinite,
+   negative delay set by inject-life). Overrides entries.css via the var.
    ================================================================ */
 .kw-pulse {
   animation: kwIdlePulse var(--kw-pulse-dur, 4.6s) ease-in-out
@@ -186,8 +221,26 @@
 }
 
 /* ================================================================
+   BODY LINE PERPETUAL LIFE — the body froze after entering too. Each line
+   gets a slow per-line desynced float (inner .body-ink carries it, set by
+   inject-type.js) so the body keeps subtly drifting. Seek-safe loop.
+   ================================================================ */
+.body-ink {
+  display: inline-block;
+  will-change: transform;
+}
+@keyframes bodyLineLife {
+  0%   { transform: translate(0px, 0px); }
+  50%  { transform: translate(calc(var(--bl-xdir, 1) * 2px * var(--life-amp, 1)),
+                              calc(-2.5px * var(--life-amp, 1))); }
+  100% { transform: translate(0px, 0px); }
+}
+
+/* ================================================================
    HELD-BEAT escape hatch — beat.life_still=true also calms typography
    evolution (the reveal still plays; only the perpetual loops stop).
    ================================================================ */
 .life-still .kw-pulse,
+.life-still .kw-word,
+.life-still .body-ink,
 .life-still [data-reveal] .kw-host { animation: none !important; }
