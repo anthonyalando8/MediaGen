@@ -1,0 +1,193 @@
+/* ================================================================
+   typography.css  --  CINEMATIC KINETIC TYPOGRAPHY ENGINE (v1)
+   Load AFTER entries.css (so its reveal modes win the cascade),
+   BEFORE overlays.css.
+   ================================================================
+   GOAL
+   ---------------------------------------------------------------
+   Stop text behaving like clean title-cards. Give every beat an
+   EMOTIONALLY-DIRECTED reveal + staging, so the viewer can't predict
+   the next text behavior. Driven by beat.emotion / beat.scene /
+   beat.intensity via inject-type.js, which stamps:
+       .scene .{kw}      data-reveal="slam|fracture|drift|rise|hero|punch"
+       .{kw}             --type-amp   (intensity → magnitude)
+       each .kw-word     inline animation (name+dur+ease) for rhythm
+       .{body}           data-reveal=...   (body inherits the mood)
+
+   SEEK-SAFETY (non-negotiable, same rules as the motion system)
+   ---------------------------------------------------------------
+   - .kw-word reveals use animation-delay:0 ALWAYS. "Delay" / anticipation
+     gaps are baked into the keyframe as an opacity HOLD (0%..N% hidden),
+     and the per-word RHYTHM is carried by animation-DURATION (set inline
+     by inject-type.js). This is the only seek-safe way to get "appears
+     late but moves fast" — a positive delay would put the span in the
+     idle before-phase the renderer skips.
+   - .body-line keeps delay-based reveal (proven safe: forwards fill,
+     opacity:0 base → hidden before delay, shown after).
+   - .em punch uses delay-based timing with fill:both and a NEUTRAL 0%/100%
+     state, so the word is readable before AND after the punch.
+   - No font-size changes anywhere (beat.sz_kw owns font-size !important).
+     All scale drama is transform:scale.
+   ================================================================ */
+
+:root {
+  --type-amp: 1;                 /* intensity → reveal magnitude, set per beat */
+  --kw-pulse-dur: 4.6s;          /* emotion-flavoured idle breath period */
+}
+
+/* Each word is its own transform context; the underline (::after, base CSS)
+   rides along. perspective on the wrap lets a couple of modes tilt in 3D. */
+.kw-host { perspective: 1400px; transform-style: preserve-3d; }
+.kw-word { backface-visibility: hidden; }
+
+/* ================================================================
+   REVEAL MODE :: SLAM   (urgent / angry / climax / cta)
+   Heavy, fast, overshoots and recoils. Reads as IMPACT.
+   inject-type sets short per-word durations + tight cascade.
+   ================================================================ */
+@keyframes kwSlam {
+  0%   { opacity: 0; transform: translateY(calc(68px * var(--type-amp))) scale(1.18); filter: blur(7px); }
+  46%  { opacity: 1; transform: translateY(calc(-13px * var(--type-amp))) scale(1.035); filter: blur(0); }
+  68%  { transform: translateY(4px) scale(0.992); }
+  84%  { transform: translateY(-1.5px) scale(1.003); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* SLAM payoff word — internal HOLD then late fast slam (anticipation gap
+   without a positive delay). Used for the final word of hook/climax/cta. */
+@keyframes kwSlamPunch {
+  0%, 52% { opacity: 0; transform: translateY(calc(82px * var(--type-amp))) scale(1.24); filter: blur(9px); }
+  72%     { opacity: 1; transform: translateY(calc(-16px * var(--type-amp))) scale(1.05); filter: blur(0); }
+  86%     { transform: translateY(5px) scale(0.99); }
+  100%    { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ================================================================
+   REVEAL MODE :: FRACTURE   (tense / anxious)
+   Words snap in from alternating sides under a clip wipe + micro-skew.
+   Nervous, compressed, off-balance. --frac-x set by nth-child below.
+   ================================================================ */
+@keyframes kwFracture {
+  0%   { opacity: 0; transform: translateX(var(--frac-x, 40px)) skewX(calc(var(--frac-skew, 6deg))); clip-path: inset(0 0 0 100%); }
+  40%  { opacity: 1; }
+  60%  { transform: translateX(calc(var(--frac-x, 40px) * -0.12)) skewX(0deg); clip-path: inset(0 0 0 0%); }
+  78%  { transform: translateX(2px); }
+  100% { opacity: 1; transform: translateX(0) skewX(0deg); clip-path: inset(0 0 0 0%); }
+}
+[data-reveal="fracture"] .kw-word:nth-child(odd)  { --frac-x: calc(-46px * var(--type-amp)); --frac-skew:  5deg; }
+[data-reveal="fracture"] .kw-word:nth-child(even) { --frac-x: calc( 46px * var(--type-amp)); --frac-skew: -5deg; }
+[data-reveal="fracture"] .kw-host { letter-spacing: -0.07em; }   /* compressed = tension */
+
+/* ================================================================
+   REVEAL MODE :: DRIFT   (melancholic / cold / serious / truth)
+   Slow fade up through blur, wide tracking that tightens as it lands.
+   Isolated, reflective, "lonely". Long per-word durations + big gaps.
+   ================================================================ */
+@keyframes kwDrift {
+  0%   { opacity: 0; transform: translateY(calc(26px * var(--type-amp))) scale(1.015); filter: blur(13px); }
+  55%  { opacity: 1; filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+[data-reveal="drift"] .kw-host { letter-spacing: 0.01em; }       /* airier than default */
+
+/* ================================================================
+   REVEAL MODE :: RISE   (hopeful / confident / payoff / surprised)
+   Clean, assured lift with a small confident overshoot. The "premium"
+   default — used when no strong emotion dominates.
+   ================================================================ */
+@keyframes kwRise {
+  0%   { opacity: 0; transform: translateY(calc(34px * var(--type-amp))) scale(0.992); filter: blur(3px); }
+  60%  { opacity: 1; transform: translateY(-5px) scale(1.006); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ================================================================
+   REVEAL MODE :: HERO   (single-word keyword = a cinematic event)
+   Holds hidden, then a masked scale-up takeover from a tighter size.
+   Transform-scale only (font-size is owned by sz_kw). Reads as "one
+   giant word lands in the room."
+   ================================================================ */
+@keyframes kwHero {
+  0%, 30% { opacity: 0; transform: scale(calc(1 - 0.16 * var(--type-amp))); filter: blur(10px); clip-path: inset(0 0 100% 0); }
+  58%     { opacity: 1; transform: scale(calc(1 + 0.05 * var(--type-amp))); filter: blur(0); clip-path: inset(0 0 0% 0); }
+  78%     { transform: scale(0.995); }
+  100%    { opacity: 1; transform: scale(1); clip-path: inset(0 0 0% 0); }
+}
+[data-reveal="hero"] .kw-host { letter-spacing: -0.04em; }
+
+/* ================================================================
+   PERPETUAL TYPOGRAPHY EVOLUTION
+   ---------------------------------------------------------------
+   The keyword keeps breathing after it lands, FLAVOURED by emotion via
+   --kw-pulse-dur (inject-type sets it: tense≈3.2s nervous, reflective≈6.5s
+   slow, aggressive≈4s). Magnitude couples to --life-amp (set by inject-life).
+   Seek-safe: infinite, ease-in-out, negative delay (set by inject-life).
+   This overrides the fixed period in entries.css via the variable.
+   ================================================================ */
+.kw-pulse {
+  animation: kwIdlePulse var(--kw-pulse-dur, 4.6s) ease-in-out
+             var(--kw-pulse-delay, -1.6s) infinite both;
+}
+
+/* Reflective beats: a second, very slow tracking breath on the whole
+   keyword — the words feel like they're quietly inhaling. Seek-safe loop. */
+@keyframes kwTrackingBreath {
+  0%, 100% { letter-spacing: 0.010em; }
+  50%      { letter-spacing: 0.030em; }
+}
+[data-reveal="drift"] .kw-host,
+[data-reveal="hero"]  .kw-host {
+  animation: kwTrackingBreath calc(var(--kw-pulse-dur, 6.5s) * 1.6) ease-in-out
+             var(--kw-pulse-delay, -2s) infinite both;
+}
+
+/* ================================================================
+   SPATIAL EMBEDDING — emotion-tuned depth shadow so text sits INSIDE
+   the scene light, not pasted on top. Pure shadow, no layout effect.
+   ================================================================ */
+[data-reveal="slam"]     .kw-host { text-shadow: 0 6px 30px oklch(0 0 0 / 0.55); }          /* heavy, grounded */
+[data-reveal="fracture"] .kw-host { text-shadow: 0 3px 18px oklch(0 0 0 / 0.45); }
+[data-reveal="drift"]    .kw-host { text-shadow: 0 0 46px oklch(from var(--acc) 0.7 0.10 h / 0.30); } /* soft accent halo */
+[data-reveal="rise"]     .kw-host { text-shadow: 0 4px 24px oklch(0 0 0 / 0.40); }
+[data-reveal="hero"]     .kw-host { text-shadow: 0 0 60px oklch(from var(--acc) 0.7 0.12 h / 0.32), 0 8px 34px oklch(0 0 0 / 0.5); }
+
+/* ================================================================
+   BODY MOOD — the body lines inherit the emotional reveal character.
+   Keeps the delay-based stagger (set by inject.js) — only swaps the
+   keyframe + easing so the body matches the keyword's emotion.
+   ================================================================ */
+@keyframes bodySlamLine   { 0% { opacity: 0; transform: translateY(22px); filter: blur(4px); } 100% { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes bodyDriftLine  { 0% { opacity: 0; transform: translateY(12px); filter: blur(8px); } 100% { opacity: 1; transform: translateY(0); filter: blur(0); } }
+@keyframes bodyFractLine  { 0% { opacity: 0; transform: translateX(18px); clip-path: inset(0 0 0 100%); } 100% { opacity: 1; transform: translateX(0); clip-path: inset(0 0 0 0); } }
+
+[data-reveal="slam"]     .body-line { animation-name: bodySlamLine;  animation-timing-function: cubic-bezier(.2,1.2,.3,1); }
+[data-reveal="fracture"] .body-line { animation-name: bodyFractLine; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+[data-reveal="drift"]    .body-line { animation-name: bodyDriftLine; animation-timing-function: cubic-bezier(.25,.7,.2,1); animation-duration: .85s; }
+
+/* ================================================================
+   EMPHASIS PUNCH (*word*) — the retention spike. Lands on the spoken
+   word (timing from inject.js --em-delay). NEUTRAL 0%/100% so the word
+   is readable before and after; the middle is the flash. Seek-safe:
+   delay-based, fill both.
+   ================================================================ */
+.em {
+  display: inline-block;
+  font-weight: 600;
+  color: var(--fg);
+  animation: emPunch 0.62s cubic-bezier(.2,1.4,.3,1) var(--em-delay, 1.6s) both;
+  transform-origin: center 70%;
+}
+@keyframes emPunch {
+  0%   { transform: scale(1);    color: var(--fg);  text-shadow: none; }
+  28%  { transform: scale(calc(1 + 0.16 * var(--type-amp))); color: var(--acc);
+         text-shadow: 0 0 26px oklch(from var(--acc) 0.72 0.16 h / 0.55); }
+  60%  { transform: scale(0.99); }
+  100% { transform: scale(1);    color: var(--acc); text-shadow: none; }
+}
+
+/* ================================================================
+   HELD-BEAT escape hatch — beat.life_still=true also calms typography
+   evolution (the reveal still plays; only the perpetual loops stop).
+   ================================================================ */
+.life-still .kw-pulse,
+.life-still [data-reveal] .kw-host { animation: none !important; }
