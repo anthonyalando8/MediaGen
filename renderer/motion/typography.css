@@ -221,19 +221,26 @@
 }
 
 /* ================================================================
-   BODY LINE PERPETUAL LIFE — the body froze after entering too. Each line
-   gets a slow per-line desynced float (inner .body-ink carries it, set by
-   inject-type.js) so the body keeps subtly drifting. Seek-safe loop.
+   BODY LINE PERPETUAL LIFE — the body froze after entering. NOTE: the
+   body CONTAINER can't carry this drift — inject.js step 10 stamps
+   `animationName:none` inline on `.{scene}-body` (to suppress its entry
+   anim), which also kills any settleDrift. So the perpetual life MUST
+   live on the inner .body-ink (set inline by inject-type.js, which
+   inject.js never touches). Amplitude is deliberately bigger than v1
+   (~7px) so the paragraph clearly breathes next to the lively keyword;
+   lines share direction + a small phase wave so it drifts as a coherent
+   block, not jittery independent lines. Seek-safe infinite loop.
    ================================================================ */
 .body-ink {
   display: inline-block;
   will-change: transform;
 }
 @keyframes bodyLineLife {
-  0%   { transform: translate(0px, 0px); }
-  50%  { transform: translate(calc(var(--bl-xdir, 1) * 2px * var(--life-amp, 1)),
-                              calc(-2.5px * var(--life-amp, 1))); }
-  100% { transform: translate(0px, 0px); }
+  0%   { transform: translate(0px, 0px) scale(1); }
+  50%  { transform: translate(calc(var(--bl-xdir, 1) * 4px * var(--life-amp, 1)),
+                              calc(-7px * var(--life-amp, 1)))
+                    scale(calc(1 + 0.006 * var(--life-amp, 1))); }
+  100% { transform: translate(0px, 0px) scale(1); }
 }
 
 /* ================================================================

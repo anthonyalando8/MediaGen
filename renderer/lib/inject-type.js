@@ -139,7 +139,12 @@
   // ── T3b. BODY LINE perpetual life (stop the body freezing too) ───
   // Wrap each line's content in .body-ink; the line keeps its delay-based
   // entrance (on .body-line), the inner ink carries a slow infinite float.
+  // Lines SHARE direction + a small phase wave so the paragraph drifts as
+  // a coherent block (not jittery independent lines). The body container's
+  // own settleDrift is dead (inject.js stamps animationName:none on it), so
+  // this inner-ink loop is the body's only perpetual motion — make it count.
   var bodyLines = scene.querySelectorAll('.body-line');
+  var bodyDir = 1;                                  // whole paragraph leans one way
   Array.prototype.forEach.call(bodyLines, function (line, i) {
     var ink = line.querySelector('.body-ink');
     if (!ink) {
@@ -148,9 +153,9 @@
       while (line.firstChild) ink.appendChild(line.firstChild);
       line.appendChild(ink);
     }
-    var dur   = 6.5 + (i % 2) * 0.9;                 // 6.5 / 7.4s
-    var delay = -((i * 1.4) % dur);
-    ink.style.setProperty('--bl-xdir', (i % 2) ? '-1' : '1');
+    var dur   = 7.0 + (i % 2) * 0.6;                // 7.0 / 7.6s — close, coherent
+    var delay = -(i * 0.55);                         // small phase wave down the lines
+    ink.style.setProperty('--bl-xdir', String(bodyDir));
     ink.style.animation = 'bodyLineLife ' + dur.toFixed(2) + 's ease-in-out '
                         + delay.toFixed(2) + 's infinite both';
   });
