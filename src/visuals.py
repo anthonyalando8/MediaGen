@@ -23,7 +23,7 @@ import pathlib
 import subprocess
 import json
 import os
-from timeline import attach_to_contracts
+from captions.timeline import attach_to_contracts
 
 
 from visuals_dir.visuals_calc_word_width import calc_kw_font_size

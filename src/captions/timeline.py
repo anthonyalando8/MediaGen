@@ -35,10 +35,38 @@ from __future__ import annotations
 import json
 import pathlib
 
-from captions.caption_director import direct_transcript, _lower
+from captions.caption_director import direct_transcript, _lower, _strip, ABSOLUTES
 
 
 SCHEMA_VERSION = 1
+
+
+def _flatten_transcript_words(transcript: dict) -> list[dict]:
+    """All whisper words across segments, with absolute voice.wav times."""
+    out = []
+    for seg in transcript.get("segments", []):
+        ws = seg.get("words") or [{"text": seg.get("text", ""),
+                                    "start": seg.get("start", 0.0),
+                                    "end": seg.get("end", 0.0)}]
+        for w in ws:
+            txt = (w.get("text") or w.get("word") or "").strip()
+            if txt:
+                out.append({"text": txt, "start": float(w["start"]), "end": float(w["end"])})
+    return out
+
+
+def _beat_highlight_set(sbeat: dict) -> set:
+    """Words this beat marks for emphasis — the *starred* words + highlight_words.
+    These are exactly what capture.js turns into <span class="em"> in the body,
+    so emphasis_times will line up 1:1 with the .em spans in the DOM."""
+    hl = set()
+    for h in (sbeat.get("highlight_words") or []):
+        hl.add(_lower(h))
+    import re as _re
+    for m in _re.findall(r"\*([^*]+)\*", sbeat.get("text") or ""):
+        for x in m.split():
+            hl.add(_lower(x))
+    return hl
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -68,43 +96,62 @@ def build_timeline(
 
     fps = cfg.get("video", {}).get("fps", 30)
 
-    # 2. Group units by beat so we can derive per-beat, beat-relative timing.
-    by_beat: dict[int, list] = {}
-    for u in units:
-        by_beat.setdefault(u.beat_index, []).append(u)
+    # 2. BEATS layer — per-beat, BEAT-RELATIVE word timing for scene sync.
+    #    Reference = the beat's AUDIO START (cumulative durations), NOT the
+    #    first spoken word. The scene animation clock starts at the beat's
+    #    audio segment start (leading silence included), so word times must be
+    #    relative to that, or emphasis fires early by the leading-silence amount.
+    #
+    #    Words are assigned to beats by TIME WINDOW (which beat's audio span
+    #    contains the word) rather than token count — more accurate for timing
+    #    and independent of ASR token drift. Assumes voice.wav is the per-beat
+    #    WAVs concatenated (so cumulative durations = beat boundaries).
+    all_tw = _flatten_transcript_words(transcript)
+    starts = []
+    acc = 0.0
+    for d in durations_s:
+        starts.append(acc)
+        acc += d
+    n_beats_dur = len(durations_s)
+
+    def _beat_of(t: float) -> int:
+        for bi in range(n_beats_dur):
+            lo = starts[bi]
+            hi = starts[bi] + durations_s[bi]
+            if t < hi or bi == n_beats_dur - 1:
+                return bi if t >= lo or bi == 0 else bi
+        return max(0, n_beats_dur - 1)
 
     beats_out = []
     script_beats = script.get("beats", [])
     for bi, sbeat in enumerate(script_beats):
-        bu = by_beat.get(bi, [])
-        # beat's global start = first spoken word in the beat (audio-accurate).
-        flat_words = [w for u in bu for w in u.words]
-        if flat_words:
-            beat_global_start = min(w.start for w in flat_words)
-            beat_global_end = max(w.end for w in flat_words)
-        else:
-            beat_global_start = sum(durations_s[:bi]) if durations_s else 0.0
-            beat_global_end = beat_global_start + (durations_s[bi] if bi < len(durations_s) else 0.0)
+        audio_start = starts[bi] if bi < len(starts) else (sum(durations_s) if durations_s else 0.0)
+        beat_dur = durations_s[bi] if bi < len(durations_s) else 0.0
+        hl = _beat_highlight_set(sbeat)
 
         rel_words = []
         emphasis = []
-        for w in flat_words:
-            rel_s = round(w.start - beat_global_start, 3)
-            rel_e = round(w.end - beat_global_start, 3)
-            entry = {"text": w.text, "start_s": rel_s, "end_s": rel_e, "tier": w.tier}
+        for w in all_tw:
+            if _beat_of(w["start"]) != bi:
+                continue
+            tok = _lower(w["text"])
+            emph = tok in hl
+            tier = 1 if (tok in ABSOLUTES and len(tok) > 2) else (2 if emph else 3)
+            rel_s = round(w["start"] - audio_start, 3)
+            rel_e = round(w["end"] - audio_start, 3)
+            entry = {"text": w["text"], "start_s": rel_s, "end_s": rel_e, "tier": tier}
             rel_words.append(entry)
-            if w.tier <= 2:          # tier 1 = hero/event, 2 = *emphasis*/highlight
-                emphasis.append({"text": w.text, "start_s": rel_s, "end_s": rel_e, "tier": w.tier})
+            if emph or tier == 1:
+                emphasis.append(entry)
 
         beats_out.append({
-            "beat_index":     bi,
-            "scene":          sbeat.get("type", ""),
-            "keyword":        sbeat.get("keyword", ""),
-            "duration_ms":    int(round(durations_s[bi] * 1000)) if bi < len(durations_s) else None,
-            "global_start_s": round(beat_global_start, 3),
-            "global_end_s":   round(beat_global_end, 3),
-            "words":          rel_words,      # BEAT-RELATIVE — for inject.js
-            "emphasis":       emphasis,       # the words the scene should react to
+            "beat_index":      bi,
+            "scene":           sbeat.get("type", ""),
+            "keyword":         sbeat.get("keyword", ""),
+            "duration_ms":     int(round(beat_dur * 1000)),
+            "audio_start_s":   round(audio_start, 3),   # where this beat sits in voice.wav
+            "words":           rel_words,                # BEAT-RELATIVE — for inject.js
+            "emphasis":        emphasis,                 # the *starred* words the scene reacts to
         })
 
     # 3. Caption layer — GLOBAL times, exactly what captions.py will render.

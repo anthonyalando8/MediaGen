@@ -111,13 +111,26 @@ def _video_duration(video_path: pathlib.Path) -> float:
         return 5.0
 
 
-def _load_scene_json(beat_dirs) -> dict | None:
+def _load_scene_json(beat_dirs, explicit_path=None) -> dict | None:
     """
-    Find and parse scene.json.
-    Expected location: frames/scene.json  (parent of the beat_* dirs).
+    Find and parse scene.json. It is written to run_dir/scene.json — i.e.
+    the PARENT of frames/, which is the parent.parent of the beat_* dirs.
+    (The old code only checked frames/scene.json, so it was never found and
+    every transition silently fell back to a plain concat.)
     """
+    candidates = []
+    if explicit_path:
+        candidates.append(pathlib.Path(explicit_path))
     for d in beat_dirs:
-        candidate = pathlib.Path(d).parent / "scene.json"
+        p = pathlib.Path(d)
+        candidates.append(p.parent / "scene.json")          # frames/scene.json (legacy guess)
+        candidates.append(p.parent.parent / "scene.json")   # run_dir/scene.json (ACTUAL)
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         if candidate.exists():
             try:
                 data = _json.loads(candidate.read_text(encoding="utf-8"))
@@ -230,7 +243,7 @@ def _build_xfade_chain(beat_videos, transitions, work, cfg):
     return out
 
 
-def build_slide_video_from_frames(beat_dirs, out_path, cfg):
+def build_slide_video_from_frames(beat_dirs, out_path, cfg,scene_json_path=None):
     """
     Convert Playwright frame sequences to a concatenated video.
     Reads scene.json for transition data automatically.
@@ -269,7 +282,7 @@ def build_slide_video_from_frames(beat_dirs, out_path, cfg):
 
     # ── Load transitions from scene.json ────────────────────────────
     transitions = ["cut"] * len(beat_videos)  # default: all cuts
-    scene_json = _load_scene_json(beat_dirs)
+    scene_json = _load_scene_json(beat_dirs,scene_json_path)
     if scene_json and "beats" in scene_json:
         for i, beat in enumerate(scene_json["beats"]):
             if i < len(transitions):
@@ -519,7 +532,7 @@ def assemble(
     first = pathlib.Path(slide_paths[0])
     if first.is_dir():
         print("[assemble] HTML renderer mode — assembling from frame directories")
-        build_slide_video_from_frames(slide_paths, silent, cfg)
+        build_slide_video_from_frames(slide_paths, silent, cfg, scene_json_path=run_dir / "scene.json")
     else:
         print("[assemble] Pillow mode — assembling from static PNGs")
         build_slide_video(slide_paths, durations, silent, cfg)

@@ -51,7 +51,7 @@ from utils    import (
     make_run_dir, qa_check, extract_thumbnail,
     save_report, load_topics, random_topic,
 )
-from timeline import build_timeline, write_timeline
+from captions.timeline import build_timeline, write_timeline
 
 
 # ─────────────────────────────────────────────────────────────────────────────

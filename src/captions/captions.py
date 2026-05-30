@@ -230,7 +230,15 @@ class _Renderer:
         words = u.words
         n = len(words)
         cx = self.g["cx"]
-        fade_tag = "{\\fad(%d,%d)}" % (fade or (90, 90))
+        fin, fout = fade or (90, 90)
+
+        # CONSTANT geometry across every word-event: only tier-1 words get a
+        # size bump, and that bump is the SAME in every event of the phrase, so
+        # the line never reflows as the highlight walks. The active word is
+        # distinguished by COLOUR only — no per-word size/bold change (those
+        # changed the line width each step → the words visibly "shifted").
+        def stable_size(w):
+            return int(base * 1.18) if w.tier == 1 else base
 
         # one Dialogue per active-word window; the whole phrase stays visible.
         for i in range(n):
@@ -239,15 +247,24 @@ class _Renderer:
             parts = []
             for j, w in enumerate(words):
                 col = self._word_colour(w, j, i)
-                size = self._word_size(w, j, i, base)
                 if dim_all and j != i:
                     col = self.s["future_colour"]
-                tag = _r() + _c(col) + (_b(True) if (j == i and self.s["active_bold"]) else "") + _fs(size)
+                tag = _r() + _c(col) + _fs(stable_size(w))
                 nl = ""
                 if (stacked or split) and j > 0 and j == (n + 1) // 2:
                     nl = "\\N"
                 parts.append(f"{nl}{tag}{w.text.strip()}")
-            txt = f"{{\\an{anchor}}}{{\\pos({cx},{y})}}{fade_tag}" + " ".join(parts).replace(" \\N", "\\N")
+            # FADE ONLY AT PHRASE BOUNDARIES. Fading every word-event made the
+            # caption flash out→in at each highlight step (the flicker).
+            if n == 1:
+                ftag = "{\\fad(%d,%d)}" % (fin, fout)
+            elif i == 0:
+                ftag = "{\\fad(%d,0)}" % fin
+            elif i == n - 1:
+                ftag = "{\\fad(0,%d)}" % fout
+            else:
+                ftag = ""
+            txt = f"{{\\an{anchor}}}{{\\pos({cx},{y})}}{ftag}" + " ".join(parts).replace(" \\N", "\\N")
             events.append(f"Dialogue: {layer},{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{txt}")
         return events
 
@@ -273,8 +290,8 @@ class _Renderer:
             parts = []
             for j, w in enumerate(words):
                 col = self._word_colour(w, j, i)
-                size = self._word_size(w, j, i, int(self.fs * 1.05))
-                tag = _r() + _c(col) + (_b(True) if j == i else "") + _fs(size)
+                size = int(self.fs * 1.05 * (1.18 if w.tier == 1 else 1.0))  # constant per word
+                tag = _r() + _c(col) + _fs(size)
                 parts.append(f"{tag}{w.text.strip()}")
             txt = f"{{\\an5}}{{\\pos({cx},{y})}}" + " ".join(parts)
             events.append(f"Dialogue: {layer},{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{txt}")
@@ -295,7 +312,7 @@ class _Renderer:
                 col = self.s["active_colour"] if j == i else (self.s["past_colour"] if j < i else self.s["future_colour"])
                 tag = _r() + _c(col) + _b(True) + _fs(size)
                 parts.append(f"{tag}{w.text.strip()}")
-            anim = "{\\fad(140,160)}{\\fscx92\\fscy92}{\\t(0,260,\\fscx100\\fscy100)}" if i == 0 else "{\\fad(0,160)}" if i == n - 1 else ""
+            anim = "{\\fad(140,0)}{\\fscx92\\fscy92}{\\t(0,260,\\fscx100\\fscy100)}" if i == 0 else "{\\fad(0,160)}" if i == n - 1 else ""
             txt = f"{{\\an5}}{{\\pos({cx},{y})}}{anim}" + " ".join(parts)
             events.append(f"Dialogue: {layer},{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{txt}")
         return events
@@ -316,7 +333,16 @@ class _Renderer:
                 col = self.s["active_colour"] if j == i else (self.s["past_colour"] if j < i else self.s["future_colour"])
                 tag = _r() + _c(col) + _b(True) + _fs(size)
                 parts.append(f"{tag}{w.text.strip()}")
-            txt = f"{{\\an5}}{{\\pos({cx},{y})}}{{\\fad(80,80)}}" + " ".join(parts)
+            # boundary-only fade (per-event fade flickered)
+            if n == 1:
+                ftag = "{\\fad(80,80)}"
+            elif i == 0:
+                ftag = "{\\fad(80,0)}"
+            elif i == n - 1:
+                ftag = "{\\fad(0,80)}"
+            else:
+                ftag = ""
+            txt = f"{{\\an5}}{{\\pos({cx},{y})}}{ftag}" + " ".join(parts)
             events.append(f"Dialogue: {layer},{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{txt}")
         return events
 
