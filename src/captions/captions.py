@@ -192,13 +192,14 @@ class _Renderer:
 
     # -- colour for a word given its role at the active index --------------
     def _word_colour(self, w, j, active_i):
+        # Strict karaoke roles: ONLY the active word is highlighted. (Tier-1
+        # "event" words used to pre-glow in the active colour — that read as a
+        # not-yet-spoken word being highlighted, which was confusing. Event
+        # emphasis now lives at the MODE level: hero / impact, not per-word.)
         if j == active_i:
             return self.s["active_colour"]
         if j < active_i:
             return self.s["past_colour"]
-        # future
-        if w.tier == 1:
-            return self.s["active_colour"]   # event words pre-glow
         return self.s["future_colour"]
 
     def _word_size(self, w, j, active_i, base):
@@ -232,14 +233,6 @@ class _Renderer:
         cx = self.g["cx"]
         fin, fout = fade or (90, 90)
 
-        # CONSTANT geometry across every word-event: only tier-1 words get a
-        # size bump, and that bump is the SAME in every event of the phrase, so
-        # the line never reflows as the highlight walks. The active word is
-        # distinguished by COLOUR only — no per-word size/bold change (those
-        # changed the line width each step → the words visibly "shifted").
-        def stable_size(w):
-            return int(base * 1.18) if w.tier == 1 else base
-
         # one Dialogue per active-word window; the whole phrase stays visible.
         for i in range(n):
             t_start = words[i].start
@@ -249,7 +242,13 @@ class _Renderer:
                 col = self._word_colour(w, j, i)
                 if dim_all and j != i:
                     col = self.s["future_colour"]
-                tag = _r() + _c(col) + _fs(stable_size(w))
+                # ACTIVE word = colour + a VERTICAL-ONLY scale pop (\fscy).
+                # Vertical scale doesn't change advance width, so the line never
+                # reflows → "bigger == being spoken" with zero horizontal shift.
+                # All words share ONE font size (no constant tier bump → no
+                # non-spoken word looks permanently large).
+                pop = "{\\fscy118}" if (j == i and not dim_all) else ""
+                tag = _r() + _c(col) + pop + _fs(base)
                 nl = ""
                 if (stacked or split) and j > 0 and j == (n + 1) // 2:
                     nl = "\\N"
@@ -290,8 +289,8 @@ class _Renderer:
             parts = []
             for j, w in enumerate(words):
                 col = self._word_colour(w, j, i)
-                size = int(self.fs * 1.05 * (1.18 if w.tier == 1 else 1.0))  # constant per word
-                tag = _r() + _c(col) + _fs(size)
+                pop = "{\\fscy118}" if j == i else ""
+                tag = _r() + _c(col) + pop + _fs(int(self.fs * 1.05))
                 parts.append(f"{tag}{w.text.strip()}")
             txt = f"{{\\an5}}{{\\pos({cx},{y})}}" + " ".join(parts)
             events.append(f"Dialogue: {layer},{_ts(t_start)},{_ts(t_end)},Cap,,0,0,0,,{txt}")
@@ -435,6 +434,18 @@ def _build_ass(transcript: dict, out_path: pathlib.Path, cfg: dict,
 
     # DIRECT: transcript → choreographed caption units
     units = direct_transcript(transcript, script, seed=sc.get("seed", 7))
+
+    # GLOBAL de-overlap. direct_beat schedules units PER BEAT, so a hold on a
+    # beat's last phrase (hero +0.7s, isolated +0.4s) can overrun the FIRST
+    # phrase of the next beat → two captions on screen at once. Clamp every
+    # unit to clear out before the next one begins, across the whole video.
+    _GAP = 0.04
+    for i in range(len(units) - 1):
+        u, nxt = units[i], units[i + 1]
+        min_end = u.words[-1].start + 0.06        # keep the last word briefly visible
+        target = nxt.start - _GAP
+        if u.end > target:
+            u.end = max(min_end, target)
 
     renderer = _Renderer(sdef, geom, fs, fs_hi)
     dialogue: list[str] = []

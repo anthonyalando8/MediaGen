@@ -125,7 +125,7 @@ _COPY_FOR_STEP = {
     4: ["voice.wav", "beat_*.wav", "captions.ass",
         "transcript.json"],                                   # slides: copy audio + captions
     5: ["voice.wav", "beat_*.wav", "captions.ass",
-        "transcript.json","timeline.json"],                                   # assembly: copy audio + captions
+        "transcript.json","timeline.json", "scene.json"],                                   # assembly: copy audio + captions
                                                               # frames are handled separately below
 }
 

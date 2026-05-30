@@ -228,9 +228,14 @@ def _build_xfade_chain(beat_videos, transitions, work, cfg):
         cumulative_s += durs[i] - xf_dur
 
     out = work / "assembled.mp4"
+
     _run(
-        inputs + [
-            "-filter_complex", ";".join(filter_parts),
+        [
+            "ffmpeg",
+            "-y",
+            *inputs,
+            "-filter_complex",
+            ";".join(filter_parts),
             "-map", prev_label,
             "-c:v", "libx264",
             "-preset", preset,
@@ -238,8 +243,8 @@ def _build_xfade_chain(beat_videos, transitions, work, cfg):
             "-pix_fmt", "yuv420p",
             str(out),
         ],
-        f"Assemble {n} beats with xfade chain"
-    )
+    f"Assemble {n} beats with xfade chain"
+)
     return out
 
 
