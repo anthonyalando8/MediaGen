@@ -53,7 +53,20 @@
    reveal delay = 0, life delay <= 0, both infinite/Active under currentTime. */
 .kw-ink {
   display: inline-block;
+  position: relative;          /* anchors the light-sweep ::after overlay */
   will-change: transform, opacity, filter;
+}
+
+/* NEVER break a keyword mid-glyph — breaking reads as a broken video.
+   Words may wrap BETWEEN themselves (white-space normal), but a single
+   word is kept whole; if it's too wide it's resized by inject-type.js's
+   auto-fit (preferred) or clips (acceptable) — but never fractures.
+   This overrides the base `.kw-word { overflow-wrap: break-word }`. */
+.kw-host .kw-word,
+.kw-ink {
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  hyphens: none !important;
 }
 
 /* PERPETUAL WORD LIFE — the words never fully settle. Per-word direction
@@ -177,14 +190,110 @@
 }
 
 /* ================================================================
-   SPATIAL EMBEDDING — emotion-tuned depth shadow so text sits INSIDE
-   the scene light, not pasted on top. Pure shadow, no layout effect.
+   EMPHASIS DIVERSITY  (v6.2)
+   ---------------------------------------------------------------
+   The underline used to fire on EVERY word of EVERY keyword — same
+   thickness, placement, timing → a template signature, not emphasis.
+   It is now demoted to ONE contextual tool and each emotional mode gets
+   its own emphasis language. All effects are transform/opacity/shadow
+   only (no font-size) and seek-safe (delay <= 0).
+
+     slam / hero  → LIGHT SWEEP   (accent light crosses the words)
+     fracture     → UNDERLINE     (tension divider) + baseline OFFSET
+     drift        → BREATHING GLOW (soft accent halo, pulsing)
+     rise         → LEFT ACCENT BAR (clean directional mark)
+   ================================================================ */
+
+/* 0. KILL the default per-word underline everywhere. The base rule lives
+      in _base.html (.kw-word::after, animated kwWordUnderline); typography
+      is linked after it, so this same-specificity rule wins. */
+.kw-word::after { display: none !important; }
+
+/* 1. FRACTURE — underline RETURNS, but as a deliberate tension mark:
+      accent-coloured, only on ALTERNATE words, with the even words
+      vertically OFFSET (fragmentation / collision). Reads as fracture
+      lines, not a uniform template. */
+[data-reveal="fracture"] .kw-word:nth-child(odd)::after {
+  display: block !important;
+  background: var(--acc);
+  height: 3px;
+  bottom: -10px;
+}
+[data-reveal="fracture"] .kw-word:nth-child(even) { top: 10px; }     /* baseline offset */
+[data-reveal="fracture"] .kw-word:nth-child(3n)   { top: -6px; }     /* extra fragmentation */
+
+/* 2. SLAM + HERO — LIGHT SWEEP. An accent sheen crosses each word, staggered
+      by word position so the light waves left→right across the title, then a
+      long dark gap before it repeats. Infinite + negative delay = seek-safe
+      and adds perpetual light life. Box-level sheen (screen blend), not a
+      glyph clip — reads as cinematic light, not a gimmick shimmer. */
+[data-reveal="slam"] .kw-ink::after,
+[data-reveal="hero"] .kw-ink::after {
+  content: "";
+  position: absolute;
+  inset: -2% -6%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(100deg,
+    transparent 40%,
+    oklch(from var(--acc) 0.95 0.11 h / 0.42) 50%,
+    transparent 60%);
+  transform: translateX(-140%);
+  animation: lightSweep var(--sweep-dur, 5.4s) cubic-bezier(.4,0,.2,1)
+             var(--sweep-delay, -1s) infinite both;
+}
+@keyframes lightSweep {
+  0%   { transform: translateX(-140%); }
+  16%  { transform: translateX(140%); }
+  100% { transform: translateX(140%); }   /* long dark gap = a glint, not a strobe */
+}
+/* left→right wave: each successive word's sweep starts a touch later */
+[data-reveal="slam"] .kw-word:nth-child(2) .kw-ink::after,
+[data-reveal="hero"] .kw-word:nth-child(2) .kw-ink::after { --sweep-delay: -0.55s; }
+[data-reveal="slam"] .kw-word:nth-child(3) .kw-ink::after,
+[data-reveal="hero"] .kw-word:nth-child(3) .kw-ink::after { --sweep-delay: -0.10s; }
+[data-reveal="slam"] .kw-word:nth-child(4) .kw-ink::after,
+[data-reveal="hero"] .kw-word:nth-child(4) .kw-ink::after { --sweep-delay:  0.35s; }
+
+/* 3. RISE — a clean vertical ACCENT BAR at the keyword's left edge
+      (offset positioning / directionality), grows in then holds with a
+      gentle breath. Editorial, confident — no underline. */
+[data-reveal="rise"] .kw-host { position: relative; }
+[data-reveal="rise"] .kw-host::before {
+  content: "";
+  position: absolute;
+  left: -28px;
+  top: 0.08em;
+  width: 5px;
+  height: 0.84em;
+  background: var(--acc);
+  transform-origin: top center;
+  animation: riseBarGrow 0.6s cubic-bezier(.16,1,.3,1) both,
+             riseBarBreath calc(var(--kw-pulse-dur, 5s) * 1.3) ease-in-out -1.5s infinite both;
+}
+@keyframes riseBarGrow   { 0% { transform: scaleY(0); opacity: 0; } 100% { transform: scaleY(1); opacity: 1; } }
+@keyframes riseBarBreath { 0%,100% { opacity: 0.65; } 50% { opacity: 1; } }
+
+/* ================================================================
+   SPATIAL EMBEDDING + EMOTIONAL GLOW — depth shadow so text sits INSIDE
+   the scene light. drift's glow now BREATHES (replaces the static halo);
+   the rest are static depth shadows. Pure shadow, no layout effect.
    ================================================================ */
 [data-reveal="slam"]     .kw-host { text-shadow: 0 6px 30px oklch(0 0 0 / 0.55); }          /* heavy, grounded */
 [data-reveal="fracture"] .kw-host { text-shadow: 0 3px 18px oklch(0 0 0 / 0.45); }
-[data-reveal="drift"]    .kw-host { text-shadow: 0 0 46px oklch(from var(--acc) 0.7 0.10 h / 0.30); } /* soft accent halo */
 [data-reveal="rise"]     .kw-host { text-shadow: 0 4px 24px oklch(0 0 0 / 0.40); }
 [data-reveal="hero"]     .kw-host { text-shadow: 0 0 60px oklch(from var(--acc) 0.7 0.12 h / 0.32), 0 8px 34px oklch(0 0 0 / 0.5); }
+
+/* drift: a soft accent halo that PULSES (breathing glow emphasis) — runs
+   alongside the tracking breath above (different property, no conflict). */
+[data-reveal="drift"] .kw-host {
+  animation: kwTrackingBreath calc(var(--kw-pulse-dur, 6.5s) * 1.6) ease-in-out var(--kw-pulse-delay, -2s) infinite both,
+             glowBreath       calc(var(--kw-pulse-dur, 6.5s) * 1.25) ease-in-out -1s infinite both;
+}
+@keyframes glowBreath {
+  0%,100% { text-shadow: 0 0 30px oklch(from var(--acc) 0.70 0.10 h / 0.22); }
+  50%     { text-shadow: 0 0 58px oklch(from var(--acc) 0.74 0.13 h / 0.46); }
+}
 
 /* ================================================================
    BODY MOOD — the body lines inherit the emotional reveal character.

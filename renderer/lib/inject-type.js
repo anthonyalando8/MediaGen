@@ -56,6 +56,22 @@
              || scene.querySelector('.kw-pulse')
              || scene.querySelector('[class$="-kw"]');
   if (keyword) keyword.classList.add('kw-host');
+
+  // ── KEYWORD FIT-SIZE (robust sz_kw application) ──────────────────
+  // capture.js computes beat.sz_kw and injects
+  //   [class$="-kw"] { font-size: var(--sz-kw) !important; }
+  // but inject.js appends `kw-pulse` to the keyword, so its class no longer
+  // ENDS in "-kw" → that rule never matches → the keyword renders at the
+  // giant scene default and OVERFLOWS/clips (the "truth truncation" bug).
+  // Fix it here without requiring a capture.js edit: stamp the fit-size
+  // inline on the keyword host (font-size inherits to .kw-word/.kw-ink).
+  // Inline beats the scene's class default; harmless if capture.js is also
+  // fixed (same value). Only applies when sz_kw was provided.
+  if (keyword && beat.sz_kw != null && beat.sz_kw !== '') {
+    keyword.style.fontSize = (typeof beat.sz_kw === 'number')
+      ? beat.sz_kw + 'px' : String(beat.sz_kw);
+  }
+
   var words   = keyword ? keyword.querySelectorAll('.kw-word') : [];
   var nWords  = words.length;
 
@@ -172,4 +188,45 @@
   var PACE_PULSE = { slow: 1.15, mid: 1.0, fast: 0.9, explosive: 0.82 };
   pulseDur *= (PACE_PULSE[beat.pace] != null ? PACE_PULSE[beat.pace] : 1.0);
   scene.style.setProperty('--kw-pulse-dur', pulseDur.toFixed(2) + 's');
+
+  // ── T5. KEYWORD AUTO-FIT — the guarantee that a word NEVER breaks/clips
+  // ---------------------------------------------------------------------
+  // Words must NOT fracture mid-glyph (reads as a broken video) and should
+  // not clip either — the keyword is RESIZED to fit the frame. sz_kw from
+  // visuals.py is a good first guess, but it can still overflow a given
+  // layout/column; this measures the real laid-out word boxes against the
+  // scene bounds and shrinks font-size until the whole title fits. Runs
+  // once now, then again on fonts.ready (a font swap changes metrics).
+  //
+  // Pure style mutation (font-size) — NOT an animation, so it's seek-safe
+  // and persists across every captured frame.
+  function fitKeyword() {
+    if (!keyword || !words.length) return;
+    var sc = document.querySelector('.scene');
+    if (!sc) return;
+    var pad = 26;                                   // safe gutter from frame edges
+    // worst overflow past either side, at current size
+    function worstOverflow() {
+      var r = sc.getBoundingClientRect();
+      var left = r.left + pad, right = r.right - pad;
+      var over = 0;
+      Array.prototype.forEach.call(words, function (w) {
+        var b = w.getBoundingClientRect();
+        if (b.right - right > over) over = b.right - right;
+        if (left - b.left  > over) over = left - b.left;
+      });
+      return over;                                  // >0 == overflowing
+    }
+    var cur = parseFloat(getComputedStyle(keyword).fontSize) || 100;
+    var guard = 0;
+    while (worstOverflow() > 0.5 && cur > 22 && guard < 80) {
+      cur *= 0.95;
+      keyword.style.fontSize = cur.toFixed(2) + 'px';
+      guard++;
+    }
+  }
+  fitKeyword();
+  if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+    document.fonts.ready.then(fitKeyword);          // re-fit after font swap
+  }
 })();
