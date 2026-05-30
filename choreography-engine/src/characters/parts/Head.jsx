@@ -22,13 +22,14 @@ const Head = forwardRef(function Head(
       {...rest}
     >
       <g transform={`scale(${s})`}>
-        {/* ── NECK (drawn first, behind the jaw) ───────────────── */}
-        <path d="M30 60 L46 60 L48 86 Q48 92 42 92 L34 92 Q28 92 28 86 Z"
+        {/* ── NECK (drawn first, behind the jaw) — wide trapezoid that fills
+            the torso neckline so no background shows through ───────────── */}
+        <path d="M30 56 L46 56 L52 90 Q52 92 46 92 L30 92 Q24 92 24 90 Z"
               fill={C.skin}/>
         {/* neck core shadow (cast by jaw) */}
-        <path d="M30 60 L46 60 L46 67 Q38 71 30 67 Z" fill={C.skinShade} opacity="0.8"/>
+        <path d="M30 56 L46 56 L47 64 Q38 68 29 64 Z" fill={C.skinShade} opacity="0.85"/>
         {/* neck side shade (away side) */}
-        <path d="M28 70 Q27 82 31 90 Q29 80 30 70 Z" fill={C.skinShade} opacity="0.6"/>
+        <path d="M26 66 Q25 82 31 90 Q28 80 29 66 Z" fill={C.skinShade} opacity="0.55"/>
 
         {/* ── EARS ─────────────────────────────────────────────── */}
         <path d="M13 38 Q6 38 7 47 Q8 54 15 53 Z" fill={C.skin}/>

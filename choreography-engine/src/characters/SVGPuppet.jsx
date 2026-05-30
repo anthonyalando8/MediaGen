@@ -2,32 +2,32 @@ import { forwardRef, useRef, useImperativeHandle } from "react";
 import { Head, Eye, Brow, Mouth, Torso, Arm, Hand, Hip, Leg, Shadow } from "./parts/index.js";
 
 /**
- * SVGPuppet.jsx — GSAP-safe two-group architecture
- * -------------------------------------------------
- * CRITICAL RULE: Every part component's outer <g ref> has NO SVG transform
- * attribute. SVGPuppet positions parts via wrapper <g transform="translate(x,y)">.
- * GSAP only ever writes CSS transforms to the ref — no conflict with SVG attributes.
+ * SVGPuppet.jsx — GSAP-safe two-group architecture (contract UNCHANGED).
+ * -------------------------------------------------------------------------
+ * Every part's outer <g ref> has NO SVG transform; SVGPuppet positions parts
+ * with wrapper <g transform="translate(x,y)">; GSAP writes CSS transforms only.
  *
- * Tree structure per part:
- *   <g transform="translate(x,y)">          ← SVGPuppet positions (SVG attr, static)
- *     <Part ref={partRef}>                  ← GSAP target (CSS transform only)
- *       <g transform="scale(s)">            ← static scale (SVG attr, inside part)
- *         {raw paths}
- *       </g>
- *     </Part>
- *   </g>
+ * ── MATCHED TO THE CURRENT (large) PARTS ─────────────────────────────────
+ *   Torso     120×150   (broad chest, V-taper)
+ *   Upper arm  52×92     deltoid cap on the INNER side (local x≈2–16),
+ *                        arm-body centerline ≈ local x36, bottom(elbow) ≈ x36
+ *   Lower arm  32×86     body centerline ≈ local x16
+ *   Hand       40×46     centerline ≈ local x20
+ *   Hip        88×56     Leg 46×170     Head 76×92
  *
- * Layout math — stacking bottom→top from y=0 (feet):
- *   Parts are placed at their TOP-LEFT corner in stage space.
- *   Heights at native scale (parts render at scale=1, so pixel = viewBox unit):
+ * Why the old build looked "disconnected": the previous SVGPuppet used the
+ * chibi dims (TORSO_W=90, UA_W=32), did NOT pass full widths, applied NO joint
+ * overlaps, and did NOT mirror the back/left arm — so the deltoid landed on the
+ * wrong side and every joint had a gap. All fixed below.
  *
- *   legs    38×80  → legY  = -80    (top at -80, bottom at 0)
- *   hip     90×40  → hipY  = -120   (top at -120, bottom at -80)
- *   torso   90×110 → torY  = -230   (top at -230, bottom at -120)
- *   upper_arm 32×70           shoulder = -230
- *   lower_arm 28×65           elbow    = -160
- *   hand    36×40             wrist    = -95
- *   head    80×80  → headY = -310   (top at -310, bottom at -230)
+ * KEY RULES that keep the upper body connected:
+ *   1. Back/left arm AND right/front arm both get the correct mirror so each
+ *      deltoid points toward the torso centre (inner side).
+ *   2. Each segment is offset so the deltoid overlaps the torso shoulder and the
+ *      forearm + hand fall straight under the elbow (shared visible centre).
+ *   3. Joints overlap (ELBOW/WRIST/SHOULDER) so the later-drawn part hides the seam.
+ *
+ * Stage space: y=0 ≈ ground at feet, building UPWARD (negative y).
  */
 const SVGPuppet = forwardRef(function SVGPuppet(
   { characterId = "character", scale = 1, x = 0, y = 0, facingRight = true, style = {}, className = "" },
@@ -83,68 +83,83 @@ const SVGPuppet = forwardRef(function SVGPuppet(
     legs:        [legLRef.current,      legRRef.current],
   }));
 
-  // ── Part dimensions (native viewBox sizes = rendered pixel sizes at scale 1) ─
-  const TORSO_W = 90,  TORSO_H = 110;
-  const HIP_W   = 90,  HIP_H   = 40;
-  const LEG_W   = 38,  LEG_H   = 80;
-  const UA_W    = 32,  UA_H    = 70;
-  const LA_W    = 28,  LA_H    = 65;
-  const HAND_W  = 36;
-  const HEAD_W  = 80,  HEAD_H  = 80;
-  const EYE_W   = 24;   // rendered width (smaller than viewBox for proportion)
-  const BROW_W  = 22;
-  const MOUTH_W = 40;
-  const SHADOW_W = 100;
+  // ── Part dimensions (native viewBox = rendered px at scale 1) ─────
+  const TORSO_W = 120, TORSO_H = 150;
+  const HIP_W   = 88,  HIP_H   = 56;
+  const LEG_W   = 46,  LEG_H   = 170;
+  const UA_W    = 36,  UA_H    = 92;    // upper arm (slim tapered tube)
+  const LA_W    = 30,  LA_H    = 86;
+  const HAND_W  = 34;
+  const HEAD_W  = 76,  HEAD_H  = 92;
+  const EYE_W   = 20;
+  const BROW_W  = 20;
+  const MOUTH_W = 30;
+  const SHADOW_W = 130;
 
-  // ── Y positions — each part's TOP-LEFT corner ─────────────────────
-  const LEG_Y      = -LEG_H;               // -80
-  const HIP_Y      = -LEG_H - HIP_H;       // -120
-  const TORSO_Y    = HIP_Y  - TORSO_H;     // -230
-  const SHOULDER_Y = TORSO_Y;              // -230 — arm top = torso top
-  const ELBOW_Y    = SHOULDER_Y + UA_H;    // -160
-  const WRIST_Y    = ELBOW_Y   + LA_H;     // -95
-  const HEAD_Y     = TORSO_Y   - HEAD_H;   // -310
+  // ── Local centrelines inside each part (viewBox units) ────────────
+  const UA_BODY_C = 18;   // upper-arm centreline (= width/2, centred shape)
+  const LA_BODY_C = 15;   // lower-arm centreline
+  const HAND_C    = 17;   // hand centreline
 
-  // ── X positions — centered on x=0 ────────────────────────────────
-  const TORSO_X = -(TORSO_W / 2);          // -45  (center)
-  const HIP_X   = -(HIP_W   / 2);          // -45
-  // Legs: gap of 4px between them, centered under hip
-  const LEG_L_X = -(LEG_W + 2);            // -40
-  const LEG_R_X =  2;                      //  +2
-  // Arms: sit flush against torso sides
-  const UA_L_X  = TORSO_X - UA_W;          // -77
-  const UA_R_X  = -TORSO_X;               // +45
-  const LA_L_X  = UA_L_X  + 2;            // -75
-  const LA_R_X  = UA_R_X  - 2;            // +43
-  const HA_L_X  = LA_L_X  - 2;            // -77
-  const HA_R_X  = LA_R_X  + (LA_W - HAND_W) / 2 + 2; // centers hand on forearm
-  // Head: centered
-  const HEAD_X  = -(HEAD_W / 2);           // -40
+  // ── Joint overlaps (px the upper part dips behind the lower one) ──
+  const HIP_OVERLAP   = 16;
+  const TORSO_OVERLAP = 16;
+  const NECK_OVERLAP  = 26;   // head drops onto the shoulders; neck ends in the collar
+  const ELBOW_OVERLAP = 12;
+  const WRIST_OVERLAP = 15;
 
-  // ── Face feature positions (in HEAD's local space after translate) ─
-  // Head rect occupies x=4..76, y=8..76. Hair fills y=4..28.
-  // Usable face area: x=10..70  y=28..72  →  60px wide, 44px tall
-  // Eyes: place two eyes symmetrically, with natural spacing
-  const EYE_Y   = HEAD_Y + 34;  // absolute stage Y: -310 + 34 = -276
-  const EYE_L_X = HEAD_X + 10;  // left eye left edge:  -40 + 10 = -30
-  const EYE_R_X = HEAD_X + HEAD_W - EYE_W - 10;  // right eye left edge: -40+80-24-10 = +6
+  // ── Y positions — each part's TOP-LEFT corner, stacked bottom→top ─
+  const LEG_Y      = -LEG_H;                               // -170
+  const HIP_Y      = LEG_Y - HIP_H + HIP_OVERLAP;          // -210
+  const TORSO_Y    = HIP_Y - TORSO_H + TORSO_OVERLAP;      // -344
+  const HEAD_Y     = TORSO_Y - HEAD_H + NECK_OVERLAP;      // -420
+  const SHOULDER_Y = TORSO_Y + 20;                         // slim arm tucks under the torso shoulder shelf
+  const ELBOW_Y    = SHOULDER_Y + (UA_H - 4) - ELBOW_OVERLAP; // lower-arm top
+  const WRIST_Y    = ELBOW_Y + (LA_H - 2) - WRIST_OVERLAP;    // hand top
 
-  // Brows: just above eyes
-  const BROW_Y   = HEAD_Y + 24;
-  const BROW_L_X = HEAD_X + 11;
-  const BROW_R_X = HEAD_X + HEAD_W - BROW_W - 11;
+  // ── X positions — centred on x=0 ─────────────────────────────────
+  const TORSO_X = -(TORSO_W / 2);   // -60
+  const HIP_X   = -(HIP_W / 2);     // -44
 
-  // Mouth: lower face, centered
-  const MOUTH_Y = HEAD_Y + 56;
-  const MOUTH_X = HEAD_X + (HEAD_W - MOUTH_W) / 2;  // centered
+  // Legs: visible centres at ±LEG_CX (leg-art centre ≈ w/2)
+  const LEG_CX  = 20;
+  const LEG_L_X = -LEG_CX - LEG_W / 2;   // -43
+  const LEG_R_X =  LEG_CX - LEG_W / 2;   // -3
 
-  // Shadow: centered at feet
+  // Arms: pick the elbow's visible centre, then back-solve each segment so the
+  // deltoid overlaps the torso shoulder and forearm/hand fall straight down.
+  const ELBOW_CX = 44;   // |stage x| of the shoulder–elbow–wrist line (inside the torso shoulder)
+
+  // right side (NOT mirrored): stage = X + localCentre
+  const UA_R_X = ELBOW_CX - UA_BODY_C;   // 20
+  const LA_R_X = ELBOW_CX - LA_BODY_C;   // 40
+  const HA_R_X = ELBOW_CX - HAND_C;      // 36
+  // left side (mirrored): stage = X + (w - localCentre) ⇒ X = -ELBOW_CX - (w - c)
+  const UA_L_X = -ELBOW_CX - (UA_W - UA_BODY_C);  // -72
+  const LA_L_X = -ELBOW_CX - (LA_W - LA_BODY_C);  // -72
+  const HA_L_X = -ELBOW_CX - (HAND_W - HAND_C);   // -76
+
+  // Head: centred
+  const HEAD_X = -(HEAD_W / 2);   // -38
+
+  // ── Face features (stage coords; head face-centre is stage x=0) ───
+  const EYE_CX  = 11;
+  const EYE_Y   = HEAD_Y + 31;
+  const EYE_R_X =  EYE_CX - 10;   // +1
+  const EYE_L_X = -EYE_CX - 10;   // -21 (mirror)
+
+  const BROW_Y   = EYE_Y - 7;
+  const BROW_R_X =  EYE_CX - 10;
+  const BROW_L_X = -EYE_CX - 11;
+
+  const MOUTH_Y = EYE_Y + 25;
+  const MOUTH_X = -(MOUTH_W / 2);
+
   const SHADOW_X = -(SHADOW_W / 2);
-  const SHADOW_Y = -8;
+  const SHADOW_Y = 8;
 
   const flip = facingRight ? 1 : -1;
 
-  // ── Positioner helper — keeps SVGPuppet JSX clean ────────────────
   const P = ({ x: px, y: py, children }) => (
     <g transform={`translate(${px}, ${py})`}>{children}</g>
   );
@@ -163,10 +178,10 @@ const SVGPuppet = forwardRef(function SVGPuppet(
         <Shadow ref={shadowRef} width={SHADOW_W} />
       </P>
 
-      {/* ── Back arm (left — BEHIND torso) ──────────────────── */}
-      <P x={UA_L_X} y={SHOULDER_Y}><Arm ref={upperArmLRef} segment="upper" width={UA_W} /></P>
-      <P x={LA_L_X} y={ELBOW_Y}>   <Arm ref={lowerArmLRef} segment="lower" width={LA_W} /></P>
-      <P x={HA_L_X} y={WRIST_Y}>   <Hand ref={handLRef}                    width={HAND_W} /></P>
+      {/* ── Back arm (left — BEHIND torso, mirrored so deltoid is inner) ── */}
+      <P x={UA_L_X} y={SHOULDER_Y}><Arm ref={upperArmLRef} segment="upper" width={UA_W} mirror /></P>
+      <P x={LA_L_X} y={ELBOW_Y}>   <Arm ref={lowerArmLRef} segment="lower" width={LA_W} mirror /></P>
+      <P x={HA_L_X} y={WRIST_Y}>   <Hand ref={handLRef}                    width={HAND_W} mirror /></P>
 
       {/* ── Legs ────────────────────────────────────────────── */}
       <P x={LEG_L_X} y={LEG_Y}><Leg ref={legLRef} footRef={footLRef} legWidth={LEG_W} /></P>
@@ -187,12 +202,12 @@ const SVGPuppet = forwardRef(function SVGPuppet(
       <P x={HEAD_X} y={HEAD_Y}><Head ref={headRef} width={HEAD_W} /></P>
 
       {/* ── Brows ───────────────────────────────────────────── */}
-      <P x={BROW_L_X} y={BROW_Y}><Brow ref={browLRef} width={BROW_W} /></P>
-      <P x={BROW_R_X} y={BROW_Y}><Brow ref={browRRef} width={BROW_W} mirror /></P>
+      <P x={BROW_L_X} y={BROW_Y}><Brow ref={browLRef} width={BROW_W} mirror /></P>
+      <P x={BROW_R_X} y={BROW_Y}><Brow ref={browRRef} width={BROW_W} /></P>
 
       {/* ── Eyes ────────────────────────────────────────────── */}
-      <P x={EYE_L_X} y={EYE_Y}><Eye ref={eyeLRef} width={EYE_W} /></P>
-      <P x={EYE_R_X} y={EYE_Y}><Eye ref={eyeRRef} width={EYE_W} mirror /></P>
+      <P x={EYE_L_X} y={EYE_Y}><Eye ref={eyeLRef} width={EYE_W} mirror /></P>
+      <P x={EYE_R_X} y={EYE_Y}><Eye ref={eyeRRef} width={EYE_W} /></P>
 
       {/* ── Mouth ───────────────────────────────────────────── */}
       <P x={MOUTH_X} y={MOUTH_Y}><Mouth ref={mouthRef} width={MOUTH_W} /></P>

@@ -56,7 +56,7 @@ const Leg = forwardRef(function Leg(
       <g
         ref={footRef}
         data-rig-part="foot"
-        transform={`translate(${-footW * 0.16}, ${legH - 4})`}
+        transform={`translate(${-footW * 0.16}, ${legH - 21})`}
         style={{ transformOrigin: '50% 0%', transformBox: 'fill-box' }}
       >
         <g transform={`scale(${footS}) ${mirror ? `scale(-1,1) translate(${-56}, 0)` : ''}`}>
