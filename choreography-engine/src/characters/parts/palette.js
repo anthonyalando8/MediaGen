@@ -1,59 +1,53 @@
 /**
  * palette.js — single source of truth for puppet colors.
  * Re-skin the whole character by editing this one file.
+ *
+ * Style: flat modern vector (Storyset-like). Each surface uses ONE flat fill
+ * plus ONE soft shade tone for cel-style form. No hard black outlines — the
+ * "line" color is a soft warm charcoal used sparingly for the smallest accents.
+ * Gender-neutral, bright friendly SaaS palette.
  */
 export const PALETTE = {
-  // skin
-  skin:        '#FBDFCC',
-  skinShade:   '#F0B695',
-  skinDeep:    '#C58660',
-  skinLine:    '#A06640',
+  // ── skin (warm neutral tan) ──────────────────────────────
+  skin:        '#F2C6A0',
+  skinShade:   '#E3A87E',
+  skinDeep:    '#CE8E61',
+  skinLine:    '#B97C50',
 
-  // hair
-  hairBase:    '#2A1810',
-  hairShade:   '#1A0E08',
-  hairMid:     '#5C3920',
-  hairHi:      '#B57A48',
-  hairOutline: '#100804',
+  // ── hair (warm modern brown) ─────────────────────────────
+  hairBase:    '#5A453A',
+  hairShade:   '#46352C',
+  hairHi:      '#705749',
 
-  // eye
-  eyeWhite:    '#FAF9F4',
-  eyeShade:    '#E8DFD4',
-  irisOuter:   '#3D74B8',
-  irisInner:   '#1B3D7A',
-  irisRim:     '#92C2EF',
-  pupil:       '#0A0E14',
-  lashes:      '#1A0F08',
+  // ── eyes / brows ─────────────────────────────────────────
+  eyeDark:     '#3A322E',   // friendly dark (not pure black)
+  eyeShine:    '#FFFFFF',
+  brow:        '#5A453A',
 
-  // mouth — natural skin-toned lips
-  lip:         '#D08878',
-  lipDeep:     '#8A4838',
-  mouthIn:     '#5A2018',
-  teeth:       '#F5F0E8',
-  tongue:      '#D87878',
+  // ── mouth ────────────────────────────────────────────────
+  mouth:       '#B85C4E',   // soft warm
+  mouthDeep:   '#8A3F35',
+  mouthIn:     '#7A3329',
+  teeth:       '#FBF6EE',
 
-  // jacket / outfit
-  jacket:      '#2E4172',
-  jacketShade: '#1B2A50',
-  jacketHi:    '#4A6CB0',
-  jacketLine:  '#0E1830',
-  shirt:       '#F8F4EB',
-  shirtShade:  '#D8D2C2',
-  tie:         '#B4393E',
-  tieShade:    '#7C1F23',
+  // ── top / shirt (friendly indigo) ────────────────────────
+  top:         '#5C6CD8',
+  topShade:    '#4452B2',
+  topHi:       '#7E8CEC',
+  collar:      '#4452B2',
 
-  // pants
-  pants:       '#1F2842',
-  pantsShade:  '#0E152C',
-  pantsHi:     '#374570',
+  // ── pants (deep calm navy) ───────────────────────────────
+  pants:       '#323C5E',
+  pantsShade:  '#262E49',
+  pantsHi:     '#46527A',
 
-  // shoes
-  shoe:        '#171008',
-  shoeShade:   '#0A0500',
-  shoeLace:    '#E8DECA',
-  shoeSole:    '#F5EDDA',
+  // ── shoes (off-white + teal accent sole) ─────────────────
+  shoe:        '#F4F1E9',
+  shoeShade:   '#DDD7C8',
+  shoeSole:    '#1FB6A0',
+  shoeSoleSh:  '#15917F',
 
-  // line + accents
-  line:        '#0F0A06',
-  blush:       '#EE9098',
+  // ── accents ──────────────────────────────────────────────
+  blush:       '#F0A892',
+  line:        '#3A322E',   // soft warm charcoal, used sparingly
 };

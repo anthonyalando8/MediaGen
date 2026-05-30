@@ -143,108 +143,76 @@ def _load_scene_json(beat_dirs, explicit_path=None) -> dict | None:
 
 def _build_xfade_chain(beat_videos, transitions, work, cfg):
     """
-    Assemble beat MP4s into a single output video using a uniform xfade
-    filter_complex.
+    Assemble beat MP4s PAIRWISE into a growing accumulator.
 
-    All beat pairs — even CSS-handled transitions (cut, slam_cut, etc.) —
-    go through xfade. CSS transitions use duration=0.001s (1 frame at 30fps),
-    which is a visually invisible passthrough that keeps the entire chain as
-    uniform xfade nodes.
+      • hard-cut / CSS beats (cut, slam_cut, flash, dip_black, …) → concat
+        (stream-copy, fast, baked-in CSS effects preserved)
+      • blur_wipe / fade / whip_pan → real xfade against the accumulator
 
-    This avoids the concat=n=2 approach which breaks when mixed with xfade
-    nodes in the same filter_complex (audio/video stream count mismatch).
-
-    Transition durations:
-      blur_wipe   → xfade fade       0.25 s
-      fade        → xfade fade       0.40 s
-      whip_pan    → xfade slideleft  0.20 s
-      everything else → xfade fade   0.001 s  (invisible passthrough)
+    This replaces the old single-filter_complex chain, which forced EVERY
+    boundary (even cuts) through xfade with a 0.001s "passthrough". A 0.001s
+    xfade is sub-frame (33ms/frame @30fps) → zero transition frames → chaining
+    them corrupted the timeline and collapsed the output to ~the first beat.
+    Pairwise ops are each a known-good 2-input graph, so the full length is
+    always preserved and only real crossfades re-encode.
     """
-    PASSTHROUGH = ("fade", 0.001)  # 1-frame invisible, keeps chain uniform
-
     fps    = cfg["video"]["fps"]
     preset = cfg["video"]["preset"]
     crf    = str(cfg["video"]["crf"])
+    w      = cfg["video"]["width"]
+    h      = cfg["video"]["height"]
     n      = len(beat_videos)
+    out    = work / "assembled.mp4"
 
-    # Get durations of each beat
-    durs = [_video_duration(v) for v in beat_videos]
-
-    # If ALL transitions are CSS-handled, skip filter_complex entirely
-    # (pure concat is faster and avoids re-encoding)
-    needs_xfade = any(
-        _XFADE_MAP.get(transitions[i] if i < len(transitions) else "cut")
-        for i in range(1, n)
-    )
-    if not needs_xfade:
-        concat_file = work / "concat_beats.txt"
-        concat_file.write_text(
-            "\n".join(f"file '{p.resolve().as_posix()}'" for p in beat_videos),
-            encoding="utf-8",
-        )
-        out = work / "assembled.mp4"
-        _run([
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", str(concat_file),
-            "-c", "copy",
-            str(out),
-        ], "Concat beat videos (no xfade transitions)")
+    if n == 1:
+        shutil.copy2(str(beat_videos[0]), str(out))
         return out
 
-    # ── Build uniform xfade filter_complex ───────────────────────────
-    print(f"[assemble] Building xfade chain across {n} beats…")
-
-    inputs = []
-    for v in beat_videos:
-        inputs += ["-i", str(v)]
-
-    filter_parts = []
-    prev_label   = "[0:v]"
-    cumulative_s = durs[0]
-    label_idx    = 0
+    acc      = beat_videos[0]
+    acc_dur  = _video_duration(acc)
 
     for i in range(1, n):
-        t = transitions[i] if i < len(transitions) else "cut"
-        xf_name, xf_dur = _XFADE_MAP.get(t, PASSTHROUGH)
+        t   = transitions[i] if i < len(transitions) else "cut"
+        xf  = _XFADE_MAP.get(t)
+        nxt = beat_videos[i]
+        nxt_dur = _video_duration(nxt)
+        step = work / f"_acc_{i:02d}.mp4"
 
-        offset     = max(0.0, cumulative_s - xf_dur)
-        next_label = f"[{i}:v]"
-        out_label  = f"xf{label_idx}"
+        if xf:
+            xf_name, xf_dur = xf
+            offset = max(0.0, acc_dur - xf_dur)
+            _run([
+                "ffmpeg", "-y",
+                "-i", str(acc), "-i", str(nxt),
+                "-filter_complex",
+                (f"[0:v]settb=AVTB,fps={fps},format=yuv420p[a];"
+                 f"[1:v]settb=AVTB,fps={fps},format=yuv420p[b];"
+                 f"[a][b]xfade=transition={xf_name}:duration={xf_dur:.4f}:offset={offset:.4f}[v]"),
+                "-map", "[v]",
+                "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p",
+                str(step),
+            ], f"xfade {t}  beat {i}→{i+1}  (offset={offset:.3f}s)")
+            acc_dur = offset + nxt_dur
+        else:
+            # hard cut — concat demuxer, stream-copy (beats share identical encode params)
+            lst = work / f"_concat_{i:02d}.txt"
+            lst.write_text(
+                f"file '{pathlib.Path(acc).resolve().as_posix()}'\n"
+                f"file '{pathlib.Path(nxt).resolve().as_posix()}'\n",
+                encoding="utf-8",
+            )
+            _run([
+                "ffmpeg", "-y",
+                "-f", "concat", "-safe", "0", "-i", str(lst),
+                "-c", "copy",
+                str(step),
+            ], f"concat cut  beat {i}→{i+1}")
+            acc_dur += nxt_dur
 
-        filter_parts.append(
-            f"{prev_label}{next_label}"
-            f"xfade=transition={xf_name}"
-            f":duration={xf_dur:.4f}"
-            f":offset={offset:.4f}"
-            f"[{out_label}]"
-        )
+        acc = step
 
-        kind = t if t in _XFADE_MAP else f"{t} (passthrough)"
-        print(f"[assemble]   Beat {i}→{i+1}: {kind}  offset={offset:.3f}s")
-
-        prev_label    = f"[{out_label}]"
-        label_idx    += 1
-        cumulative_s += durs[i] - xf_dur
-
-    out = work / "assembled.mp4"
-
-    _run(
-        [
-            "ffmpeg",
-            "-y",
-            *inputs,
-            "-filter_complex",
-            ";".join(filter_parts),
-            "-map", prev_label,
-            "-c:v", "libx264",
-            "-preset", preset,
-            "-crf", crf,
-            "-pix_fmt", "yuv420p",
-            str(out),
-        ],
-    f"Assemble {n} beats with xfade chain"
-)
+    if acc != out:
+        shutil.move(str(acc), str(out))
     return out
 
 

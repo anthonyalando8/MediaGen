@@ -226,7 +226,11 @@
     var guard = 0;
     // Shrink ONLY until the longest word fits the column (2% safety margin).
     // Stops as soon as it fits → stays as large as possible, wrap preserved.
-    while (widestWord() > avail * 0.98 && cur > 30 && guard < 90) {
+    // (No frame-overflow check: a keyword that ran off-frame was caused by the
+    // comp-corner mutator colliding with bespoke layouts, fixed in retention.css
+    // — not a sizing problem. Adding a frame-overflow shrink here fought that
+    // off-screen anchor and collapsed the size.)
+    while (widestWord() > avail * 0.98 && cur > 40 && guard < 90) {
       cur *= 0.97;
       keyword.style.fontSize = cur.toFixed(2) + 'px';
       guard++;

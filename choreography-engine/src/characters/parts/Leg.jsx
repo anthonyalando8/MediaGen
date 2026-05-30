@@ -1,14 +1,21 @@
 import { forwardRef } from "react";
 import { PALETTE as C } from "./palette.js";
 
+/**
+ * Leg — single tapered pant leg + a shoe as a footRef child (matches the rig:
+ * one leg ref per side, foot is a nested ref, no separate knee/upper/lower).
+ *   leg  viewBox 46×170, pivot 50% 0% (hip joint)
+ *   foot viewBox 56×30,  pivot 50% 0% (ankle), placed near the leg bottom
+ * Drawn before the hip (hip hides the leg-top seam). Soft knee + inner shade.
+ */
 const Leg = forwardRef(function Leg(
-  { legWidth = 38, mirror = false, style = {}, className = '', footRef = null, ...rest },
+  { legWidth = 46, mirror = false, style = {}, className = '', footRef = null, ...rest },
   ref
 ) {
-  const s     = legWidth / 38;
-  const legH  = 80 * s;
-  const footW = legWidth * (54 / 38);
-  const footS = footW / 54;
+  const s     = legWidth / 46;
+  const legH  = 170 * s;
+  const footW = legWidth * (56 / 46);
+  const footS = footW / 56;
   const mirrorT = mirror ? `scale(-1,1) translate(${-legWidth}, 0)` : '';
   return (
     <g
@@ -20,75 +27,59 @@ const Leg = forwardRef(function Leg(
     >
       {/* Pant leg */}
       <g transform={`scale(${s}) ${mirrorT}`}>
-        <path d="M4 2 Q2 2 2 8 L2 72 Q2 78 8 78 L30 78 Q36 78 36 72 L36 8 Q36 2 34 2 Z"
-              fill={C.pants} stroke={C.pantsShade} strokeWidth="1.3"/>
-        {/* highlight stripe down center */}
-        <path d="M14 10 L14 76" stroke={C.pantsHi} strokeWidth="2.2"
-              fill="none" opacity="0.35" strokeLinecap="round"/>
-        {/* outer shadow */}
-        <path d="M32 8 Q30 40 33 76" stroke={C.pantsShade} strokeWidth="2.5"
-              fill="none" opacity="0.7" strokeLinecap="round"/>
+        <path d="M7 5
+                 C 5 5, 4 9, 5 16
+                 C 6 60, 7 105, 9 142
+                 C 10 154, 13 163, 18 163
+                 L 28 163
+                 C 33 163, 36 154, 37 142
+                 C 39 105, 40 60, 41 16
+                 C 42 9, 41 5, 39 5
+                 C 30 3, 16 3, 7 5 Z"
+              fill={C.pants}/>
+        {/* inner-edge shade */}
+        <path d="M6 16 C 7 60, 8 105, 10 142 C 11 153, 13 161, 17 162
+                 C 14 150, 13 105, 12 60 C 11 38, 10 22, 11 16
+                 C 11 12, 6 12, 6 16 Z"
+              fill={C.pantsShade} opacity="0.5"/>
+        {/* knee soft highlight */}
+        <ellipse cx="24" cy="92" rx="9" ry="13" fill={C.pantsHi} opacity="0.22"/>
         {/* knee crease */}
-        <path d="M4 44 Q19 47 34 44" stroke={C.pantsShade} strokeWidth="0.7" fill="none" opacity="0.55"/>
-        {/* small fabric folds at hem */}
-        <path d="M4 72 Q19 75 34 72" stroke={C.pantsShade} strokeWidth="0.6" fill="none" opacity="0.5"/>
+        <path d="M9 104 Q23 108 37 104" stroke={C.pantsShade} strokeWidth="0.8"
+              fill="none" opacity="0.5" strokeLinecap="round"/>
+        {/* ankle hem fold */}
+        <path d="M11 152 Q23 156 35 152" stroke={C.pantsShade} strokeWidth="0.8"
+              fill="none" opacity="0.5" strokeLinecap="round"/>
       </g>
 
-      {/* Foot — sneaker */}
+      {/* Foot — flat sneaker */}
       <g
         ref={footRef}
         data-rig-part="foot"
-        transform={`translate(${-footW * 0.1}, ${legH - 2})`}
+        transform={`translate(${-footW * 0.16}, ${legH - 4})`}
         style={{ transformOrigin: '50% 0%', transformBox: 'fill-box' }}
       >
-        <g transform={`scale(${footS}) ${mirror ? `scale(-1,1) translate(${-54}, 0)` : ''}`}>
-          {/* white midsole stripe (sits BEHIND upper) */}
-          <path d="M2 22 Q2 28 10 28 L46 28 Q53 28 52 22 L2 22 Z"
-                fill={C.shoeSole} stroke={C.line} strokeWidth="0.8"/>
-
-          {/* shoe upper — sneaker silhouette */}
-          <path d="M3 22
-                   Q3 16 7 14
-                   L18 8
-                   Q22 6 26 6
-                   L38 8
-                   Q44 10 47 14
-                   L51 20
-                   Q53 22 51 24
-                   L8 24
-                   Q3 24 3 22 Z"
-                fill={C.shoe} stroke={C.line} strokeWidth="1"/>
-
-          {/* white toe cap */}
-          <path d="M40 14 Q47 17 51 22 L48 24 Q43 22 38 22 Q36 18 40 14 Z"
-                fill={C.shoeSole} stroke={C.line} strokeWidth="0.8"/>
-
-          {/* tongue (peeks out top) */}
-          <path d="M16 10 L26 6 L30 14 L19 16 Z"
-                fill={C.shoeShade} stroke={C.line} strokeWidth="0.7"/>
-          <path d="M20 11 L25 8 L28 13 L21 14 Z" fill={C.shoe} opacity="0.8"/>
-
-          {/* laces (3 crossing pairs) */}
-          <line x1="15" y1="14" x2="30" y2="12" stroke={C.shoeLace} strokeWidth="1.1" strokeLinecap="round"/>
-          <line x1="14" y1="17" x2="31" y2="15" stroke={C.shoeLace} strokeWidth="1.1" strokeLinecap="round"/>
-          <line x1="13" y1="20" x2="32" y2="18" stroke={C.shoeLace} strokeWidth="1.1" strokeLinecap="round"/>
-          {/* lace knot */}
-          <circle cx="22" cy="13" r="0.8" fill={C.shoeLace}/>
-
-          {/* swoosh / side stripe (anime sneaker accent) */}
-          <path d="M8 20 Q18 22 38 20" stroke={C.shoeSole} strokeWidth="1.3"
-                fill="none" strokeLinecap="round"/>
-
-          {/* heel cap */}
-          <path d="M3 22 Q3 14 7 12 L11 16 L9 22 Z"
-                fill={C.shoeShade} stroke={C.line} strokeWidth="0.6"/>
-          {/* heel highlight */}
-          <path d="M5 14 Q6 18 7 20" stroke={C.shoeLace} strokeWidth="0.4"
-                fill="none" opacity="0.5"/>
-
-          {/* ankle hole (back) */}
-          <path d="M3 14 Q5 11 9 11 L11 14 Q7 13 4 15 Z"
-                fill={C.line} opacity="0.6"/>
+        <g transform={`scale(${footS}) ${mirror ? `scale(-1,1) translate(${-56}, 0)` : ''}`}>
+          {/* sole (teal accent) */}
+          <path d="M3 21 Q3 29 12 29 L49 29 Q55 29 54 21 Q54 19 51 19 L6 19 Q3 19 3 21 Z"
+                fill={C.shoeSole}/>
+          <path d="M3 24 L54 24" stroke={C.shoeSoleSh} strokeWidth="1.4" opacity="0.5" strokeLinecap="round"/>
+          {/* upper (off-white) */}
+          <path d="M5 21
+                   C 5 13, 11 9, 19 8
+                   C 32 6, 45 12, 52 19
+                   C 53 21, 51 22, 49 22
+                   L 9 22 C 6 22, 5 22, 5 21 Z"
+                fill={C.shoe}/>
+          {/* upper inner shade */}
+          <path d="M6 21 C 6 14, 11 10, 18 9 C 12 12, 9 16, 9 22 L 6 22 Z"
+                fill={C.shoeShade} opacity="0.7"/>
+          {/* lace hints */}
+          <path d="M22 14 L31 13" stroke={C.shoeShade} strokeWidth="1.3" strokeLinecap="round"/>
+          <path d="M21 17 L31 16" stroke={C.shoeShade} strokeWidth="1.3" strokeLinecap="round"/>
+          {/* ankle collar */}
+          <path d="M5 20 C 5 14, 9 10, 14 9 L 16 13 C 11 14, 9 17, 9 21 Z"
+                fill={C.shoeShade} opacity="0.8"/>
         </g>
       </g>
     </g>

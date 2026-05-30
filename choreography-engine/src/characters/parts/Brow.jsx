@@ -1,8 +1,12 @@
 import { forwardRef } from "react";
 import { PALETTE as C } from "./palette.js";
 
+/**
+ * Brow — short soft rounded brow. viewBox 48×16, pivot center.
+ * Animate via translateY (raise/lower) or rotate (anger/worry).
+ */
 const Brow = forwardRef(function Brow(
-  { width = 48, mirror = false, style = {}, className = '', ...rest },
+  { width = 20, mirror = false, style = {}, className = '', ...rest },
   ref
 ) {
   const s = width / 48;
@@ -16,18 +20,13 @@ const Brow = forwardRef(function Brow(
       {...rest}
     >
       <g transform={`scale(${s}) ${mirrorT}`}>
-        {/* main brow — tapered shape, drawn UPPER in the 16-tall viewBox so it
-            doesn't kiss the eyelashes when placed above the eye */}
-        <path d="M4 7
-                 Q14 2 26 3
-                 Q36 3 44 5
-                 L43 7
-                 Q35 5 26 5
-                 Q15 5 5 8 Z"
-              fill={C.hairBase}/>
-        {/* hair-grain highlight */}
-        <path d="M8 6 Q20 3 32 4 Q40 4 42 5"
-              stroke={C.hairHi} strokeWidth="0.7" fill="none" opacity="0.6" strokeLinecap="round"/>
+        {/* soft tapered brow, thicker at the inner end */}
+        <path d="M6 9
+                 Q16 4 30 5
+                 Q40 6 44 9
+                 Q40 8 30 8
+                 Q17 8 7 11 Z"
+              fill={C.brow}/>
       </g>
     </g>
   );

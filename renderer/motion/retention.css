@@ -63,7 +63,7 @@
   pointer-events: none; z-index: var(--z-flash, 99);
   mix-blend-mode: screen;
   background: transparent;                 /* hidden until animation fires */
-  animation: piChroma .18s linear var(--pi-delay, 2s) both;
+  animation: piChroma .18s linear var(--pi-delay, 2s) forwards;
 }
 @keyframes piChroma {
   0%   { background: oklch(.6 .2 25 / .6); transform: translateX(-4px); }
@@ -86,13 +86,21 @@
 }
 
 /* PI-04  INVERT — 80ms negative exposure flash ──────────────── */
-.pi-invert .depth-fg,
-.pi-invert .depth-bg {
+.pi-invert::after {
+  content: ""; position: absolute; inset: 0;
+  pointer-events: none; z-index: var(--z-flash, 99);
+  mix-blend-mode: difference;
+  background: oklch(1 0 0);
+  opacity: 0;
+  /* Dedicated overlay (NOT filter on .depth-*). inject.js step 5 stamps an
+     inline animation-duration on the depth planes; inline beats this shorthand
+     so .08s was ignored and the invert held ~the whole beat (white takeover).
+     A difference-blend white overlay on its OWN element has no such collision. */
   animation: piInvert .08s steps(1) var(--pi-delay, 2s) forwards;
 }
 @keyframes piInvert {
-  0%   { filter: invert(1) hue-rotate(180deg); }
-  100% { filter: none; }
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* PI-06  IRIS PULL — vignette tightens then releases ────────── */
@@ -241,6 +249,25 @@
 .scene[data-layout="full"].comp-corner [class$="-body"] {
   transform: translate(0%, 8%) !important;
   text-align: right !important;
+}
+
+/* ── FLIP opt-out ──────────────────────────────────────────────
+   The flip scene has a bespoke two-part (NOT-THIS / keyword) absolute
+   layout. The generic corner/crop/tilt/sparse mutators translate +
+   right-align the -kw-wrap, which collides with that layout and shoves
+   "IT IS EASY" off the right edge. Flip keeps its own composition. */
+.flip-scene.comp-corner   [class$="-kw-wrap"],
+.flip-scene.comp-corner   [class$="-body"],
+.flip-scene.comp-crop-low [class$="-kw-wrap"],
+.flip-scene.comp-crop-low [class$="-body"],
+.flip-scene.comp-tilt     [class$="-kw-wrap"],
+.flip-scene.comp-tilt     [class$="-body"],
+.flip-scene.comp-sparse   [class$="-kw"],
+.flip-scene.comp-sparse   [class$="-kw-wrap"],
+.flip-scene.comp-sparse   [class$="-body"] {
+  transform: none !important;
+  text-align: inherit !important;
+  max-width: none !important;
 }
 
 /* SPARSE — keyword takes only 40% width, anchored to layout side

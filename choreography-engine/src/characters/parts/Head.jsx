@@ -1,11 +1,18 @@
 import { forwardRef } from "react";
 import { PALETTE as C } from "./palette.js";
 
+/**
+ * Head — viewBox 76×92.
+ * Includes a NECK STUB at the bottom (y≈62→92) so there is no separate neck
+ * part; SVGPuppet overlaps the head over the torso collar to hide the seam.
+ * Pivot: 50% 100% (neck base) so head-tilt/nod rotates around the neck.
+ * Face is drawn symmetric so eye/brow mirroring stays valid.
+ */
 const Head = forwardRef(function Head(
-  { width = 80, style = {}, className = '', ...rest },
+  { width = 76, style = {}, className = '', ...rest },
   ref
 ) {
-  const s = width / 80;
+  const s = width / 76;
   return (
     <g
       ref={ref}
@@ -15,111 +22,67 @@ const Head = forwardRef(function Head(
       {...rest}
     >
       <g transform={`scale(${s})`}>
-        {/* back hair (peeks behind ears) */}
-        <path d="M10 28 Q4 36 6 52 Q8 64 14 70 L14 30 Z" fill={C.hairBase}/>
-        <path d="M70 28 Q76 36 74 52 Q72 64 66 70 L66 30 Z" fill={C.hairBase}/>
+        {/* ── NECK (drawn first, behind the jaw) ───────────────── */}
+        <path d="M30 60 L46 60 L48 86 Q48 92 42 92 L34 92 Q28 92 28 86 Z"
+              fill={C.skin}/>
+        {/* neck core shadow (cast by jaw) */}
+        <path d="M30 60 L46 60 L46 67 Q38 71 30 67 Z" fill={C.skinShade} opacity="0.8"/>
+        {/* neck side shade (away side) */}
+        <path d="M28 70 Q27 82 31 90 Q29 80 30 70 Z" fill={C.skinShade} opacity="0.6"/>
 
-        {/* ears */}
-        <path d="M10 40 Q5 41 5 48 Q5 56 11 58 L13 50 Z"
-              fill={C.skin} stroke={C.skinLine} strokeWidth="0.9"/>
-        <path d="M8 46 Q8 50 11 53" stroke={C.skinDeep} strokeWidth="0.8" fill="none" opacity="0.7"/>
-        <path d="M70 40 Q75 41 75 48 Q75 56 69 58 L67 50 Z"
-              fill={C.skin} stroke={C.skinLine} strokeWidth="0.9"/>
-        <path d="M72 46 Q72 50 69 53" stroke={C.skinDeep} strokeWidth="0.8" fill="none" opacity="0.7"/>
+        {/* ── EARS ─────────────────────────────────────────────── */}
+        <path d="M13 38 Q6 38 7 47 Q8 54 15 53 Z" fill={C.skin}/>
+        <path d="M11 43 Q10 47 13 50" stroke={C.skinDeep} strokeWidth="1" fill="none" opacity="0.6" strokeLinecap="round"/>
+        <path d="M63 38 Q70 38 69 47 Q68 54 61 53 Z" fill={C.skin}/>
+        <path d="M65 43 Q66 47 63 50" stroke={C.skinDeep} strokeWidth="1" fill="none" opacity="0.6" strokeLinecap="round"/>
 
-        {/* face — teardrop silhouette */}
-        <path d="M14 28
-                 Q12 20 18 16
-                 Q20 14 24 14
-                 Q30 12 40 12
-                 Q50 12 56 14
-                 Q60 14 62 16
-                 Q68 20 66 28
-                 Q68 38 66 50
-                 Q64 62 58 70
-                 Q50 76 40 76
-                 Q30 76 22 70
-                 Q16 62 14 50
-                 Q12 38 14 28 Z"
-              fill={C.skin} stroke={C.skinLine} strokeWidth="1.1"/>
+        {/* ── FACE (soft rounded silhouette) ───────────────────── */}
+        <path d="M38 7
+                 C 21 7, 12 19, 12 36
+                 C 12 55, 23 73, 38 73
+                 C 53 73, 64 55, 64 36
+                 C 64 19, 55 7, 38 7 Z"
+              fill={C.skin}/>
 
-        {/* cool-side cheek shadow (cel-shaded) */}
-        <path d="M14 40 Q12 56 18 66 Q14 60 13 50 Q12 42 14 40 Z"
-              fill={C.skinShade} opacity="0.7"/>
-        {/* warm-side cheek (subtle) */}
-        <path d="M62 42 Q68 56 60 68 Q66 60 66 50 Q66 44 62 42 Z"
-              fill={C.skinShade} opacity="0.35"/>
-
-        {/* jaw shading under chin */}
-        <path d="M30 70 Q40 75 50 70 Q44 73 40 73 Q36 73 30 70 Z"
-              fill={C.skinShade} opacity="0.45"/>
+        {/* cheek shade on the away (left) side — single soft cel shape */}
+        <path d="M14 36 C 13 54, 22 71, 33 73 C 23 69, 17 55, 17 38 C 17 33, 15 33, 14 36 Z"
+              fill={C.skinShade} opacity="0.55"/>
+        {/* under-fringe forehead shadow */}
+        <path d="M16 30 Q38 36 60 30 Q40 33 18 31 Z" fill={C.skinDeep} opacity="0.18"/>
 
         {/* blush */}
-        <ellipse cx="22" cy="54" rx="5.5" ry="2.6" fill={C.blush} opacity="0.55"/>
-        <ellipse cx="58" cy="54" rx="5.5" ry="2.6" fill={C.blush} opacity="0.55"/>
+        <ellipse cx="23" cy="52" rx="6" ry="3.2" fill={C.blush} opacity="0.5"/>
+        <ellipse cx="53" cy="52" rx="6" ry="3.2" fill={C.blush} opacity="0.5"/>
 
-        {/* nose — minimal anime hint */}
-        <path d="M40 42 Q39 50 41 53" stroke={C.skinLine} strokeWidth="0.9"
-              fill="none" strokeLinecap="round" opacity="0.8"/>
-        <ellipse cx="40.5" cy="53" rx="1.6" ry="0.7" fill={C.skinDeep} opacity="0.55"/>
+        {/* tiny soft nose */}
+        <path d="M38 44 Q36.5 50 39 52" stroke={C.skinDeep} strokeWidth="1.1"
+              fill="none" strokeLinecap="round" opacity="0.5"/>
 
-        {/* ── HAIR — single clean silhouette with hanging forelocks ── */}
-
-        {/* MAIN MASS — one continuous path defining the entire hair shape.
-           Top is smooth and rounded; bottom edge has 3 forelock scallops that
-           dip into the forehead. */}
-        <path d="M 8 28
-                 Q 6 10 16 6
-                 Q 26 2 40 3
-                 Q 54 2 64 6
-                 Q 74 10 72 28
-                 L 70 20
-                 Q 66 16 64 22
-                 Q 60 26 56 18
-                 L 52 26
-                 Q 46 30 42 22
-                 L 38 26
-                 Q 32 30 28 22
-                 L 26 26
-                 Q 20 24 14 22
-                 Q 10 22 8 28 Z"
-              fill={C.hairBase} stroke={C.hairOutline} strokeWidth="0.4"/>
-
-        {/* SECONDARY SMALLER FORELOCKS — fill gaps between the main bangs */}
-        <path d="M 18 22 Q 20 18 22 22 L 21 26 Z" fill={C.hairBase}/>
-        <path d="M 32 22 Q 34 18 36 22 L 35 26 Z" fill={C.hairBase}/>
-        <path d="M 48 22 Q 50 18 52 22 L 51 26 Z" fill={C.hairBase}/>
-
-        {/* AHOGE — single cowlick at the crown */}
-        <path d="M 38 4 Q 42 -2 47 0 Q 44 4 41 7 Q 39 5 38 4 Z" fill={C.hairBase}/>
-
-        {/* SIDEBURN WISPS — hair extending down past the ears */}
-        <path d="M 9 28 Q 6 44 11 56 Q 12 48 11 40 Q 10 32 9 28 Z" fill={C.hairBase}/>
-        <path d="M 71 28 Q 74 44 69 56 Q 68 48 69 40 Q 70 32 71 28 Z" fill={C.hairBase}/>
-
-        {/* HIGHLIGHT RIBBON — cel-shaded sheen across the crown */}
-        <path d="M 18 14
-                 Q 28 9 42 9
-                 Q 56 9 62 14
-                 Q 56 12 50 11
-                 Q 44 11 38 11.5
-                 Q 30 12 24 13
-                 Q 20 13.5 18 14 Z"
-              fill={C.hairHi} opacity="0.85"/>
-
-        {/* Strand highlights */}
-        <path d="M 22 12 Q 30 9 38 9" stroke={C.hairHi} strokeWidth="0.6"
-              fill="none" opacity="0.7" strokeLinecap="round"/>
-        <path d="M 44 9 Q 52 9 58 12" stroke={C.hairHi} strokeWidth="0.6"
-              fill="none" opacity="0.7" strokeLinecap="round"/>
-
-        {/* Inner hair shadow (subtle base-tone darkening) */}
-        <path d="M 10 24 Q 40 28 70 24 Q 50 26 30 26 Q 16 26 10 24 Z"
-              fill={C.hairShade} opacity="0.5"/>
-
-        {/* Subtle forehead shadow CAST by the forelocks (skin tone gets darker just under the bangs) */}
-        <path d="M 14 26 Q 40 30 66 26 Q 50 28 32 28 Q 18 28 14 26 Z"
-              fill={C.skinDeep} opacity="0.18"/>
+        {/* ── HAIR — modern short, soft side-swept fringe ──────── */}
+        {/* main mass: crown + sides */}
+        <path d="M12 44
+                 C 8 22, 19 5, 38 5
+                 C 57 5, 68 22, 64 44
+                 C 63 37, 61 32, 57 30
+                 C 60 25, 55 20, 47 23
+                 C 42 25, 39 29, 33 28
+                 C 27 26, 21 25, 18 31
+                 C 15 35, 13 39, 16 44
+                 C 15 39, 16 35, 19 33
+                 C 16 36, 14 40, 12 44 Z"
+              fill={C.hairBase}/>
+        {/* fringe sweep (front lock crossing the forehead) */}
+        <path d="M55 29
+                 C 58 26, 56 21, 49 22
+                 C 41 23, 36 29, 28 28
+                 C 33 31, 41 30, 47 28
+                 C 51 27, 54 27, 55 29 Z"
+              fill={C.hairShade} opacity="0.65"/>
+        {/* crown sheen */}
+        <path d="M24 13 Q38 7 52 13 Q40 11 30 13 Q26 13.5 24 13 Z"
+              fill={C.hairHi} opacity="0.8"/>
+        <path d="M22 17 Q34 11 46 12" stroke={C.hairHi} strokeWidth="1.2"
+              fill="none" opacity="0.6" strokeLinecap="round"/>
       </g>
     </g>
   );

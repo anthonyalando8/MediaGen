@@ -1,11 +1,17 @@
 import { forwardRef } from "react";
 import { PALETTE as C } from "./palette.js";
 
+/**
+ * Hip / pelvis — top of the pants. viewBox 88×56.
+ * Drawn AFTER the legs so its opaque bottom hides the leg-top seams; the bottom
+ * edge splits into two leg openings with a soft crotch notch.
+ * Pivot 50% 0% (spine base) so the lower body sways from the waist.
+ */
 const Hip = forwardRef(function Hip(
-  { width = 90, style = {}, className = '', ...rest },
+  { width = 88, style = {}, className = '', ...rest },
   ref
 ) {
-  const s = width / 90;
+  const s = width / 88;
   return (
     <g
       ref={ref}
@@ -15,35 +21,35 @@ const Hip = forwardRef(function Hip(
       {...rest}
     >
       <g transform={`scale(${s})`}>
-        {/* pants base */}
-        <path d="M4 2 Q2 2 2 6 L2 34 Q2 38 6 38 L84 38 Q88 38 88 34 L88 6 Q88 2 86 2 Z"
-              fill={C.pants} stroke={C.pantsShade} strokeWidth="1.3"/>
-        {/* belt */}
-        <path d="M2 2 L88 2 L88 11 Q88 13 86 13 L4 13 Q2 13 2 11 Z"
-              fill={C.pantsShade} stroke={C.line} strokeWidth="0.6"/>
-        {/* belt highlight */}
-        <path d="M2 3 L88 3 L88 5 L2 5 Z" fill={C.pantsHi} opacity="0.5"/>
-        {/* buckle */}
-        <rect x="38" y="3" width="14" height="9" rx="1.5"
-              fill="#D6B560" stroke="#7A5A20" strokeWidth="0.8"/>
-        <rect x="40" y="5" width="10" height="5" rx="0.8"
-              fill="#9B7530" stroke="#5A3F18" strokeWidth="0.4"/>
-        <line x1="45" y1="5" x2="45" y2="10" stroke="#5A3F18" strokeWidth="0.5"/>
+        {/* pelvis */}
+        <path d="M7 9
+                 C 5 4, 9 2, 13 2
+                 L 75 2
+                 C 79 2, 83 4, 81 9
+                 C 83 24, 81 40, 77 52
+                 C 75 56, 69 56, 67 52
+                 C 60 44, 53 42, 47 48
+                 C 45 51, 43 51, 41 48
+                 C 35 42, 28 44, 21 52
+                 C 19 56, 13 56, 11 52
+                 C 7 40, 5 24, 7 9 Z"
+              fill={C.pants}/>
 
-        {/* fly */}
-        <path d="M45 14 L45 36" stroke={C.pantsShade} strokeWidth="0.8" opacity="0.7"/>
-        <path d="M45 14 Q47 14 47 18" stroke={C.pantsShade} strokeWidth="0.5" opacity="0.6" fill="none"/>
+        {/* away-side (left) shade */}
+        <path d="M7 9 C 5 24, 7 40, 11 52 C 13 55, 17 55, 19 53
+                 C 15 40, 13 24, 14 10 C 14 6, 8 6, 7 9 Z"
+              fill={C.pantsShade} opacity="0.5"/>
 
-        {/* fabric folds */}
-        <path d="M14 28 Q40 32 76 28" stroke={C.pantsShade} strokeWidth="0.7" fill="none" opacity="0.6"/>
+        {/* waistband */}
+        <path d="M7 9 C 5 4, 9 2, 13 2 L 75 2 C 79 2, 83 4, 81 9
+                 C 81 13, 80 14, 77 14 L 11 14 C 8 14, 7 13, 7 9 Z"
+              fill={C.pantsShade}/>
+        <path d="M9 6 L 79 6" stroke={C.pantsHi} strokeWidth="1"
+              opacity="0.4" strokeLinecap="round"/>
 
-        {/* side shading */}
-        <path d="M2 14 Q4 30 2 36 Q6 26 5 18 Q3 14 2 14 Z" fill={C.pantsShade} opacity="0.6"/>
-        <path d="M88 14 Q86 30 88 36 Q84 26 85 18 Q87 14 88 14 Z" fill={C.pantsShade} opacity="0.6"/>
-
-        {/* belt loops */}
-        <rect x="22" y="2" width="2" height="11" rx="0.5" fill={C.line} opacity="0.7"/>
-        <rect x="66" y="2" width="2" height="11" rx="0.5" fill={C.line} opacity="0.7"/>
+        {/* center seam / fly */}
+        <path d="M44 15 L 44 47" stroke={C.pantsShade} strokeWidth="1.1"
+              opacity="0.55" strokeLinecap="round"/>
       </g>
     </g>
   );
