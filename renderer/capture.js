@@ -95,46 +95,101 @@ const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY || '';
 
 async function fetchUnsplashUrl(query) {
   if (!UNSPLASH_KEY) {
-    console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
+    console.warn('[capture] UNSPLASH_API_KEY not set — skipping background images');
     return null;
   }
-  if (!query) {
-    console.log(`[capture] Beat has no visual_query — skipping image`);
-    return null;
-  }
+  if (!query) return null;
 
-  const url = `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=portrait&content_filter=high&client_id=${UNSPLASH_KEY}`;
-
-  try {
-    const res = await fetch(url, {
-      headers: { 'Accept-Version': 'v1' },
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (!res.ok) {
-      console.warn(`[capture] Unsplash ${res.status} for "${query}" — skipping`);
-      return null;
+  // SEARCH (relevance-ranked), not RANDOM. random returns a loosely-matched photo
+  // from a wide pool and, on ZERO hits, falls back to an UNRELATED image — that is
+  // the "mountains on a coding video" bug. search lets us rank by relevance AND
+  // detect empty results so we can retry with just the subject instead.
+  async function search(q) {
+    const url = `https://api.unsplash.com/search/photos`
+      + `?query=${encodeURIComponent(q)}`
+      + `&orientation=portrait&content_filter=high&per_page=8&order_by=relevant`
+      + `&client_id=${UNSPLASH_KEY}`;
+    try {
+      const res = await fetch(url, {
+        headers: { 'Accept-Version': 'v1' },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) { console.warn(`[capture] Unsplash ${res.status} for "${q}"`); return []; }
+      const data = await res.json();
+      return Array.isArray(data?.results) ? data.results : [];
+    } catch (err) {
+      console.warn(`[capture] Unsplash search failed for "${q}": ${err.message}`);
+      return [];
     }
+  }
 
-    const data = await res.json();
-    const imageUrl = data?.urls?.regular;
+  let results = await search(query);
 
-    if (!imageUrl) {
-      console.warn(`[capture] Unsplash returned no URL for "${query}"`);
-      return null;
+  // Retry with just the SUBJECT (first 2 words) if the full query was too niche.
+  if (!results.length) {
+    const subject = query.split(/\s+/).slice(0, 2).join(' ');
+    if (subject && subject !== query) {
+      console.log(`[capture] "${query}" had 0 hits — retrying subject "${subject}"`);
+      results = await search(subject);
     }
+  }
 
-    const credit = data?.user?.name || 'unknown';
-    console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
-    console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
-    //return imageUrl;
-    return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
-
-  } catch (err) {
-    console.warn(`[capture] Unsplash fetch failed for "${query}": ${err.message}`);
+  // Better NO image (theme background colour shows) than a WRONG one.
+  if (!results.length) {
+    console.log(`[capture] no contextual image for "${query}" — using theme bg`);
     return null;
   }
+
+  // Pick from the top few for variety while staying relevant.
+  const top  = results.slice(0, Math.min(5, results.length));
+  const pick = top[Math.floor(Math.random() * top.length)];
+  const imageUrl = pick?.urls?.regular;
+  if (imageUrl) console.log(`[capture] ✓ "${query}" → ${pick?.user?.name || 'unknown'}`);
+  return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
 }
+
+// async function fetchUnsplashUrl(query) {
+//   if (!UNSPLASH_KEY) {
+//     console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
+//     return null;
+//   }
+//   if (!query) {
+//     console.log(`[capture] Beat has no visual_query — skipping image`);
+//     return null;
+//   }
+
+//   const url = `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=portrait&content_filter=high&client_id=${UNSPLASH_KEY}`;
+
+//   try {
+//     const res = await fetch(url, {
+//       headers: { 'Accept-Version': 'v1' },
+//       signal: AbortSignal.timeout(6000),
+//     });
+
+//     if (!res.ok) {
+//       console.warn(`[capture] Unsplash ${res.status} for "${query}" — skipping`);
+//       return null;
+//     }
+
+//     const data = await res.json();
+//     const imageUrl = data?.urls?.regular;
+
+//     if (!imageUrl) {
+//       console.warn(`[capture] Unsplash returned no URL for "${query}"`);
+//       return null;
+//     }
+
+//     const credit = data?.user?.name || 'unknown';
+//     console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
+//     console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
+//     //return imageUrl;
+//     return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
+
+//   } catch (err) {
+//     console.warn(`[capture] Unsplash fetch failed for "${query}": ${err.message}`);
+//     return null;
+//   }
+// }
 
 // ─────────────────────────────────────────────────────────────────────────────
 

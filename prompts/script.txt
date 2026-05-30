@@ -13,7 +13,8 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
     "theme":        "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white | tech_blue | cyber_noir",
     "music_mood":   "tense | cinematic | ambient | dark | aggressive | suspense | minimal | emotional | playful | upbeat",
     "voice_style":  "calm_intense | storyteller | aggressive | documentary | dramatic | analytical | comedic",
-    "camera_style": "static | dynamic | handheld"
+    "camera_style": "static | dynamic | handheld",
+    "subject":      "1-3 word concrete photographable noun describing the topic's literal on-screen world (e.g. 'laptop code', 'gym weights', 'cash money', 'car engine'). Used to anchor every visual_query."
   }},
 
   "beats": [
@@ -30,7 +31,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "transition":       "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
       "background":       "solid | gradient | noise | grid | glow | lines | abstract",
       "layout":           "left | center | right | full",
-      "visual_query":     "2-5 word Unsplash search string matching this beat's mood and topic",
+      "visual_query":     "2-4 word LITERAL image search. Lead with a concrete photographable subject from the topic domain. No mood/emotion words. See VISUAL QUERY rules.",
       "intensity":        0.55,
       "pattern_interrupt":"",
       "composition":      ""
@@ -80,6 +81,11 @@ GLOBAL FIELDS — pick one value per field based on what fits the topic.
 - music_mood:   what would play under this script
 - voice_style:  how this would be narrated
 - camera_style: static=considered/calm, dynamic=intense/contrarian, handheld=raw/documentary
+- subject:      the literal, photographable noun at the centre of the topic. This is
+                the anchor every visual_query must build on. Pick the most common,
+                concrete object a viewer would SEE if filming this topic. Not a
+                feeling, not an abstraction. Programming → "laptop code". Money →
+                "cash banknotes". Fitness → "gym weights". Sleep → "bed dark room".
 
 ──────────────────────────────────────────────────────────────────────
 PER-BEAT VARIETY — MANDATORY
@@ -106,9 +112,41 @@ PER-BEAT FIELD GUIDANCE
 - background:    hook=glow, climax=abstract, tension=lines, insight=grid/solid. Rotate.
 - layout:        left=editorial, center=calm, right=cinematic, full=intense/climax.
                  Alternate. Two consecutive same-layout is okay; three is monotony.
-- visual_query:  2-5 word Unsplash query. Match topic AND emotion. Dark, atmospheric.
-                 Good: "dark code terminal blur" / "person alone crowd"
-                 Bad:  "technology" / "business" / "abstract background"
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL. It does not understand emotion or metaphor. A query made
+of mood words ("dark solitude atmospheric") returns generic landscape stock —
+nature dominates the image pool, so you get mountains, skies, and fog instead of
+your topic. A query that is too niche returns ZERO results and the API falls back
+to a random unrelated photo. Both are why a coding video shows a mountain.
+
+RULES (all mandatory):
+1. SUBJECT FIRST. Every visual_query MUST begin with the global `subject` (or a
+   concrete photographable noun from the same topic domain) — the literal thing on
+   screen, not the feeling. The topic subject must be present in EVERY beat.
+2. Then add AT MOST 1-2 VISUAL modifiers only: lighting, angle, or setting
+   ("night", "close up", "macro", "blue light", "office", "screen glow", "overhead").
+3. BANNED in queries — emotions and abstractions: "solitude", "struggle", "journey",
+   "atmospheric", "powerful", "freedom", "mind", "soul", "abstract", "chaos", "alone",
+   and ANY feeling word. These return nature/abstract stock, never your topic.
+4. Use COMMON stock subjects that exist in quantity. If the literal subject is rare,
+   use the nearest common, photographable proxy.
+5. 2-4 words. Concrete + visual. No mood.
+
+Template:  [subject] + [setting or lighting]
+
+For a PROGRAMMING topic (subject "laptop code"):
+  Good: "laptop code screen night" / "developer dark office" / "server room blue"
+        / "keyboard macro close up" / "terminal screen glow" / "monitor code dark"
+  Bad:  "dark solitude" / "mountain journey" / "abstract struggle" / "deep focus"
+        / "mind racing" / "digital freedom"   ← all return landscapes/abstract
+
+Every beat, regardless of emotion, stays ON the topic subject. Emotion is carried by
+the MOTION system (camera, intensity, grain, tint) — NOT by the photo. The photo's
+only job is to keep the viewer inside the topic's world. If you cannot write a
+concrete on-topic query for a beat, reuse the subject with a different setting/angle.
 
 ──────────────────────────────────────────────────────────────────────
 INTENSITY — 0.0 to 1.0, REQUIRED on every beat
@@ -182,7 +220,7 @@ Examples:
 ⚠ NEVER omit asterisks — every text field must contain at least one *…*.
 
 ──────────────────────────────────────────────────────────────────────
-ANALYTICAL EXAMPLE (5 beats)
+ANALYTICAL EXAMPLE (5 beats — subject "bed dark room")
 ──────────────────────────────────────────────────────────────────────
 {{
   "title": "Sleep Kills Performance",
@@ -192,7 +230,8 @@ ANALYTICAL EXAMPLE (5 beats)
     "theme":        "clean_modern",
     "music_mood":   "minimal",
     "voice_style":  "analytical",
-    "camera_style": "static"
+    "camera_style": "static",
+    "subject":      "bed dark room"
   }},
   "beats": [
     {{
@@ -208,7 +247,7 @@ ANALYTICAL EXAMPLE (5 beats)
       "transition":       "slam_cut",
       "background":       "glow",
       "layout":           "left",
-      "visual_query":     "person awake dark room night",
+      "visual_query":     "bedroom phone screen night",
       "intensity":        0.93,
       "pattern_interrupt":"slam",
       "composition":      ""
@@ -226,7 +265,7 @@ ANALYTICAL EXAMPLE (5 beats)
       "transition":       "cut",
       "background":       "gradient",
       "layout":           "center",
-      "visual_query":     "brain scan minimal lab",
+      "visual_query":     "alarm clock bedside dark",
       "intensity":        0.50,
       "pattern_interrupt":"",
       "composition":      "sparse"
@@ -244,7 +283,7 @@ ANALYTICAL EXAMPLE (5 beats)
       "transition":       "cut",
       "background":       "lines",
       "layout":           "right",
-      "visual_query":     "exhausted face close up dark",
+      "visual_query":     "tired person desk morning",
       "intensity":        0.72,
       "pattern_interrupt":"",
       "composition":      ""
@@ -262,7 +301,7 @@ ANALYTICAL EXAMPLE (5 beats)
       "transition":       "slam_cut",
       "background":       "abstract",
       "layout":           "full",
-      "visual_query":     "alarm clock dark dramatic",
+      "visual_query":     "alarm clock close up macro",
       "intensity":        1.00,
       "pattern_interrupt":"chroma",
       "composition":      ""
@@ -280,7 +319,7 @@ ANALYTICAL EXAMPLE (5 beats)
       "transition":       "dip_black",
       "background":       "solid",
       "layout":           "center",
-      "visual_query":     "dark minimalist night sky",
+      "visual_query":     "bedroom window night dark",
       "intensity":        0.85,
       "pattern_interrupt":"",
       "composition":      ""
@@ -289,7 +328,7 @@ ANALYTICAL EXAMPLE (5 beats)
 }}
 
 ──────────────────────────────────────────────────────────────────────
-HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
+HUMOROUS EXAMPLE (4 beats — subject "laptop screens", varied cameras/layouts)
 ──────────────────────────────────────────────────────────────────────
 {{
   "title": "You Are Not Multitasking",
@@ -299,7 +338,8 @@ HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
     "theme":        "warm_amber",
     "music_mood":   "playful",
     "voice_style":  "comedic",
-    "camera_style": "static"
+    "camera_style": "static",
+    "subject":      "laptop screens"
   }},
   "beats": [
     {{
@@ -315,7 +355,7 @@ HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
       "transition":       "slam_cut",
       "background":       "glow",
       "layout":           "center",
-      "visual_query":     "person multiple screens overwhelmed",
+      "visual_query":     "desk multiple monitors screens",
       "intensity":        0.92,
       "pattern_interrupt":"slam",
       "composition":      ""
@@ -333,7 +373,7 @@ HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
       "transition":       "cut",
       "background":       "gradient",
       "layout":           "left",
-      "visual_query":     "brain scan colorful abstract",
+      "visual_query":     "laptop desk overhead flatlay",
       "intensity":        0.48,
       "pattern_interrupt":"",
       "composition":      "tilt"
@@ -351,7 +391,7 @@ HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
       "transition":       "blur_wipe",
       "background":       "solid",
       "layout":           "right",
-      "visual_query":     "focused person single task desk",
+      "visual_query":     "single laptop clean desk",
       "intensity":        0.78,
       "pattern_interrupt":"",
       "composition":      ""
@@ -369,7 +409,7 @@ HUMOROUS EXAMPLE (4 beats — note varied cameras/layouts even for jokes)
       "transition":       "dip_black",
       "background":       "solid",
       "layout":           "full",
-      "visual_query":     "single light dark room minimal",
+      "visual_query":     "laptop single screen dark",
       "intensity":        0.86,
       "pattern_interrupt":"flash",
       "composition":      ""
@@ -390,5 +430,8 @@ FINAL CHECKLIST before outputting (rewrite if any fail):
 8. pattern_interrupt only set on beats with intensity ≥ 0.80 (or "").
 9. At most ONE beat has a non-empty composition value.
 10. Every per-beat field present and from the allowed vocabulary.
+11. global.subject is a concrete photographable noun (not a feeling).
+12. EVERY visual_query leads with that subject (or a same-domain concrete noun)
+    and contains NO mood/emotion/abstraction words.
 
 Output the JSON only.
