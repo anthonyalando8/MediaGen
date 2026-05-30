@@ -23,8 +23,10 @@ import pathlib
 import subprocess
 import json
 import os
+from timeline import attach_to_contracts
 
-from visuals_calc_word_width import calc_kw_font_size
+
+from visuals_dir.visuals_calc_word_width import calc_kw_font_size
 
 # ---------------------------------------------------------------------------
 # .env loader
@@ -406,6 +408,7 @@ def render_slides(
     out_dir:           pathlib.Path,
     cfg:               dict,
     beat_durations_ms: list = None,
+    timeline:          dict = None,
 ) -> list[pathlib.Path]:
     """
     Render all beats via Node/Playwright and return a list of frame directories.
@@ -414,8 +417,10 @@ def render_slides(
 
     Requires renderer/capture.js to exist (run `npm install` in renderer/).
     """
+
     renderer_dir = pathlib.Path(__file__).parent.parent / "renderer"
     capture_js   = renderer_dir / "capture.js"
+
     if not capture_js.exists():
         raise FileNotFoundError(
             f"[visuals] renderer/capture.js not found at {renderer_dir}\n"
@@ -435,6 +440,9 @@ def render_slides(
         style=script_style,
         camera_style=global_cam_style,
     )
+
+    if timeline:
+        attach_to_contracts(beats_contracts, timeline)
 
     scene_json = {
         "video_id": out_dir.name,

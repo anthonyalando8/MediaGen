@@ -92,104 +92,270 @@ function rewriteAssetUrls(html) {
 
 // ── Unsplash ─────────────────────────────────────────────────────────────────
 const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY || '';
+const PEXELS_KEY = process.env.PEXELS_API_KEY || '';
+const PIXABAY_KEY = process.env.PIXABAY_API_KEY || '';
 
-async function fetchUnsplashUrl(query) {
-  if (!UNSPLASH_KEY) {
-    console.warn('[capture] UNSPLASH_API_KEY not set — skipping background images');
-    return null;
-  }
+async function fetchMediaAsset(query, type = "image") {
   if (!query) return null;
 
-  // SEARCH (relevance-ranked), not RANDOM. random returns a loosely-matched photo
-  // from a wide pool and, on ZERO hits, falls back to an UNRELATED image — that is
-  // the "mountains on a coding video" bug. search lets us rank by relevance AND
-  // detect empty results so we can retry with just the subject instead.
-  async function search(q) {
-    const url = `https://api.unsplash.com/search/photos`
-      + `?query=${encodeURIComponent(q)}`
-      + `&orientation=portrait&content_filter=high&per_page=8&order_by=relevant`
-      + `&client_id=${UNSPLASH_KEY}`;
-    try {
-      const res = await fetch(url, {
-        headers: { 'Accept-Version': 'v1' },
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) { console.warn(`[capture] Unsplash ${res.status} for "${q}"`); return []; }
-      const data = await res.json();
-      return Array.isArray(data?.results) ? data.results : [];
-    } catch (err) {
-      console.warn(`[capture] Unsplash search failed for "${q}": ${err.message}`);
-      return [];
+  const TIMEOUT_MS = 6000;
+
+  // ─── PROVIDER 1: PEXELS ───────────────────────────────────────────────────
+
+  async function fetchPexelsImage(q) {
+    if (!PEXELS_KEY) return null;
+
+    async function search(searchQuery) {
+      const url = `https://api.pexels.com/v1/search`
+        + `?query=${encodeURIComponent(searchQuery)}`
+        + `&orientation=portrait&per_page=8&size=medium`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: PEXELS_KEY },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+
+        if (!res.ok) {
+          console.warn(`[media] Pexels ${res.status} for "${searchQuery}"`);
+          return [];
+        }
+
+        const data = await res.json();
+        return Array.isArray(data?.photos) ? data.photos : [];
+      } catch (err) {
+        console.warn(`[media] Pexels search failed for "${searchQuery}": ${err.message}`);
+        return [];
+      }
     }
-  }
 
-  let results = await search(query);
+    let results = await search(q);
 
-  // Retry with just the SUBJECT (first 2 words) if the full query was too niche.
-  if (!results.length) {
-    const subject = query.split(/\s+/).slice(0, 2).join(' ');
-    if (subject && subject !== query) {
-      console.log(`[capture] "${query}" had 0 hits — retrying subject "${subject}"`);
-      results = await search(subject);
+    if (!results.length) {
+      const subject = q.split(/\s+/).slice(0, 2).join(" ");
+      if (subject && subject !== q) {
+        console.log(`[media] Pexels: "${q}" had 0 hits — retrying subject "${subject}"`);
+        results = await search(subject);
+      }
     }
-  }
 
-  // Better NO image (theme background colour shows) than a WRONG one.
-  if (!results.length) {
-    console.log(`[capture] no contextual image for "${query}" — using theme bg`);
+    if (!results.length) return null;
+
+    const pick = results[0]; // Pexels returns by relevance — always take top result
+    const imageUrl = pick?.src?.portrait || pick?.src?.large2x || pick?.src?.large;
+
+    if (imageUrl) {
+      console.log(`[media] Pexels ✓ "${q}" → ${pick?.photographer || "unknown"}`);
+      return imageUrl;
+    }
+
     return null;
   }
 
-  // Pick from the top few for variety while staying relevant.
-  const top  = results.slice(0, Math.min(5, results.length));
-  const pick = top[Math.floor(Math.random() * top.length)];
-  const imageUrl = pick?.urls?.regular;
-  if (imageUrl) console.log(`[capture] ✓ "${query}" → ${pick?.user?.name || 'unknown'}`);
-  return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
+  // ─── PROVIDER 2: UNSPLASH ─────────────────────────────────────────────────
+
+  async function fetchUnsplashImage(q) {
+    if (!UNSPLASH_KEY) return null;
+
+    async function search(searchQuery) {
+      const url = `https://api.unsplash.com/search/photos`
+        + `?query=${encodeURIComponent(searchQuery)}`
+        + `&orientation=portrait&content_filter=high&per_page=8&order_by=relevant`
+        + `&client_id=${UNSPLASH_KEY}`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { "Accept-Version": "v1" },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+
+        if (!res.ok) {
+          console.warn(`[media] Unsplash ${res.status} for "${searchQuery}"`);
+          return [];
+        }
+
+        const data = await res.json();
+        return Array.isArray(data?.results) ? data.results : [];
+      } catch (err) {
+        console.warn(`[media] Unsplash search failed for "${searchQuery}": ${err.message}`);
+        return [];
+      }
+    }
+
+    let results = await search(q);
+
+    if (!results.length) {
+      const subject = q.split(/\s+/).slice(0, 2).join(" ");
+      if (subject && subject !== q) {
+        console.log(`[media] Unsplash: "${q}" had 0 hits — retrying subject "${subject}"`);
+        results = await search(subject);
+      }
+    }
+
+    if (!results.length) return null;
+
+    const top = results.slice(0, Math.min(5, results.length));
+    const pick = top[Math.floor(Math.random() * top.length)];
+    const imageUrl = pick?.urls?.regular;
+
+    // ✅ REQUIRED: Trigger Unsplash download tracking
+    if (pick?.links?.download_location) {
+      try {
+        await fetch(
+          `${pick.links.download_location}?client_id=${UNSPLASH_KEY}`,
+          {
+            headers: { "Accept-Version": "v1" },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          }
+        );
+        console.log(`[media] Unsplash download tracked for "${q}"`);
+      } catch (err) {
+        console.warn(`[media] Unsplash download tracking failed: ${err.message}`);
+      }
+    }
+
+    if (imageUrl) {
+      console.log(`[media] Unsplash ✓ "${q}" → ${pick?.user?.name || "unknown"}`);
+      return imageUrl + "&bri=-30&con=10";
+    }
+
+    return null;
+  }
+
+  // ─── PROVIDER 3: PIXABAY ─────────────────────────────────────────────────
+
+  async function fetchPixabayImage(q) {
+    if (!PIXABAY_KEY) return null;
+
+    async function search(searchQuery) {
+      const url = `https://pixabay.com/api/`
+        + `?key=${encodeURIComponent(PIXABAY_KEY)}`
+        + `&q=${encodeURIComponent(searchQuery)}`
+        + `&image_type=photo&orientation=vertical&safesearch=true`
+        + `&per_page=8&order=relevant`;
+
+      try {
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+
+        if (!res.ok) {
+          console.warn(`[media] Pixabay ${res.status} for "${searchQuery}"`);
+          return [];
+        }
+
+        const data = await res.json();
+        return Array.isArray(data?.hits) ? data.hits : [];
+      } catch (err) {
+        console.warn(`[media] Pixabay search failed for "${searchQuery}": ${err.message}`);
+        return [];
+      }
+    }
+
+    let results = await search(q);
+
+    if (!results.length) {
+      const subject = q.split(/\s+/).slice(0, 2).join(" ");
+      if (subject && subject !== q) {
+        console.log(`[media] Pixabay: "${q}" had 0 hits — retrying subject "${subject}"`);
+        results = await search(subject);
+      }
+    }
+
+    if (!results.length) return null;
+
+    const pick = results[0];
+    const imageUrl = pick?.webformatURL || pick?.largeImageURL;
+
+    if (imageUrl) {
+      console.log(`[media] Pixabay ✓ "${q}" → ${pick?.user || "unknown"}`);
+      return imageUrl;
+    }
+
+    return null;
+  }
+
+  // ─── PROVIDER DISPATCH: VIDEO (future) ────────────────────────────────────
+
+  async function fetchPexelsVideo(q) {
+    if (!PEXELS_KEY) return null;
+
+    async function search(searchQuery) {
+      const url = `https://api.pexels.com/v1/videos/search`
+        + `?query=${encodeURIComponent(searchQuery)}`
+        + `&orientation=portrait&per_page=8&size=medium`;
+
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: PEXELS_KEY },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+
+        if (!res.ok) {
+          console.warn(`[media] Pexels Video ${res.status} for "${searchQuery}"`);
+          return [];
+        }
+
+        const data = await res.json();
+        return Array.isArray(data?.videos) ? data.videos : [];
+      } catch (err) {
+        console.warn(`[media] Pexels Video search failed for "${searchQuery}": ${err.message}`);
+        return [];
+      }
+    }
+
+    let results = await search(q);
+
+    if (!results.length) {
+      const subject = q.split(/\s+/).slice(0, 2).join(" ");
+      if (subject && subject !== q) {
+        console.log(`[media] Pexels Video: "${q}" had 0 hits — retrying subject "${subject}"`);
+        results = await search(subject);
+      }
+    }
+
+    if (!results.length) return null;
+
+    const pick = results[0];
+    const videoFile = pick?.video_files?.find(
+      (f) => f.quality === "hd" && f.width <= 1080
+    ) || pick?.video_files?.[0];
+
+    const videoUrl = videoFile?.link;
+
+    if (videoUrl) {
+      console.log(`[media] Pexels Video ✓ "${q}" → ${pick?.user?.name || "unknown"}`);
+      return videoUrl;
+    }
+
+    return null;
+  }
+
+  // ─── PIPELINE ORCHESTRATION ───────────────────────────────────────────────
+
+  if (type === "video") {
+    const pexelsVideo = await fetchPexelsVideo(query);
+    if (pexelsVideo) return pexelsVideo;
+
+    console.warn(`[media] All video providers exhausted for "${query}" — returning null`);
+    return null;
+  }
+
+  // type === "image" — waterfall through providers
+  const pexelsImage = await fetchPexelsImage(query);
+  if (pexelsImage) return pexelsImage;
+
+  const unsplashImage = await fetchUnsplashImage(query);
+  if (unsplashImage) return unsplashImage;
+
+  const pixabayImage = await fetchPixabayImage(query);
+  if (pixabayImage) return pixabayImage;
+
+  console.warn(`[media] All image providers exhausted for "${query}" — returning null`);
+  return null;
 }
 
-// async function fetchUnsplashUrl(query) {
-//   if (!UNSPLASH_KEY) {
-//     console.warn('[capture] UNSPLASH_API_KEY not set — skipping all background images');
-//     return null;
-//   }
-//   if (!query) {
-//     console.log(`[capture] Beat has no visual_query — skipping image`);
-//     return null;
-//   }
 
-//   const url = `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=portrait&content_filter=high&client_id=${UNSPLASH_KEY}`;
-
-//   try {
-//     const res = await fetch(url, {
-//       headers: { 'Accept-Version': 'v1' },
-//       signal: AbortSignal.timeout(6000),
-//     });
-
-//     if (!res.ok) {
-//       console.warn(`[capture] Unsplash ${res.status} for "${query}" — skipping`);
-//       return null;
-//     }
-
-//     const data = await res.json();
-//     const imageUrl = data?.urls?.regular;
-
-//     if (!imageUrl) {
-//       console.warn(`[capture] Unsplash returned no URL for "${query}"`);
-//       return null;
-//     }
-
-//     const credit = data?.user?.name || 'unknown';
-//     console.log(`[capture] ✓ Image fetched: "${query}" → ${credit}`);
-//     console.log(`[capture]   URL: ${imageUrl.slice(0, 80)}…`);
-//     //return imageUrl;
-//     return imageUrl ? imageUrl + '&bri=-30&con=10' : null;
-
-//   } catch (err) {
-//     console.warn(`[capture] Unsplash fetch failed for "${query}": ${err.message}`);
-//     return null;
-//   }
-// }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -499,7 +665,7 @@ async function main() {
 
   console.log(`[capture] Pre-fetching ${activeIndices.length} images in parallel…`);
   const imageUrls = await Promise.all(
-    activeIndices.map(i => fetchUnsplashUrl(beats[i].visual_query || ''))
+    activeIndices.map(i => fetchMediaAsset(beats[i].visual_query || '', "image"))
   );
 
   console.log(`[capture] Rendering ${activeIndices.length} beats (concurrency=${CONCURRENCY})…`);

@@ -44,13 +44,14 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 from llm      import generate_script
 from tts      import synthesize, beat_durations
-from captions import generate_captions
+from captions.captions import generate_captions
 from visuals  import render_slides
 from assemble import assemble
 from utils    import (
     make_run_dir, qa_check, extract_thumbnail,
     save_report, load_topics, random_topic,
 )
+from timeline import build_timeline, write_timeline
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ _COPY_FOR_STEP = {
     4: ["voice.wav", "beat_*.wav", "captions.ass",
         "transcript.json"],                                   # slides: copy audio + captions
     5: ["voice.wav", "beat_*.wav", "captions.ass",
-        "transcript.json"],                                   # assembly: copy audio + captions
+        "transcript.json","timeline.json"],                                   # assembly: copy audio + captions
                                                               # frames are handled separately below
 }
 
@@ -211,12 +212,23 @@ def rebuild(prefix: str, from_step: int, cfg: dict) -> dict:
     else:
         _skip(3, "Captions", ass_path.name)
 
+    # ── Step 3.5: Timeline  (only needed when slides will re-render) ──────
+    timeline = None
+    if from_step <= 4:
+        _step(4, "Timeline  (word-sync spine)")
+        transcript = json.loads((run_dir / "transcript.json").read_text(encoding="utf-8"))
+        timeline = build_timeline(
+            transcript, script, durations, cfg,
+            seed=cfg.get("subs", {}).get("seed", 7),
+        )
+        write_timeline(timeline, run_dir)
+
     # ── Step 4: Slides ────────────────────────────────────────────────────
     if from_step <= 4:
         _step(4, "Slide rendering")
         durations_ms = [int(d * 1000) for d in durations]
         slide_paths, frames_dir = render_slides(
-            script, run_dir, cfg, beat_durations_ms=durations_ms,
+            script, run_dir, cfg, beat_durations_ms=durations_ms, timeline=timeline,
         )
     else:
         beat_dirs = sorted(frames_dir.glob("beat_*"))
@@ -285,15 +297,24 @@ def run_one(topic: str, cfg: dict) -> dict:
     _step(3, "Word-level captions  (auto-style by script)")
     ass_path = generate_captions(voice_path, run_dir, cfg, script=script)
 
+    # ── 3.5 Timeline spine  (shared timing truth) ─────────────────────────
+    _step(4, "Timeline  (word-sync spine)")
+    transcript = json.loads((run_dir / "transcript.json").read_text(encoding="utf-8"))
+    timeline = build_timeline(
+        transcript, script, durations, cfg,
+        seed=cfg.get("subs", {}).get("seed", 7),
+    )
+    write_timeline(timeline, run_dir)
+
     # ── 4. Slides ─────────────────────────────────────────────────────────
-    _step(4, "Slide rendering  (HTML/Playwright + depth planes)")
+    _step(5, "Slide rendering  (HTML/Playwright + depth planes)")
     durations_ms = [int(d * 1000) for d in durations]
     slide_paths, frames_dir = render_slides(
-        script, run_dir, cfg, beat_durations_ms=durations_ms,
+        script, run_dir, cfg, beat_durations_ms=durations_ms, timeline=timeline,
     )
 
     # ── 5. Assembly ───────────────────────────────────────────────────────
-    _step(5, "Assembly  (FFmpeg, mood-aware BGM)")
+    _step(6, "Assembly  (FFmpeg, mood-aware BGM)")
     final_path = assemble(
         slide_paths, durations,
         voice_path, ass_path,
@@ -344,7 +365,7 @@ def _cleanup_and_qa(
         frame_count = sum(1 for _ in frames_dir.rglob("*.png"))
         print(f"[main] Frames kept → {frame_count} PNGs in {frames_dir}")
 
-    _step(7, "QA check")
+    _step(8, "QA check")
     report = qa_check(final_path, cfg)
     thumb  = extract_thumbnail(final_path, run_dir)
 

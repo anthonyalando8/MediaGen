@@ -151,3 +151,301 @@ Render a programming script and watch the `[capture]` logs:
           `no contextual image … using theme bg` (clean fallback)
 
 Both outcomes are on-brand. Neither is a mountain.
+
+
+
+
+This is a continuation of the existing short-form video engine discussion.
+
+I am attaching my current caption engine implementation.
+
+The engine already works correctly and should NOT be rewritten from scratch.
+
+Current capabilities already working:
+
+* Whisper word-level timestamps
+* ASS subtitle generation
+* Per-word dialogue events
+* Active word highlighting
+* Future word dimming
+* Multiple visual styles
+* TikTok/CapCut-style word progression
+* Style selection from script metadata
+* Production rendering through ffmpeg/libass
+
+The system is stable.
+
+I am NOT looking for bug fixes.
+
+I am looking for a major upgrade in caption psychology, caption choreography, and retention-driven caption behavior.
+
+The current captions are technically correct but still feel like:
+
+* transcript rendering
+* karaoke captions
+* subtitle overlays
+
+Instead of:
+
+* creator captions
+* cinematic captions
+* motion-directed captions
+* retention-engineered captions
+* editorial typography
+
+The motion engine and scene system have already improved significantly.
+
+Captions have now become one of the largest remaining quality bottlenecks.
+
+IMPORTANT:
+
+Do NOT focus on:
+
+* transcription accuracy
+* Whisper models
+* ffmpeg
+* performance optimization
+* code cleanup
+* Python style issues
+* type hints
+* linting
+
+Focus entirely on:
+
+* caption presentation
+* caption timing
+* caption psychology
+* visual rhythm
+* retention mechanics
+* phrase choreography
+* emotional emphasis
+* cinematic readability
+
+The biggest current weakness:
+
+The caption engine still thinks in WORDS.
+
+I need it to think in EMOTIONAL PHRASES.
+
+For example:
+
+Instead of:
+
+Everybody thinks hard work guarantees attention until they launch something nobody even notices
+
+being treated as a mechanical sequence of words,
+
+I want captions to understand:
+
+"Everybody thinks"
+
+"hard work"
+
+"guarantees attention"
+
+"until they launch something"
+
+"nobody even notices"
+
+as separate emotional units.
+
+The system should render ideas and emotions, not just words.
+
+MAJOR AREAS TO IMPROVE
+
+1. PHRASE CHUNKING
+
+The current engine uses fixed word counts.
+
+This feels mechanical.
+
+I want intelligent phrase grouping based on:
+
+* punctuation
+* pauses
+* timing gaps
+* emotional emphasis
+* sentence structure
+* speaking rhythm
+
+The resulting caption blocks should feel natural and cinematic.
+
+2. HERO WORDS
+
+Certain words should become events.
+
+Examples:
+
+* NEVER
+* EVERYTHING
+* NOTHING
+* STOP
+* THREE YEARS
+* 650 DAYS
+* TOO LATE
+
+These should be able to:
+
+* grow larger
+* isolate themselves
+* dominate the frame
+* temporarily replace normal caption flow
+
+Not every highlighted word should behave the same.
+
+I need a hierarchy of emphasis.
+
+3. CAPTION CHOREOGRAPHY
+
+Current behavior is too uniform.
+
+Every caption follows the same presentation pattern.
+
+Need multiple layout modes such as:
+
+* standard phrase
+* stacked phrase
+* hero word
+* isolated word
+* split phrase
+* dramatic pause
+* impact phrase
+* escalation phrase
+
+The viewer should not subconsciously predict how the next caption appears.
+
+4. EMOTIONAL ADAPTATION
+
+My scripts already contain:
+
+* energy
+* emotion
+* pace
+* highlight_words
+
+The caption system should use them.
+
+Examples:
+
+Urgent scenes:
+
+* stronger emphasis
+* larger highlights
+* tighter timing
+
+Reflective scenes:
+
+* more breathing room
+* slower progression
+* cleaner layouts
+
+Aggressive scenes:
+
+* stronger interruptions
+* harder emphasis moments
+
+The captions should inherit the emotional state of the scene.
+
+5. RHYTHM ENGINEERING
+
+Current captions are rhythmically consistent.
+
+Need:
+
+* tension
+* release
+* anticipation
+* pauses
+* surprise
+
+The caption system should actively contribute to retention.
+
+6. VISUAL VARIETY
+
+Current caption hierarchy becomes predictable.
+
+Need:
+
+* occasional oversized words
+* occasional tiny words
+* phrase compression
+* phrase expansion
+* dramatic spacing
+* visual contrast
+
+Not random.
+
+Intentional.
+
+7. RETENTION SPIKES
+
+Need moments where captions themselves become the payoff.
+
+Examples:
+
+A phrase builds normally.
+
+Then suddenly:
+
+"TOO LATE"
+
+fills the frame.
+
+Or:
+
+"NOTHING"
+
+appears alone.
+
+Or:
+
+"THREE YEARS"
+
+momentarily dominates the composition.
+
+These moments should be rare and strategic.
+
+8. CAPTION TIMING PSYCHOLOGY
+
+Need analysis of:
+
+* when captions should appear
+* when captions should linger
+* when captions should disappear
+* when pauses should be visible
+
+Not all words deserve equal screen time.
+
+Important ideas should receive more visual weight.
+
+9. CINEMATIC CAPTION SYSTEM
+
+The final result should feel closer to:
+
+* premium creator edits
+* modern documentary captions
+* cinematic trailers
+* high-retention social content
+
+And less like:
+
+* subtitles
+* karaoke
+* transcript overlays
+
+IMPORTANT OUTPUT
+
+After reviewing the attached code:
+
+1. Identify architectural limitations.
+2. Identify specific functions requiring modification.
+3. Propose new systems that should be added.
+4. Recommend changes to data structures.
+5. Recommend changes to rendering logic.
+6. Recommend changes to timing logic.
+7. Recommend changes to caption hierarchy.
+8. Recommend changes to emotional adaptation.
+
+Provide production-grade implementation of the caption system.
+
+The goal is to transform captions from a transcript renderer into a cinematic typography layer that actively improves retention and emotional impact.
