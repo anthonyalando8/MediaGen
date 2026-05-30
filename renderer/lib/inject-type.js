@@ -202,25 +202,32 @@
   // and persists across every captured frame.
   function fitKeyword() {
     if (!keyword || !words.length) return;
-    var sc = document.querySelector('.scene');
-    if (!sc) return;
-    var pad = 26;                                   // safe gutter from frame edges
-    // worst overflow past either side, at current size
-    function worstOverflow() {
-      var r = sc.getBoundingClientRect();
-      var left = r.left + pad, right = r.right - pad;
-      var over = 0;
+    // Available width = the keyword's own COLUMN width (its block content box).
+    // We fit the WIDEST WORD to this column and stop — which preserves the
+    // natural multi-line wrap (e.g. "THE" / "PERFORMANCE") at a BIG size,
+    // instead of shrinking until the whole title collapses onto one small
+    // line. That matches the desired "big two-line header" look.
+    var avail = keyword.clientWidth;
+    if (!avail || avail < 60) {
+      var scEl = document.querySelector('.scene');
+      avail = scEl ? scEl.clientWidth - 160 : 0;   // fallback: scene minus margins
+    }
+    if (!avail) return;
+    function widestWord() {
+      var m = 0;
       Array.prototype.forEach.call(words, function (w) {
-        var b = w.getBoundingClientRect();
-        if (b.right - right > over) over = b.right - right;
-        if (left - b.left  > over) over = left - b.left;
+        var ink = w.querySelector('.kw-ink') || w;   // ink = the unwrapped glyph run
+        var bw = ink.getBoundingClientRect().width;
+        if (bw > m) m = bw;
       });
-      return over;                                  // >0 == overflowing
+      return m;
     }
     var cur = parseFloat(getComputedStyle(keyword).fontSize) || 100;
     var guard = 0;
-    while (worstOverflow() > 0.5 && cur > 22 && guard < 80) {
-      cur *= 0.95;
+    // Shrink ONLY until the longest word fits the column (2% safety margin).
+    // Stops as soon as it fits → stays as large as possible, wrap preserved.
+    while (widestWord() > avail * 0.98 && cur > 30 && guard < 90) {
+      cur *= 0.97;
       keyword.style.fontSize = cur.toFixed(2) + 'px';
       guard++;
     }
