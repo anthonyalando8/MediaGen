@@ -1,0 +1,17 @@
+{
+  "name": "mixamo-renderer",
+  "version": "1.0.0",
+  "description": "Headless character renderer for MediaGen pipeline",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js --scene test_scene.json --out output --fps 30"
+  },
+  "dependencies": {
+    "three": "0.128.0",
+    "playwright": "^1.40.0",
+    "sharp": "^0.33.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

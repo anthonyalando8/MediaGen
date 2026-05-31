@@ -1,0 +1,42 @@
+{
+  "video_id": "test_001",
+  "theme": "documentary_gritty",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "beats": [
+    {
+      "id": "beat_01",
+      "scene": "hook",
+      "keyword": "THEY'RE COMING",
+      "body": "The United States wants to set up Ebola camps in Kenya.",
+      "emotion": "urgent",
+      "energy": "high",
+      "camera": "push_in",
+      "intensity": 0.92,
+      "duration_ms": 4000
+    },
+    {
+      "id": "beat_02",
+      "scene": "tension",
+      "keyword": "THE GAP",
+      "body": "If the world's richest nation can't contain a virus domestically.",
+      "emotion": "tense",
+      "energy": "mid",
+      "camera": "tilt_up",
+      "intensity": 0.70,
+      "duration_ms": 4000
+    },
+    {
+      "id": "beat_03",
+      "scene": "insight",
+      "keyword": "RESOURCE CHECK",
+      "body": "Kenya is struggling with basic healthcare.",
+      "emotion": "serious",
+      "energy": "low",
+      "camera": "static",
+      "intensity": 0.50,
+      "duration_ms": 4000
+    }
+  ]
+}

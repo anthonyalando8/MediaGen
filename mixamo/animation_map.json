@@ -1,0 +1,30 @@
+{
+  "character": "X Bot.fbx",
+  "idle": "Happy Idle.fbx",
+
+  "by_type": {
+    "hook":    "Pointing Forward.fbx",
+    "tension": "Nervously Look Around.fbx",
+    "insight": "Thinking.fbx",
+    "truth":   "Thoughtful Head Shake.fbx",
+    "flip":    "Shaking Head No.fbx",
+    "climax":  "Angry Gesture.fbx",
+    "payoff":  "Thankful.fbx",
+    "cta":     "Hands Forward Gesture.fbx"
+  },
+
+  "by_emotion": {
+    "urgent":      "Pointing Forward.fbx",
+    "tense":       "Nervously Look Around.fbx",
+    "serious":     "Thinking.fbx",
+    "cold":        "Shaking Head No.fbx",
+    "anxious":     "Angry Gesture.fbx",
+    "confident":   "Talking.fbx",
+    "angry":       "Angry Gesture.fbx",
+    "hopeful":     "Thankful.fbx",
+    "melancholic": "Sad Idle.fbx",
+    "surprised":   "Surprised.fbx",
+    "amused":      "Laughing.fbx",
+    "playful":     "Wave Hip Hop Dance.fbx"
+  }
+}

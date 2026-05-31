@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mixamo Animation Test</title>
+<script src="libs/three.min.js"></script>
+<script src="libs/fflate.min.js"></script>
+<script src="libs/FBXLoader.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #080808; --surface: #0f0f0f; --border: #1a1a1a;
+    --accent: #ff3030; --accent2: #ff8800; --text: #e8e8e0; --muted: #444;
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh; display: grid;
+    grid-template-columns: 1fr 300px;
+    grid-template-rows: 44px 1fr;
+    overflow: hidden;
+  }
+  header {
+    grid-column: 1 / -1; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px; gap: 14px;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.12em; color: var(--accent); }
+  .hdiv { width: 1px; height: 18px; background: var(--border); }
+  .hsub { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; }
+  .hbeat { margin-left: auto; font-size: 10px; color: var(--accent2); letter-spacing: 0.06em; padding: 2px 10px; border: 1px solid var(--accent2); border-radius: 2px; }
+
+  #viewport { position: relative; background: #050505; overflow: hidden; }
+  #viewport canvas { display: block; }
+  #keyword-overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: flex-end; padding: 0 0 80px 0;
+  }
+  #keyword-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(48px, 7vw, 88px); letter-spacing: 0.08em;
+    color: #fff; text-shadow: 0 0 40px rgba(255,48,48,0.6), 2px 2px 0 #000;
+    padding: 0 32px; opacity: 0; transform: scale(0.85);
+    transition: opacity 0.2s, transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  #keyword-text.visible { opacity: 1; transform: scale(1); }
+  #beat-text {
+    font-size: 13px; line-height: 1.7; color: rgba(255,255,255,0.75);
+    padding: 10px 32px 0; max-width: 580px;
+    opacity: 0; transition: opacity 0.4s 0.15s;
+  }
+  #beat-text.visible { opacity: 1; }
+  #beat-text em { color: var(--accent2); font-style: normal; font-weight: 700; }
+  #beat-type { position: absolute; top: 16px; right: 16px; font-size: 9px; letter-spacing: 0.15em; color: var(--muted); border: 1px solid var(--border); padding: 3px 8px; border-radius: 2px; }
+  #intensity-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--border); }
+  #intensity-fill { height: 100%; background: var(--accent); transition: width 0.5s ease; }
+  #grain { position: absolute; inset: 0; pointer-events: none; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+  #chroma-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; mix-blend-mode: screen; background: linear-gradient(45deg, rgba(255,0,0,0.5), rgba(0,255,255,0.5)); transition: opacity 0.05s; }
+
+  #panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .panel-top { padding: 14px; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-y: auto; max-height: 55vh; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .panel-top h3 { font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .section-label { font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent2); margin: 10px 0 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+  .file-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .file-row label { font-size: 9px; color: var(--muted); width: 68px; flex-shrink: 0; letter-spacing: 0.04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-row input[type=file] { flex: 1; font-size: 9px; color: var(--text); background: var(--bg); border: 1px solid var(--border); padding: 4px 5px; border-radius: 2px; cursor: pointer; min-width: 0; }
+  .file-row input[type=file]::-webkit-file-upload-button { background: var(--border); border: none; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 9px; padding: 2px 5px; cursor: pointer; border-radius: 2px; margin-right: 4px; }
+  .file-row.highlight label { color: #00cc66; }
+  .file-row.highlight input[type=file] { border-color: #00cc6644; }
+  .load-btn { width: 100%; background: var(--accent); color: #fff; border: none; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 11px; letter-spacing: 0.08em; padding: 9px; border-radius: 2px; cursor: pointer; margin-top: 8px; transition: opacity 0.2s; }
+  .load-btn:hover { opacity: 0.85; }
+  .load-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .beats-scroll { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .beat-item { padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; position: relative; }
+  .beat-item:hover { background: rgba(255,255,255,0.02); }
+  .beat-item.active { background: rgba(255,48,48,0.06); border-left: 2px solid var(--accent); }
+  .bi-id { font-size: 8px; color: var(--muted); letter-spacing: 0.1em; margin-bottom: 3px; }
+  .bi-kw { font-family: 'Bebas Neue', sans-serif; font-size: 15px; letter-spacing: 0.06em; color: var(--text); margin-bottom: 2px; }
+  .bi-meta { font-size: 8px; color: var(--muted); display: flex; gap: 8px; }
+  .bi-anim { font-size: 8px; color: var(--accent2); margin-top: 2px; }
+  .bi-intensity { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--muted); }
+
+  .playback { padding: 12px 14px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  .pb-controls { display: flex; gap: 8px; margin-bottom: 8px; }
+  .pb-btn { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 7px; border-radius: 2px; cursor: pointer; text-align: center; transition: all 0.15s; }
+  .pb-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .pb-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pb-timing { display: flex; align-items: center; gap: 8px; }
+  .pb-timing label { font-size: 9px; color: var(--muted); }
+  .pb-timing input { flex: 1; accent-color: var(--accent); }
+  .pb-timing span { font-size: 9px; color: var(--accent2); width: 30px; }
+
+  .console-area { padding: 8px 14px; border-top: 1px solid var(--border); max-height: 90px; overflow-y: auto; flex-shrink: 0; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .console-area div { font-size: 8px; line-height: 1.9; color: var(--muted); }
+  .console-area .ok { color: #00cc66; }
+  .console-area .err { color: var(--accent); }
+  .console-area .info { color: var(--accent2); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">ANIM_TEST</span>
+  <div class="hdiv"></div>
+  <span class="hsub">Mixamo FBX · Beat Animator · LOCAL SERVER</span>
+  <span class="hbeat" id="hbeat">NO MODEL</span>
+</header>
+
+<div id="viewport">
+  <div id="grain"></div>
+  <div id="chroma-flash"></div>
+  <div id="beat-type">—</div>
+  <div id="keyword-overlay">
+    <div id="keyword-text"></div>
+    <div id="beat-text"></div>
+  </div>
+  <div id="intensity-bar"><div id="intensity-fill" style="width:0%"></div></div>
+</div>
+
+<div id="panel">
+  <div class="panel-top">
+    <h3>Load Files</h3>
+
+    <!-- Character mesh -->
+    <div class="file-row">
+      <label>CHARACTER</label>
+      <input type="file" id="char-file" accept=".fbx">
+    </div>
+
+    <!-- Idle — separate clearly labelled, highlighted green -->
+    <div class="section-label">IDLE BASE (with skin)</div>
+    <div class="file-row highlight">
+      <label>IDLE</label>
+      <input type="file" id="idle-file" accept=".fbx">
+    </div>
+
+    <!-- Beat animations -->
+    <div class="section-label">BEAT ANIMATIONS (without skin ok)</div>
+    <div id="anim-file-rows"></div>
+
+    <button class="load-btn" id="load-btn" onclick="loadAll()" disabled>SELECT CHARACTER FIRST</button>
+  </div>
+
+  <div class="beats-scroll" id="beat-list"></div>
+
+  <div class="playback">
+    <div class="pb-controls">
+      <div class="pb-btn" id="play-seq-btn" onclick="toggleSequence()">▶ SEQUENCE</div>
+      <div class="pb-btn" onclick="prevBeat()">◀</div>
+      <div class="pb-btn" onclick="nextBeat()">▶</div>
+    </div>
+    <div class="pb-timing">
+      <label>BEAT TIME</label>
+      <input type="range" id="beat-dur" min="2" max="10" step="0.5" value="4">
+      <span id="beat-dur-val">4s</span>
+    </div>
+  </div>
+
+  <div class="console-area" id="console"></div>
+</div>
+
+<script>
+const SCRIPT = {
+  beats: [
+    { id:"beat_01", type:"hook",    keyword:"THEY'RE COMING",    text:"The United States wants to set up Ebola camps in Kenya, but you need to *question* why this is happening now.", emotion:"urgent",  energy:"high", intensity:0.92, pattern_interrupt:"slam",   animation:"Pointing Forward.fbx" },
+    { id:"beat_02", type:"tension", keyword:"THE GAP",           text:"If the world's richest nation can't contain a virus *domestically*, what makes you think Kenya can handle the overflow?", emotion:"tense",   energy:"mid",  intensity:0.70, pattern_interrupt:"",       animation:"Nervously Look Around.fbx" },
+    { id:"beat_03", type:"insight", keyword:"RESOURCE CHECK",    text:"Look at the medical infrastructure. Kenya is *struggling* with basic healthcare while the West exports its biological risks.", emotion:"serious", energy:"low",  intensity:0.50, pattern_interrupt:"",       animation:"Thinking.fbx" },
+    { id:"beat_04", type:"flip",    keyword:"THE REALITY",       text:"This isn't about global health. It's about who bears the *burden* when a superpower loses control of a pathogen.", emotion:"cold",    energy:"mid",  intensity:0.80, pattern_interrupt:"",       animation:"Shaking Head No.fbx" },
+    { id:"beat_05", type:"climax",  keyword:"CATASTROPHIC RISK", text:"Turning a developing nation into a *containment zone* is a gamble that could trigger a total collapse of local systems.", emotion:"anxious", energy:"high", intensity:0.98, pattern_interrupt:"chroma", animation:"Angry Gesture.fbx" },
+    { id:"beat_06", type:"cta",     keyword:"WHO PROFITS?",      text:"Are we seeing an act of charity, or is Kenya just the *cheapest* place to fail during a crisis?", emotion:"serious", energy:"mid",  intensity:0.88, pattern_interrupt:"",       animation:"Hands Forward Gesture.fbx" }
+  ]
+};
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let renderer, scene, camera, mixer;
+let currentAction = null;
+let idleAction = null;
+let animationClips = {};
+let currentBeatIdx = -1;
+let sequencePlaying = false, sequenceTimer = null;
+let returnToIdleTimer = null;
+let camShake = 0;
+const clock = new THREE.Clock();
+
+// ─── Console ──────────────────────────────────────────────────────────────────
+function clog(msg, type='') {
+  const el = document.getElementById('console');
+  const d = document.createElement('div');
+  d.className = type; d.textContent = '> ' + msg;
+  el.appendChild(d); el.scrollTop = el.scrollHeight;
+  if (el.children.length > 50) el.removeChild(el.children[0]);
+}
+
+// ─── Build UI ─────────────────────────────────────────────────────────────────
+function buildAnimFileRows() {
+  const unique = [...new Set(SCRIPT.beats.map(b => b.animation))];
+  const container = document.getElementById('anim-file-rows');
+  container.innerHTML = '';
+  unique.forEach(fname => {
+    const row = document.createElement('div');
+    row.className = 'file-row';
+    row.innerHTML = `<label title="${fname}">${fname.replace('.fbx','').slice(0,10)}</label>
+      <input type="file" accept=".fbx" data-anim="${fname}">`;
+    container.appendChild(row);
+  });
+}
+
+function buildBeatList() {
+  const list = document.getElementById('beat-list');
+  list.innerHTML = '';
+  SCRIPT.beats.forEach((beat, i) => {
+    const item = document.createElement('div');
+    item.className = 'beat-item'; item.id = `bi-${i}`;
+    item.onclick = () => playBeat(i);
+    item.innerHTML = `
+      <div class="bi-id">${beat.id} · ${beat.type.toUpperCase()}</div>
+      <div class="bi-kw">${beat.keyword}</div>
+      <div class="bi-meta"><span>${beat.emotion}</span><span>${beat.energy}</span></div>
+      <div class="bi-anim">↪ ${beat.animation}</div>
+      <div class="bi-intensity">${beat.intensity}</div>`;
+    list.appendChild(item);
+  });
+}
+
+// ─── Three.js ─────────────────────────────────────────────────────────────────
+function initThree() {
+  const vp = document.getElementById('viewport');
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(w, h);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true;
+  vp.insertBefore(renderer.domElement, vp.querySelector('#grain'));
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050505);
+  scene.fog = new THREE.FogExp2(0x050505, 0.035);
+
+  camera = new THREE.PerspectiveCamera(40, w/h, 0.1, 100);
+  camera.position.set(0, 1.4, 3.2);
+  camera.lookAt(0, 1.1, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+  const key = new THREE.DirectionalLight(0xfff0e0, 1.8);
+  key.position.set(1.5, 4, 2); key.castShadow = true; scene.add(key);
+  const fill = new THREE.DirectionalLight(0x1a1a3a, 0.5);
+  fill.position.set(-3, 1, 1); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xff4400, 0.4);
+  rim.position.set(0, 3, -3); scene.add(rim);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshStandardMaterial({ color: 0x080808, roughness: 1 })
+  );
+  floor.rotation.x = -Math.PI/2; floor.receiveShadow = true;
+  scene.add(floor);
+
+  window.addEventListener('resize', () => {
+    const w = vp.clientWidth, h = vp.clientHeight;
+    renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
+  });
+
+  (function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+    if (mixer) mixer.update(delta);
+    if (camShake > 0) {
+      camera.position.x = (Math.random()-0.5)*camShake*0.015;
+      camera.position.y = 1.4 + (Math.random()-0.5)*camShake*0.01;
+      camShake *= 0.88;
+    } else {
+      camera.position.x += (0 - camera.position.x) * 0.05;
+    }
+    camera.lookAt(0, 1.1, 0);
+    renderer.render(scene, camera);
+  })();
+
+  clog('Three.js ready', 'ok');
+}
+
+// ─── File loading ─────────────────────────────────────────────────────────────
+function readFile(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsArrayBuffer(file);
+  });
+}
+
+async function loadAll() {
+  const charInput = document.getElementById('char-file');
+  if (!charInput.files[0]) { clog('No character file', 'err'); return; }
+  const btn = document.getElementById('load-btn');
+  btn.disabled = true; btn.textContent = 'LOADING...';
+  animationClips = {};
+  idleAction = null;
+  currentAction = null;
+
+  try {
+    const loader = new THREE.FBXLoader();
+
+    // 1. Load character mesh
+    clog('Parsing character...', 'info');
+    const charBuf = await readFile(charInput.files[0]);
+    const charFbx = loader.parse(charBuf, '');
+    setupCharacter(charFbx);
+    clog('Character loaded ✓', 'ok');
+
+    // 2. Load idle (with skin) — start it as base layer
+    const idleInput = document.getElementById('idle-file');
+    if (idleInput.files[0]) {
+      clog('Parsing idle...', 'info');
+      const idleBuf = await readFile(idleInput.files[0]);
+      const idleFbx = loader.parse(idleBuf, '');
+      if (idleFbx.animations?.length) {
+        startIdle(idleFbx.animations[0]);
+        clog('Idle base started ✓', 'ok');
+      } else {
+        clog('✗ Idle — no animation tracks found', 'err');
+      }
+    } else {
+      clog('⚠ No idle loaded — arms may float after gestures', 'err');
+    }
+
+    // 3. Load beat animations (without skin is fine)
+    const animInputs = document.querySelectorAll('[data-anim]');
+    for (const input of animInputs) {
+      const fname = input.dataset.anim;
+      if (input.files[0]) {
+        try {
+          const buf = await readFile(input.files[0]);
+          const animFbx = loader.parse(buf, '');
+          if (animFbx.animations?.length) {
+            animationClips[fname] = animFbx.animations[0];
+            clog(`✓ ${fname}`, 'ok');
+          } else {
+            clog(`✗ ${fname} — no tracks`, 'err');
+          }
+        } catch(e) { clog(`✗ ${fname}: ${e.message}`, 'err'); }
+      } else {
+        clog(`⚠ ${fname} skipped`, 'info');
+      }
+    }
+
+    btn.textContent = 'RELOAD'; btn.disabled = false;
+    document.getElementById('hbeat').textContent = 'READY';
+    clog(`${Object.keys(animationClips).length} beat animations ready`, 'ok');
+    playBeat(0);
+
+  } catch(e) {
+    clog('Error: ' + e.message, 'err');
+    btn.textContent = 'RETRY'; btn.disabled = false;
+  }
+}
+
+// ─── Character setup ──────────────────────────────────────────────────────────
+function setupCharacter(fbx) {
+  // Remove old character
+  scene.children.filter(c => c.isGroup || c.type === 'Group').forEach(c => scene.remove(c));
+  if (mixer) { mixer.stopAllAction(); mixer = null; }
+
+  const box = new THREE.Box3().setFromObject(fbx);
+  const h = box.getSize(new THREE.Vector3()).y;
+  const scale = 2.2 / h;
+  fbx.scale.setScalar(scale);
+  fbx.position.y = -box.min.y * scale;
+  fbx.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(fbx);
+
+  // Create mixer — do NOT play any animation yet, idle handles that
+  mixer = new THREE.AnimationMixer(fbx);
+}
+
+// ─── Idle management ──────────────────────────────────────────────────────────
+function startIdle(clip) {
+  if (!mixer) return;
+  idleAction = mixer.clipAction(clip);
+  idleAction.loop = THREE.LoopRepeat;
+  idleAction.clampWhenFinished = false;
+  idleAction.timeScale = 1.0;
+  idleAction.play();
+  currentAction = idleAction;
+}
+
+function returnToIdle() {
+  if (!idleAction || !mixer) return;
+  // Reset and crossfade from whatever is playing back to idle
+  idleAction.reset();
+  if (currentAction && currentAction !== idleAction) {
+    idleAction.crossFadeFrom(currentAction, 0.5, true);
+  }
+  idleAction.loop = THREE.LoopRepeat;
+  idleAction.clampWhenFinished = false;
+  idleAction.play();
+  currentAction = idleAction;
+  clog('↩ idle', 'info');
+}
+
+// ─── Animation playback ───────────────────────────────────────────────────────
+function playAnimation(fname, intensity) {
+  const clip = animationClips[fname];
+  if (!clip || !mixer) {
+    if (!clip) clog(`⚠ ${fname} not loaded`, 'err');
+    return;
+  }
+
+  // Cancel any pending return-to-idle
+  if (returnToIdleTimer) {
+    clearTimeout(returnToIdleTimer);
+    returnToIdleTimer = null;
+  }
+
+  const timeScale = 0.9 + intensity * 0.3;
+  const clipDurationMs = (clip.duration / timeScale) * 1000;
+
+  const newAction = mixer.clipAction(clip);
+  newAction.reset();
+  newAction.loop = THREE.LoopOnce;          // play once only
+  newAction.clampWhenFinished = false;       // don't freeze on last frame
+  newAction.setEffectiveTimeScale(timeScale);
+
+  if (currentAction && currentAction !== newAction) {
+    newAction.crossFadeFrom(currentAction, 0.3, true);
+  }
+  newAction.play();
+  currentAction = newAction;
+
+  // Schedule return to idle 200ms before clip ends for seamless crossfade
+  const returnDelay = Math.max(clipDurationMs - 200, 100);
+  returnToIdleTimer = setTimeout(returnToIdle, returnDelay);
+
+  clog(`▶ ${fname} (${(clipDurationMs/1000).toFixed(1)}s) → idle in ${(returnDelay/1000).toFixed(1)}s`, 'ok');
+}
+
+// ─── Beat playback ────────────────────────────────────────────────────────────
+function playBeat(idx) {
+  if (idx < 0 || idx >= SCRIPT.beats.length) return;
+  currentBeatIdx = idx;
+  const beat = SCRIPT.beats[idx];
+
+  // UI
+  document.querySelectorAll('.beat-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById(`bi-${idx}`);
+  if (item) { item.classList.add('active'); item.scrollIntoView({block:'nearest'}); }
+
+  document.getElementById('hbeat').textContent = `${beat.id} · ${beat.type.toUpperCase()}`;
+  document.getElementById('beat-type').textContent = `// ${beat.type} · ${beat.emotion}`;
+
+  const pct = (beat.intensity * 100).toFixed(0);
+  const fill = document.getElementById('intensity-fill');
+  fill.style.width = pct + '%';
+  fill.style.background = beat.intensity > 0.85 ? '#ff3030' : beat.intensity > 0.65 ? '#ff8800' : '#00cc66';
+
+  const kwEl = document.getElementById('keyword-text');
+  const txEl = document.getElementById('beat-text');
+  kwEl.classList.remove('visible'); txEl.classList.remove('visible');
+  kwEl.textContent = beat.keyword;
+  txEl.innerHTML = beat.text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  setTimeout(() => { kwEl.classList.add('visible'); txEl.classList.add('visible'); }, 80);
+
+  if (beat.pattern_interrupt === 'slam') doSlam();
+  else if (beat.pattern_interrupt === 'chroma') doChroma();
+
+  applyCameraMotion(beat.camera, beat.intensity);
+  playAnimation(beat.animation, beat.intensity);
+}
+
+// ─── Camera ───────────────────────────────────────────────────────────────────
+function applyCameraMotion(cam, intensity) {
+  switch(cam) {
+    case 'push_in':     camera.position.z = 4.5; tween(camera.position,'z',3.2,0.8); break;
+    case 'pull_out':    camera.position.z = 3.2; tween(camera.position,'z',4.5,0.8); break;
+    case 'snap_zoom':   camera.position.z = 4.0; setTimeout(()=>camera.position.z=2.8,80); setTimeout(()=>tween(camera.position,'z',3.2,0.4),200); break;
+    case 'micro_shake': camShake = intensity * 1.5; break;
+    case 'tilt_up':     camera.position.y = 0.8; tween(camera.position,'y',1.4,0.6); break;
+    default:            tween(camera.position,'z',3.2,0.5);
+  }
+}
+
+function tween(obj, prop, target, dur) {
+  const start = obj[prop], t0 = performance.now(), ms = dur*1000;
+  (function tick() {
+    const t = Math.min((performance.now()-t0)/ms,1);
+    const e = t<0.5?2*t*t:-1+(4-2*t)*t;
+    obj[prop] = start+(target-start)*e;
+    if(t<1) requestAnimationFrame(tick);
+  })();
+}
+
+// ─── Pattern interrupts ───────────────────────────────────────────────────────
+function doSlam() {
+  const kw = document.getElementById('keyword-text');
+  kw.style.transform='scale(1.15)'; camShake=0.8;
+  setTimeout(()=>kw.style.transform='scale(1)',180);
+}
+function doChroma() {
+  const el = document.getElementById('chroma-flash');
+  el.style.opacity='1'; setTimeout(()=>el.style.opacity='0',120);
+  setTimeout(()=>{el.style.opacity='0.5'; setTimeout(()=>el.style.opacity='0',80);},200);
+}
+
+// ─── Sequence ─────────────────────────────────────────────────────────────────
+function toggleSequence() {
+  sequencePlaying = !sequencePlaying;
+  const btn = document.getElementById('play-seq-btn');
+  if (sequencePlaying) {
+    btn.classList.add('active'); btn.textContent='■ STOP';
+    runSequence();
+  } else {
+    btn.classList.remove('active'); btn.textContent='▶ SEQUENCE';
+    clearTimeout(sequenceTimer);
+  }
+}
+function runSequence() {
+  if (!sequencePlaying) return;
+  const dur = parseFloat(document.getElementById('beat-dur').value)*1000;
+  playBeat((currentBeatIdx+1) % SCRIPT.beats.length);
+  sequenceTimer = setTimeout(runSequence, dur);
+}
+function nextBeat() { playBeat((currentBeatIdx+1) % SCRIPT.beats.length); }
+function prevBeat() { playBeat((currentBeatIdx-1+SCRIPT.beats.length) % SCRIPT.beats.length); }
+
+document.getElementById('beat-dur').oninput = function() {
+  document.getElementById('beat-dur-val').textContent = this.value+'s';
+};
+document.getElementById('char-file').addEventListener('change', function() {
+  if (this.files[0]) {
+    document.getElementById('load-btn').disabled = false;
+    document.getElementById('load-btn').textContent = 'LOAD';
+  }
+});
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+buildAnimFileRows();
+buildBeatList();
+initThree();
+clog('Ready — load CHARACTER + IDLE (with skin) + beat animations', 'info');
+</script>
+</body>
+</html>

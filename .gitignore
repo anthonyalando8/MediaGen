@@ -35,6 +35,8 @@ choreography-engine/node_modules/
 choreography-engine/output/
 choreography-engine/python/output/
 choreography-engine/.git/
+mixamo/node_modules/
+mixamo/output/
 sdist/
 var/
 wheels/
