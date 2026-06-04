@@ -3,14 +3,18 @@ main.py  —  TikTok AI Video Pipeline
 
 Usage (from project root — MediaGen/):
 
-  # single topic
+  # single topic (direct mode — always explicit, never uses dataset logic)
   python src/main.py "why linux beats windows for developers"
 
-  # pick a random topic from data/topics.txt
-  python src/main.py --random
+  # pick a random topic from a subject file
+  python src/main.py --source tech --random
+  python src/main.py --source finance --random
 
-  # process every topic in data/topics.txt
-  python src/main.py --batch
+  # process every topic in a subject file
+  python src/main.py --source tech --batch
+
+  # process only the first N topics in a subject file
+  python src/main.py --source tech --batch --limit 10
 
   # rebuild from an existing workspace (creates a NEW run, never overwrites)
   python src/main.py --rebuild 015
@@ -30,6 +34,9 @@ Usage (from project root — MediaGen/):
 
   The source workspace is never modified. The rebuild always creates a
   fresh numbered run (e.g. 015 → 016_xxxxxxxx) so you can compare outputs.
+
+  Subject files live in:
+    data/topics/<subject>.txt   (one topic per line)
 """
 
 import sys
@@ -65,6 +72,33 @@ def _load_cfg() -> dict:
             "config.yaml not found — run from the project root (MediaGen/)"
         )
     return yaml.safe_load(p.read_text(encoding="utf-8"))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Source resolver
+# ─────────────────────────────────────────────────────────────────────────────
+
+def resolve_source(cfg: dict, source: str) -> pathlib.Path:
+    """
+    Resolve a subject name to its topic file path.
+
+    Given source="tech", returns Path("data/topics/tech.txt").
+    Raises FileNotFoundError (with available subjects listed) if missing.
+    """
+    sources_dir = pathlib.Path(cfg["paths"]["sources_dir"])
+    subject_path = sources_dir / f"{source}.txt"
+
+    if not subject_path.exists():
+        available = sorted(
+            p.stem for p in sources_dir.glob("*.txt")
+        ) if sources_dir.exists() else []
+        hint = f"Available subjects: {available}" if available else \
+               f"No subject files found in {sources_dir}/"
+        raise FileNotFoundError(
+            f"Subject file not found: {subject_path}\n{hint}"
+        )
+
+    return subject_path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +159,7 @@ _COPY_FOR_STEP = {
     4: ["voice.wav", "beat_*.wav", "captions.ass",
         "transcript.json"],                                   # slides: copy audio + captions
     5: ["voice.wav", "beat_*.wav", "captions.ass",
-        "transcript.json","timeline.json", "scene.json"],                                   # assembly: copy audio + captions
+        "transcript.json","timeline.json", "scene.json"],    # assembly: copy audio + captions
                                                               # frames are handled separately below
 }
 
@@ -392,15 +426,36 @@ def _cleanup_and_qa(
 # Batch mode
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_batch(cfg: dict) -> None:
-    topics_path = pathlib.Path(cfg["paths"]["topics"])
-    topics = load_topics(topics_path)
+def run_batch(cfg: dict, source: str, limit: int | None = None) -> None:
+    """
+    Run the pipeline for topics from a subject file.
+
+    Args:
+        cfg:    Loaded config dict.
+        source: Subject name (e.g. "tech") — resolved to data/topics/tech.txt.
+        limit:  Max number of topics to process. None = process all.
+    """
+    subject_path = resolve_source(cfg, source)
+    topics = load_topics(subject_path)
+
     if not topics:
-        print(f"[main] No topics found in {topics_path}")
+        print(f"[main] No topics found in {subject_path}")
         return
-    print(f"[main] Batch mode — {len(topics)} topics")
+
+    # Apply limit
+    if limit is not None:
+        if limit < 1:
+            print(f"[main] --limit must be a positive integer, got {limit}")
+            return
+        topics = topics[:limit]
+
+    total = len(topics)
+    source_total = len(load_topics(subject_path))
+    limit_note = f" (limit {limit} of {source_total})" if limit is not None else ""
+    print(f"[main] Batch mode — {total} topics from '{source}'{limit_note}")
+
     for i, topic in enumerate(topics, 1):
-        print(f"\n[main] ── Topic {i}/{len(topics)} ──────────────────────")
+        print(f"\n[main] ── Topic {i}/{total} ──────────────────────")
         try:
             run_one(topic, cfg)
         except Exception as e:
@@ -448,6 +503,87 @@ def _print_script(script: dict) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CLI argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_args(args: list[str]) -> dict:
+    """
+    Parse CLI arguments into a structured dict.
+
+    Rules:
+      - First arg not starting with "--" → direct topic mode
+      - Otherwise parse flags: --source, --random, --batch, --limit, --rebuild, --from
+    """
+    if not args:
+        return {"mode": "help"}
+
+    # Direct topic mode: first arg is a plain string (not a flag)
+    if not args[0].startswith("--"):
+        return {"mode": "direct", "topic": " ".join(args)}
+
+    parsed = {}
+
+    # --rebuild
+    if args[0] == "--rebuild":
+        if len(args) < 2:
+            return {"mode": "error", "msg": "Usage: main.py --rebuild <prefix> [--from tts|captions|slides|assembly]"}
+        parsed["mode"] = "rebuild"
+        parsed["prefix"] = args[1]
+        parsed["from_step"] = 2  # default
+
+        if "--from" in args:
+            idx = args.index("--from")
+            if idx + 1 >= len(args):
+                return {"mode": "error", "msg": "--from requires: tts | captions | slides | assembly"}
+            step_name = args[idx + 1].lower()
+            if step_name not in _FROM_STEP:
+                return {"mode": "error", "msg": f"Unknown step '{step_name}'. Valid: tts, captions, slides, assembly"}
+            parsed["from_step"] = _FROM_STEP[step_name]
+
+        return parsed
+
+    # --source-based modes
+    source = None
+    if "--source" in args:
+        idx = args.index("--source")
+        if idx + 1 >= len(args):
+            return {"mode": "error", "msg": "--source requires a subject name (e.g. --source tech)"}
+        source = args[idx + 1]
+
+    is_random = "--random" in args
+    is_batch  = "--batch"  in args
+
+    # Mutual exclusivity: --random and --batch cannot both be set
+    if is_random and is_batch:
+        return {"mode": "error", "msg": "--random and --batch are mutually exclusive"}
+
+    # --limit
+    limit = None
+    if "--limit" in args:
+        idx = args.index("--limit")
+        if idx + 1 >= len(args):
+            return {"mode": "error", "msg": "--limit requires an integer (e.g. --limit 10)"}
+        try:
+            limit = int(args[idx + 1])
+        except ValueError:
+            return {"mode": "error", "msg": f"--limit must be an integer, got '{args[idx + 1]}'"}
+
+    if is_random:
+        if limit is not None:
+            return {"mode": "error", "msg": "--limit has no effect with --random (selects exactly one topic). Remove --limit or use --batch instead."}
+        if not source:
+            return {"mode": "error", "msg": "--random requires --source <subject>"}
+        return {"mode": "random", "source": source}
+
+    if is_batch:
+        if not source:
+            return {"mode": "error", "msg": "--batch requires --source <subject>"}
+        return {"mode": "batch", "source": source, "limit": limit}
+
+    return {"mode": "error", "msg": f"Unrecognised arguments: {' '.join(args)}\nRun without arguments to see usage."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -455,40 +591,30 @@ if __name__ == "__main__":
     cfg  = _load_cfg()
     args = sys.argv[1:]
 
-    if not args:
+    parsed = _parse_args(args)
+    mode   = parsed["mode"]
+
+    if mode == "help":
         print(__doc__)
         sys.exit(0)
 
-    if args[0] == "--batch":
-        run_batch(cfg)
+    elif mode == "error":
+        print(f"[main] Error: {parsed['msg']}", file=sys.stderr)
+        sys.exit(1)
 
-    elif args[0] == "--random":
-        topic = random_topic(pathlib.Path(cfg["paths"]["topics"]))
+    elif mode == "direct":
+        run_one(parsed["topic"], cfg)
+
+    elif mode == "random":
+        subject_path = resolve_source(cfg, parsed["source"])
+        topic = random_topic(subject_path)
         if not topic:
-            print("[main] No topics in data/topics.txt")
+            print(f"[main] No topics in {subject_path}", file=sys.stderr)
             sys.exit(1)
         run_one(topic, cfg)
 
-    elif args[0] == "--rebuild":
-        if len(args) < 2:
-            print("Usage: main.py --rebuild <prefix> [--from tts|captions|slides|assembly]")
-            sys.exit(1)
+    elif mode == "batch":
+        run_batch(cfg, source=parsed["source"], limit=parsed["limit"])
 
-        prefix    = args[1]
-        from_step = 2   # default: redo everything from TTS
-
-        if "--from" in args:
-            idx = args.index("--from")
-            if idx + 1 >= len(args):
-                print("--from requires: tts | captions | slides | assembly")
-                sys.exit(1)
-            step_name = args[idx + 1].lower()
-            if step_name not in _FROM_STEP:
-                print(f"Unknown step '{step_name}'. Valid: tts, captions, slides, assembly")
-                sys.exit(1)
-            from_step = _FROM_STEP[step_name]
-
-        rebuild(prefix, from_step, cfg)
-
-    else:
-        run_one(" ".join(args), cfg)
+    elif mode == "rebuild":
+        rebuild(parsed["prefix"], parsed["from_step"], cfg)

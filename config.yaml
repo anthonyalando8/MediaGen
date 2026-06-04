@@ -1,5 +1,5 @@
 llm:
-  model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b
+  model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b qwen3-vl:235b-cloud
 
 tts:
   voice: "auto"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
@@ -45,7 +45,7 @@ paths:
   workspace: "workspace/runs"
   bgm: "assets/bgm"
   prompts: "prompts"
-  topics: "data/topics.txt"
+  sources_dir: "data/topics"   # subject files: data/topics/{subject}.txt
 
 # Palette in CSS oklch for HTML renderer
 palette:
