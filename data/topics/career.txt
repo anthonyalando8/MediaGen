@@ -1,3 +1,20 @@
+# ── SOFTWARE ENGINEERING CAREER ──────────────────────────────────────────────
+why senior developers write less code
+the interview process is broken and nobody wants to fix it
+why your github profile doesn't matter as much as you think
+how to get promoted without playing politics
+the real reason companies ghost you after final rounds
+why being a generalist is underrated in a specialist world
+what makes a staff engineer different from a senior
+the burnout timeline nobody shows you
+why taking a pay cut can be the best career move
+the skills that make you unfireable in a recession
+how to negotiate a salary without feeling awkward
+why switching companies beats waiting for a raise
+the hidden cost of staying in your comfort zone at work
+what hiring managers actually look for in a portfolio
+why your side project matters more than your degree
+
 # ── CAREER / WORK ─────────────────────────────────────────────────────────────
 why the smartest person in the room rarely gets promoted
 the career move that looks like a step back but isn't
@@ -7,3 +24,39 @@ the soft skill that gets people promoted faster than anything
 why your network is worth more than your degree
 the difference between a job and a career nobody explains
 what burnout actually is and why rest won't fix it
+
+# ── MONEY & FINANCIAL INDEPENDENCE ───────────────────────────────────────────
+why your salary is the worst way to build wealth
+the financial mistake most high earners make
+why saving money is not the same as building wealth
+what nobody teaches you about compound interest
+the job that pays well but costs everything
+why most people never escape the paycheck cycle
+how to think about money like someone who has it
+the difference between income and net worth nobody explains
+why financial freedom starts with one uncomfortable conversation
+what rich people do with their time that poor people don't
+
+# ── ENTREPRENEURSHIP ──────────────────────────────────────────────────────────
+why most people who want to start a business never do
+the fear that keeps smart people in jobs they hate
+what separates people who build things from people who talk about it
+why execution beats ideas every single time
+the moment you realize your boss has the same doubts you do
+why freelancing is the most underrated career move
+what working for yourself actually feels like after 90 days
+the tax nobody tells employees about
+why small bets beat one big leap
+how to start a business without quitting your job first
+
+# ── WORKPLACE DYNAMICS ────────────────────────────────────────────────────────
+why the loudest person in the meeting is rarely the smartest
+how office politics actually works and why pretending it doesn't is naive
+the colleague who takes credit and how to handle them
+why your manager's opinion of you matters more than your output
+the meeting that could have been an email and how to stop it
+why saying no at work is a power move
+the subtle way good employees get overlooked
+how to disagree with your boss without losing their respect
+why being liked at work is not the same as being respected
+the performance review hack nobody uses

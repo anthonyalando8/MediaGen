@@ -19,3 +19,138 @@ the truth about 10x engineers
 why documentation is the most underrated skill in tech
 what separates a good API from a great one
 the real cost of technical debt nobody talks about
+
+# ── AI & MACHINE LEARNING ─────────────────────────────────────────────────────
+why most AI startups will die in 2025
+the problem with AI-generated content nobody admits
+why your AI chatbot is lying to you
+how large language models actually work
+the AI skills gap that's about to hit every company
+why prompt engineering is already a dying skill
+what AI cannot do no matter how good it gets
+the quiet way AI is changing junior developer jobs
+why AI code assistants make bad programmers worse
+the real reason big tech is scared of open source AI
+what happens when AI gets it confidently wrong
+why fine-tuning beats prompting every single time
+the model that changed everything and nobody noticed
+why RAG is the most important AI pattern right now
+how to evaluate an AI model before you trust it
+
+# ── SOFTWARE ENGINEERING CAREER ──────────────────────────────────────────────
+why senior developers write less code
+the interview process is broken and nobody wants to fix it
+why your github profile doesn't matter as much as you think
+how to get promoted without playing politics
+the real reason companies ghost you after final rounds
+why being a generalist is underrated in a specialist world
+what makes a staff engineer different from a senior
+the burnout timeline nobody shows you
+why taking a pay cut can be the best career move
+the skills that make you unfireable in a recession
+how to negotiate a salary without feeling awkward
+why switching companies beats waiting for a raise
+the hidden cost of staying in your comfort zone at work
+what hiring managers actually look for in a portfolio
+why your side project matters more than your degree
+
+# ── CYBERSECURITY ─────────────────────────────────────────────────────────────
+the hack that exposed every password manager
+why two-factor authentication is not enough anymore
+how social engineering beats every firewall
+the vulnerability hiding in every smart home device
+why public wifi is still dangerous in 2025
+what zero-trust architecture actually means
+how ransomware groups operate like real businesses
+the quiet way your phone is being tracked right now
+why most data breaches start with a phishing email
+the security mistake every startup makes
+
+# ── STARTUPS & TECH BUSINESS ─────────────────────────────────────────────────
+why 90 percent of startups fail in the first year
+the funding trap that kills promising companies
+why product-market fit is harder to find than you think
+how to build a product people actually want
+the real reason venture capital is broken
+why building in public beats stealth mode every time
+what successful founders have in common
+the startup graveyard nobody talks about
+why your MVP is probably too big
+how to validate an idea before writing a line of code
+the problem with moving fast and breaking things
+why most SaaS products plateau at 10k MRR
+what nobody tells you about product launches
+the founder who builds vs the founder who sells
+why distribution beats product every time
+
+# ── CLOUD & INFRASTRUCTURE ───────────────────────────────────────────────────
+why kubernetes is overkill for most startups
+the hidden cost of going serverless
+what cloud vendors don't tell you about lock-in
+why your AWS bill is out of control
+the database decision you will regret
+how to build systems that survive millions of users
+why microservices made everything worse for small teams
+the case for boring technology in production
+what happens when the cloud goes down
+why edge computing is eating the cloud
+
+# ── DATA & PRIVACY ────────────────────────────────────────────────────────────
+the data your phone collects every single minute
+why gdpr failed to protect anyone
+how tech companies monetize your attention
+the browser fingerprint that tracks you without cookies
+why deleting your data doesn't actually delete it
+how your search history predicts your future
+the quiet way advertisers know more about you than your family
+why digital privacy is now a luxury for the rich
+what your smart TV is watching while you watch it
+how to disappear from the internet completely
+
+# ── MODERN TECH CULTURE ──────────────────────────────────────────────────────
+why remote work exposed broken management
+the meeting culture that is killing your team
+why most tech companies are allergic to saying no
+hustle culture is a scam and the data proves it
+the quiet quitting nobody is talking about
+why four day work weeks outperform five
+the truth about work-life balance in big tech
+why ping-pong tables don't make a good company culture
+what big tech gets wrong about talent
+the real reason people leave high-paying tech jobs
+
+# ── WEB3 & EMERGING TECH ─────────────────────────────────────────────────────
+why blockchain failed to deliver on its promises
+the nft crash nobody saw coming
+what web3 got right and everything it got wrong
+why decentralisation is harder than it sounds
+the future of the internet nobody is building
+what quantum computing actually threatens
+why the metaverse is not dead just misunderstood
+how augmented reality will change work not gaming
+the robot that is already taking warehouse jobs
+why brain-computer interfaces are closer than you think
+
+# ── AFRICA / KENYA TECH ANGLE ────────────────────────────────────────────────
+why nairobi is becoming africa's silicon savannah
+the mobile money revolution that left the west behind
+why african developers are solving problems the west ignores
+how mpesa changed the economics of an entire continent
+the talent war over african software engineers
+why africa will dominate the next wave of fintech
+the infrastructure gap slowing down african startups
+why kenya's tech scene is punching above its weight
+how diaspora developers are reshaping african tech
+the global south is building its own internet and it looks different
+
+# ── GEOPOLITICS OF TECH ───────────────────────────────────────────────────────
+why kenya should reject foreign biocontainment camps
+the semiconductor war between the US and China
+why tiktok is a geopolitical weapon not just an app
+how tech sanctions are reshaping the global supply chain
+the rare earth minerals powering your phone and who controls them
+why the global south is building its own tech stack
+the silent battle over undersea internet cables
+how US export controls are accelerating Chinese chip independence
+why digital sovereignty matters more than most leaders admit
+the country quietly winning the AI arms race
