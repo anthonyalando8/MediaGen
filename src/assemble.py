@@ -476,6 +476,53 @@ def burn_captions(video_path, ass_path, out_path, cfg):
 
 
 # -----------------------------------------------------------------------
+# Character overlay  (composites Mixamo PNG frames over slide video)
+# -----------------------------------------------------------------------
+
+def _composite_character(
+    bg_video:        pathlib.Path,
+    char_frames_dir: pathlib.Path,
+    out_path:        pathlib.Path,
+    cfg:             dict,
+) -> None:
+    """
+    Overlay transparent character PNG frames over the background slide video.
+
+    Character frames were rendered with alpha=true (transparent background).
+    ffmpeg overlay filter composites them frame-by-frame at full frame size —
+    the character renderer already outputs at the correct video dimensions,
+    so no scaling is needed here.
+    """
+    fps    = cfg["video"]["fps"]
+    width  = cfg["video"]["width"]
+    height = cfg["video"]["height"]
+    preset = cfg["video"]["preset"]
+    crf    = str(cfg["video"]["crf"])
+
+    char_input = str(char_frames_dir / "frame_%04d.png")
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(bg_video),                # input 0: background slides video
+        "-framerate", str(fps),
+        "-i", char_input,                   # input 1: character PNG sequence
+        "-filter_complex",
+            # Character frames are full-frame with transparent background.
+            # overlay=0:0 places them exactly over the background.
+            # format=auto preserves alpha compositing.
+            f"[1:v]scale={width}:{height}[char];"
+            f"[0:v][char]overlay=0:0:format=auto",
+        "-c:v", "libx264",
+        "-preset", preset,
+        "-crf", crf,
+        "-pix_fmt", "yuv420p",
+        str(out_path),
+    ]
+
+    _run(cmd, "Composite character over slides")
+
+
+# -----------------------------------------------------------------------
 # Public API  (signature unchanged from v2)
 # -----------------------------------------------------------------------
 
@@ -487,12 +534,15 @@ def assemble(
     run_dir,
     cfg,
     script: dict | None = None,
+    char_frames_dir=None,
 ):
     """
     Auto-detects renderer mode and assembles the final video.
 
     script (optional) — passed to BGM picker for mood-matched selection.
                         If None, falls back to random BGM choice.
+    char_frames_dir (optional) — path to character PNG frame sequence.
+                        If provided, character is composited over slides.
     """
     bgm_dir = pathlib.Path(cfg["paths"]["bgm"])
     mood    = (script or {}).get("global", {}).get("music_mood", "") if script else ""
@@ -509,6 +559,25 @@ def assemble(
     else:
         print("[assemble] Pillow mode — assembling from static PNGs")
         build_slide_video(slide_paths, durations, silent, cfg)
+
+    # ── Character overlay (optional) ──────────────────────────────────────
+    if char_frames_dir is not None:
+        char_frames_path = pathlib.Path(char_frames_dir)
+        frame_count = len(list(char_frames_path.glob("frame_*.png")))
+        if frame_count > 0:
+            print(f"[assemble] Compositing character ({frame_count} frames)...")
+            silent_with_char = run_dir / "slides_silent_char.mp4"
+            _composite_character(
+                bg_video=silent,
+                char_frames_dir=char_frames_path,
+                out_path=silent_with_char,
+                cfg=cfg,
+            )
+            silent.unlink()
+            silent_with_char.rename(silent)
+            print("[assemble] Character composited ✓")
+        else:
+            print("[assemble] char_frames_dir empty — skipping overlay")
 
     mix_audio(voice_path, bgm_dir, mixed, cfg["video"]["bgm_volume"], mood=mood)
     mux(silent, mixed, muxed)

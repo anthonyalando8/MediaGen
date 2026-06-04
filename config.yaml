@@ -59,3 +59,6 @@ theme: "tech_blue"   # maps to renderer/themes/tech_blue.css
 # true  = delete the frames/ directory after assembly completes (saves ~200-400MB per run)
 # false = keep frames on disk (useful for debugging or re-exporting)
 cleanup_frames: true
+
+character:
+  enabled: false

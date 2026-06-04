@@ -52,8 +52,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from llm      import generate_script
 from tts      import synthesize, beat_durations
 from captions.captions import generate_captions
-from visuals  import render_slides
-from assemble import assemble
+from visuals    import render_slides
+from assemble   import assemble
+from character  import render_character
 from utils    import (
     make_run_dir, qa_check, extract_thumbnail,
     save_report, load_topics, random_topic,
@@ -269,13 +270,36 @@ def rebuild(prefix: str, from_step: int, cfg: dict) -> dict:
         slide_paths = [str(d) for d in beat_dirs if d.is_dir()]
         _skip(4, "Slide rendering", f"{len(slide_paths)} beat dirs")
 
+    # ── Step 4.5: Character frames ────────────────────────────────────────
+    char_frames_dir = None
+    if cfg.get("character", {}).get("enabled", False):
+        if from_step <= 4:
+            _step(5, "Character rendering  (Mixamo/Three.js)")
+            durations_ms = [int(d * 1000) for d in durations]
+            char_frames_dir = render_character(
+                run_dir, cfg, beat_durations_ms=durations_ms
+            )
+        else:
+            # Assembly-only rebuild — reuse existing char_frames if present
+            existing = run_dir / "char_frames"
+            if existing.exists() and list(existing.glob("frame_*.png")):
+                char_frames_dir = existing
+                _skip(5, "Character rendering", f"{len(list(existing.glob('frame_*.png')))} frames")
+            else:
+                _step(5, "Character rendering  (Mixamo/Three.js)")
+                durations_ms = [int(d * 1000) for d in durations]
+                char_frames_dir = render_character(
+                    run_dir, cfg, beat_durations_ms=durations_ms
+                )
+
     # ── Step 5: Assembly ─────────────────────────────────────────────────
-    _step(5, "Assembly")
+    _step(6, "Assembly")
     final_path = assemble(
         slide_paths, durations,
         voice_path, ass_path,
         run_dir, cfg,
         script=script,
+        char_frames_dir=char_frames_dir,
     )
 
     # ── Cleanup + QA ─────────────────────────────────────────────────────
@@ -347,13 +371,22 @@ def run_one(topic: str, cfg: dict) -> dict:
         script, run_dir, cfg, beat_durations_ms=durations_ms, timeline=timeline,
     )
 
+    # ── 4.5 Character frames ──────────────────────────────────────────────
+    char_frames_dir = None
+    if cfg.get("character", {}).get("enabled", False):
+        _step(6, "Character rendering  (Mixamo/Three.js)")
+        char_frames_dir = render_character(
+            run_dir, cfg, beat_durations_ms=durations_ms
+        )
+
     # ── 5. Assembly ───────────────────────────────────────────────────────
-    _step(6, "Assembly  (FFmpeg, mood-aware BGM)")
+    _step(7, "Assembly  (FFmpeg, mood-aware BGM)")
     final_path = assemble(
         slide_paths, durations,
         voice_path, ass_path,
         run_dir, cfg,
         script=script,
+        char_frames_dir=char_frames_dir,
     )
 
     # ── 6–7. Cleanup + QA ─────────────────────────────────────────────────
@@ -442,16 +475,16 @@ def run_batch(cfg: dict, source: str, limit: int | None = None) -> None:
         print(f"[main] No topics found in {subject_path}")
         return
 
-    # Apply limit
+    # Apply limit — slicing beyond list length is safe in Python
     if limit is not None:
         if limit < 1:
             print(f"[main] --limit must be a positive integer, got {limit}")
             return
         topics = topics[:limit]
 
-    total = len(topics)
+    total        = len(topics)
     source_total = len(load_topics(subject_path))
-    limit_note = f" (limit {limit} of {source_total})" if limit is not None else ""
+    limit_note   = f" (limit {limit} of {source_total})" if limit is not None else ""
     print(f"[main] Batch mode — {total} topics from '{source}'{limit_note}")
 
     for i, topic in enumerate(topics, 1):
@@ -521,15 +554,11 @@ def _parse_args(args: list[str]) -> dict:
     if not args[0].startswith("--"):
         return {"mode": "direct", "topic": " ".join(args)}
 
-    parsed = {}
-
     # --rebuild
     if args[0] == "--rebuild":
         if len(args) < 2:
             return {"mode": "error", "msg": "Usage: main.py --rebuild <prefix> [--from tts|captions|slides|assembly]"}
-        parsed["mode"] = "rebuild"
-        parsed["prefix"] = args[1]
-        parsed["from_step"] = 2  # default
+        parsed = {"mode": "rebuild", "prefix": args[1], "from_step": 2}
 
         if "--from" in args:
             idx = args.index("--from")
@@ -553,7 +582,6 @@ def _parse_args(args: list[str]) -> dict:
     is_random = "--random" in args
     is_batch  = "--batch"  in args
 
-    # Mutual exclusivity: --random and --batch cannot both be set
     if is_random and is_batch:
         return {"mode": "error", "msg": "--random and --batch are mutually exclusive"}
 
@@ -588,9 +616,8 @@ def _parse_args(args: list[str]) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    cfg  = _load_cfg()
-    args = sys.argv[1:]
-
+    cfg    = _load_cfg()
+    args   = sys.argv[1:]
     parsed = _parse_args(args)
     mode   = parsed["mode"]
 
