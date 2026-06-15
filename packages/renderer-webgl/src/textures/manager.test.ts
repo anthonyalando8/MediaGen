@@ -141,4 +141,43 @@ describe("TextureManager", () => {
     expect(dispose).toHaveBeenCalledOnce();
     expect(texture!.destroyed).toBe(true);
   });
+
+  it("logs once and keeps returning Texture.EMPTY when an asset can't be resolved (no per-frame retry spam)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const manager = new TextureManager({ resolveAsset: () => undefined }, { createTexture: makeTexture });
+
+    expect(manager.get({ assetId: "missing" }, 30)).toBe(Texture.EMPTY);
+    await flush();
+
+    // Simulate several more RAF frames asking for the same asset.
+    expect(manager.get({ assetId: "missing" }, 30)).toBe(Texture.EMPTY);
+    expect(manager.get({ assetId: "missing" }, 30)).toBe(Texture.EMPTY);
+    await flush();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain('failed to load asset "missing"');
+
+    errorSpy.mockRestore();
+  });
+
+  it("logs once and keeps returning Texture.EMPTY when loadTexture rejects (e.g. a decode error)", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const asset: MediaAssetRef = { id: "a1", kind: "image", url: "data:image/png;base64,bad" };
+
+    const manager = new TextureManager(
+      { resolveAsset: () => asset },
+      { loadTexture: async () => Promise.reject(new Error("decode failed")), createTexture: makeTexture }
+    );
+
+    manager.get({ assetId: "a1" }, 30);
+    await flush();
+    manager.get({ assetId: "a1" }, 30);
+    await flush();
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][1]).toEqual(new Error("decode failed"));
+
+    errorSpy.mockRestore();
+  });
 });

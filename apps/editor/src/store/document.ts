@@ -3,7 +3,7 @@
 // Tier 1 · DOCUMENT (persisted, undoable) — Deliverable 09 §9.2.
 
 import { applyOp, invertOp } from "core";
-import type { Op, Project } from "core";
+import type { AssetRef, Id, Op, Project } from "core";
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
 
@@ -21,6 +21,31 @@ export interface DocumentSlice {
   redo(): void;
   canUndo(): boolean;
   canRedo(): boolean;
+  /**
+   * Appends `asset` to `project.assets` (core's `AssetRef`, project.ts) —
+   * MediaPalette's upload handler (exit criterion 02), after building the
+   * AssetRef via persistence/asset-upload.ts's `fileToAssetRef`.
+   *
+   * NOT part of the op-log/undo stack: `project.assets` is a flat
+   * Project-level array (not addressed by any Composition's JSON-pointer
+   * paths — Op.path/applyOp/invertOp operate on `project.comps[compId]`),
+   * and registering an uploaded asset in the library is an import action,
+   * not a composition edit. Still persisted: main.tsx's Tier1 subscription
+   * fires on any `document.project` replacement, including this one.
+   */
+  addAsset(asset: AssetRef): void;
+  /**
+   * Removes the asset `assetId` from `project.assets` — MediaPalette's
+   * per-item remove button. Same non-op-log/non-undo rationale as
+   * `addAsset`. Does NOT touch any composition: nodes whose
+   * `source.assetId`/`tex.assetId` still reference a removed asset are left
+   * as-is (MediaService.resolveAsset then returns `undefined` for them, and
+   * TextureManager.get logs once and falls back to `Texture.EMPTY` — see
+   * renderer-webgl/textures/manager.ts). Callers that want "remove and
+   * delete the layers using it" compose this with `deleteSelection`
+   * (store/delete-selection.ts) themselves.
+   */
+  removeAsset(assetId: Id): void;
 }
 
 /**
@@ -95,6 +120,26 @@ export function createDocumentSlice(initialProject: Project): StateCreator<Edito
 
     canRedo() {
       return get().document.cursor < get().document.opLog.length;
+    },
+
+    addAsset(asset) {
+      const { project } = get().document;
+      set({
+        document: {
+          ...get().document,
+          project: { ...project, assets: [...project.assets, asset] },
+        },
+      });
+    },
+
+    removeAsset(assetId) {
+      const { project } = get().document;
+      set({
+        document: {
+          ...get().document,
+          project: { ...project, assets: project.assets.filter((a) => a.id !== assetId) },
+        },
+      });
     },
   });
 }

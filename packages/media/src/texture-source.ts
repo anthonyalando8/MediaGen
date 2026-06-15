@@ -68,7 +68,17 @@ export async function loadImageTexture(asset: MediaAssetRef): Promise<ImageTextu
 /** Creates a hidden `<video>`-backed texture source for `asset` (MVP shortcut — see above). */
 export function createVideoTexture(asset: MediaAssetRef): VideoTextureSource {
   const element = document.createElement("video");
-  element.src = asset.url;
+
+  // `data:` URLs are what `AssetRef.master` persists for an uploaded asset
+  // (asset-upload.ts — they survive JSON/localStorage round-trips, unlike
+  // `blob:` URLs, satisfying exit criterion 10). But `<video src="data:...">`
+  // has poor cross-browser support for `currentTime` SEEKING — the
+  // `seeked` event (which `seek()` below awaits) may never fire, leaving
+  // the element's decoded frame black indefinitely. Re-wrap the SAME bytes
+  // as a `blob:` object URL for the `<video>` element itself, which has
+  // normal seek support; `objectUrl` is revoked in `dispose()`.
+  const objectUrl = asset.url.startsWith("data:") ? dataUrlToObjectUrl(asset.url) : undefined;
+  element.src = objectUrl ?? asset.url;
   element.muted = true;
   element.playsInline = true;
   element.preload = "auto";
@@ -113,8 +123,21 @@ export function createVideoTexture(asset: MediaAssetRef): VideoTextureSource {
       element.pause();
       element.removeAttribute("src");
       element.load();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     },
   };
+}
+
+/** Decodes a `data:<mime>;base64,<data>` URL into a `blob:` object URL with the same bytes/MIME type. */
+export function dataUrlToObjectUrl(dataUrl: string): string {
+  const comma = dataUrl.indexOf(",");
+  const header = dataUrl.slice(5, comma); // "<mime>;base64"
+  const mime = header.slice(0, header.indexOf(";")) || "application/octet-stream";
+  const base64 = dataUrl.slice(comma + 1);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
 /** Loads `asset` into a TextureSource, dispatching on `asset.kind`. */

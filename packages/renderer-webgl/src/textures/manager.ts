@@ -42,6 +42,7 @@ interface CacheEntry {
 export class TextureManager {
   private cache = new Map<string, CacheEntry>();
   private pending = new Set<string>();
+  private failed = new Set<string>();
   private clock = 0;
   private readonly maxEntries: number;
   private readonly loadTextureFn: (asset: MediaAssetRef) => Promise<MediaTextureSource>;
@@ -63,6 +64,14 @@ export class TextureManager {
    * re-renders every frame, Deliverable 09) will pick up the real texture
    * once it resolves. For video assets with `tex.frame` set, seeks the
    * underlying element to that frame and marks the texture for re-upload.
+   *
+   * A load that REJECTS (decode error, unresolvable asset, network
+   * failure) is logged once via `console.error` and remembered in
+   * `failed` — without this, the rejection from `void this.load(...)`
+   * would be an unhandled promise rejection (easy to miss in devtools and
+   * gives no indication of WHY a texture stayed blank/black), and without
+   * `failed`, `get()` would retry the same failing load every frame
+   * (~60/s), spamming the console.
    */
   get(tex: TexRef, fps: number): Texture {
     const entry = this.cache.get(tex.assetId);
@@ -74,9 +83,16 @@ export class TextureManager {
       return entry.texture;
     }
 
+    if (this.failed.has(tex.assetId)) return Texture.EMPTY;
+
     if (!this.pending.has(tex.assetId)) {
       this.pending.add(tex.assetId);
-      void this.load(tex.assetId).finally(() => this.pending.delete(tex.assetId));
+      void this.load(tex.assetId)
+        .catch((err) => {
+          this.failed.add(tex.assetId);
+          console.error(`TextureManager: failed to load asset "${tex.assetId}":`, err);
+        })
+        .finally(() => this.pending.delete(tex.assetId));
     }
     return Texture.EMPTY;
   }
@@ -119,5 +135,6 @@ export class TextureManager {
   destroy(): void {
     for (const assetId of [...this.cache.keys()]) this.evict(assetId);
     this.pending.clear();
+    this.failed.clear();
   }
 }
