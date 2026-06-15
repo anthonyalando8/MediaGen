@@ -129,6 +129,7 @@ export function Viewport() {
       <CanvasHost createRenderer={createRenderer} onResize={handleResize} />
       {selectedNode && !selectedNode.locked && (
         <TransformGizmo
+          selectedNode={selectedNode}
           nodeId={selectedNode.id}
           fit={fit}
           canvasSize={canvasSize}

@@ -1,8 +1,10 @@
 // apps/editor/src/components/MediaPalette.tsx
+import { Plus } from "lucide-react";
 import { addMediaNode } from "../commands/add-media";
 import { useRegistry } from "../bootstrap/registry-context";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
+import { getKindIcon } from "./kind-icons";
 
 /**
  * The "add-media palette" (Deliverable 11 Week 7): lists `project.assets`
@@ -22,20 +24,27 @@ export function MediaPalette() {
   }
 
   return (
-    <div style={{ borderBottom: "1px solid #333", padding: 8 }}>
-      <h4 style={{ margin: "0 0 4px" }}>Media</h4>
+    <div className="media-section">
+      <div className="panel__header">Media</div>
       {media.length === 0 ? (
-        <p style={{ opacity: 0.6, fontSize: 12, margin: 0 }}>No media yet — asset upload arrives in a later phase.</p>
+        <p className="panel__empty">No media yet — asset upload arrives in a later phase.</p>
       ) : (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {media.map((asset, i) => (
-            <li key={asset.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span>
-                {asset.kind} <small>({asset.id.slice(0, 6)})</small>
-              </span>
-              <button onClick={() => handleAdd(i)}>+ Add</button>
-            </li>
-          ))}
+        <ul className="media-list">
+          {media.map((asset, i) => {
+            const Icon = getKindIcon(asset.kind);
+            return (
+              <li key={asset.id} className="media-item">
+                <span className="media-item__kind">
+                  <Icon size={14} />
+                  {asset.kind}
+                  <span className="media-item__id">{asset.id.slice(0, 6)}</span>
+                </span>
+                <button className="btn btn-icon" title="Add to composition" onClick={() => handleAdd(i)}>
+                  <Plus size={14} />
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

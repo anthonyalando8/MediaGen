@@ -1,5 +1,8 @@
 // apps/editor/src/main.tsx
 import { createRoot } from "react-dom/client";
+// @ts-ignore CSS side-effect import type declarations are handled by the bundler.
+import "./styles/theme.css";
+
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

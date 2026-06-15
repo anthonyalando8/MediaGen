@@ -1,4 +1,5 @@
 // apps/editor/src/components/TimelinePlaceholder.tsx
+import { Pause, Play } from "lucide-react";
 import { toFrame } from "core";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
@@ -16,9 +17,13 @@ export function TimelinePlaceholder() {
   const duration = useEditorStore((s) => activeComp(s).duration);
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 8, borderTop: "1px solid #333" }}>
-      <button onClick={() => (playing ? store.getState().pause() : store.getState().play())}>
-        {playing ? "Pause" : "Play"}
+    <div className="timeline">
+      <button
+        className="btn btn-icon"
+        title={playing ? "Pause" : "Play"}
+        onClick={() => (playing ? store.getState().pause() : store.getState().play())}
+      >
+        {playing ? <Pause size={15} /> : <Play size={15} />}
       </button>
       <input
         type="range"
@@ -26,9 +31,8 @@ export function TimelinePlaceholder() {
         max={Math.max(0, duration - 1)}
         value={playhead}
         onChange={(e) => store.getState().setPlayhead(toFrame(Number(e.target.value)))}
-        style={{ flex: 1 }}
       />
-      <span>
+      <span className="timeline__time">
         {playhead} / {duration}
       </span>
     </div>

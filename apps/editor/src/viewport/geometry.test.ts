@@ -1,14 +1,18 @@
 // apps/editor/src/viewport/geometry.test.ts
-import { describe, expect, it } from "vitest";
-import type { Mat3, RenderNode } from "contract";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { GlyphRun, Mat3, RenderNode } from "contract";
 import {
   applyMat3,
   compToScreen,
   computeFitTransform,
   DEFAULT_BOUNDS,
+  getGroupBounds,
   getOrientedCorners,
+  getRectCenter,
   getRenderNodeBounds,
+  getScaleHandles,
   invertMat3,
+  measureTextRun,
   rotationMat3,
   scaleMat3,
   screenDeltaToComp,
@@ -114,9 +118,9 @@ describe("getRenderNodeBounds", () => {
     };
     const bounds = getRenderNodeBounds(text);
     expect(bounds.x).toBe(0);
-    expect(bounds.y).toBe(-64); // first run's y (0) minus its fontSize
+    expect(bounds.y).toBe(0); // first run's y — runs are top-left anchored (scene-graph.ts), not baseline
     expect(bounds.width).toBeCloseTo(5 * 64 * 0.6); // "Hello"/"World" are both 5 chars
-    expect(bounds.height).toBeCloseTo(76.8 + 64 * 0.2 - -64);
+    expect(bounds.height).toBeCloseTo(76.8 + 64 * 1.2); // second run's y + its line height
   });
 
   it("empty text, image, video, and group fall back to DEFAULT_BOUNDS", () => {
@@ -158,6 +162,93 @@ describe("getOrientedCorners", () => {
       { x: 210, y: 120 },
       { x: 10, y: 120 },
     ]);
+  });
+});
+
+describe("getRectCenter", () => {
+  it("returns the midpoint of bounds", () => {
+    expect(getRectCenter({ x: 0, y: 0, width: 100, height: 50 })).toEqual({ x: 50, y: 25 });
+    expect(getRectCenter({ x: 10, y: 20, width: 100, height: 50 })).toEqual({ x: 60, y: 45 });
+  });
+});
+
+describe("getScaleHandles", () => {
+  const bounds = { x: 0, y: 0, width: 100, height: 50 };
+  const handles = getScaleHandles(bounds);
+
+  it("returns 8 handles: 4 corners (both axes) + 4 edge midpoints (one axis each)", () => {
+    expect(handles).toHaveLength(8);
+    expect(handles.slice(0, 4).every((h) => h.axes.x && h.axes.y)).toBe(true);
+    expect(handles.slice(4).filter((h) => h.axes.x && !h.axes.y)).toHaveLength(2); // left/right
+    expect(handles.slice(4).filter((h) => !h.axes.x && h.axes.y)).toHaveLength(2); // top/bottom
+  });
+
+  it("each handle's pivotLocal is the opposite corner/edge — local and pivotLocal are never equal", () => {
+    for (const handle of handles) {
+      expect(handle.local).not.toEqual(handle.pivotLocal);
+    }
+  });
+
+  it("a corner handle's pivot is the diagonally opposite corner", () => {
+    const tl = handles.find((h) => h.local.x === 0 && h.local.y === 0)!;
+    expect(tl.pivotLocal).toEqual({ x: 100, y: 50 });
+  });
+
+  it("an edge handle's pivot is the midpoint of the opposite edge, on the same fixed axis", () => {
+    const right = handles.find((h) => h.local.x === 100 && h.local.y === 25)!;
+    expect(right.axes).toEqual({ x: true, y: false });
+    expect(right.pivotLocal).toEqual({ x: 0, y: 25 });
+  });
+});
+
+function rectRenderNode(id: string, matrix: Mat3, width: number, height: number): RenderNode {
+  return { id: id as RenderNode["id"], matrix, opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width, height, radius: 0 } };
+}
+
+function groupRenderNode(id: string, matrix: Mat3): RenderNode {
+  return { id: id as RenderNode["id"], matrix, opacity: 1, blend: "normal", t: "group", children: [] };
+}
+
+describe("getGroupBounds", () => {
+  it("with an identity group matrix, returns the AABB union of descendants' bounds directly", () => {
+    // a (0,0)-(100,100) shape and a (200,200)-(300,300) shape (matrix = translate by 200,200)
+    const a = rectRenderNode("a", IDENTITY, 100, 100);
+    const b = rectRenderNode("b", [1, 0, 200, 0, 1, 200, 0, 0, 1], 100, 100);
+
+    const bounds = getGroupBounds(IDENTITY, [a, b]);
+
+    expect(bounds).toEqual({ x: 0, y: 0, width: 300, height: 300 });
+  });
+
+  it("maps descendant bounds into the GROUP's local space via invertMat3(groupMatrix)", () => {
+    // group matrix: translate by (50, 50) — a child sitting at world (50,50)-(150,150)
+    // should appear at LOCAL (0,0)-(100,100) once the group's own offset is factored out.
+    const groupMatrix: Mat3 = [1, 0, 50, 0, 1, 50, 0, 0, 1];
+    const child = rectRenderNode("child", [1, 0, 50, 0, 1, 50, 0, 0, 1], 100, 100);
+
+    const bounds = getGroupBounds(groupMatrix, [child]);
+
+    expect(bounds).toEqual({ x: 0, y: 0, width: 100, height: 100 });
+  });
+
+  it("ignores 'group'-typed descendants (no intrinsic bounds)", () => {
+    const a = rectRenderNode("a", IDENTITY, 100, 100);
+    const nestedGroup = groupRenderNode("nested", [1, 0, 1000, 0, 1, 1000, 0, 0, 1]);
+
+    const bounds = getGroupBounds(IDENTITY, [a, nestedGroup]);
+
+    expect(bounds).toEqual({ x: 0, y: 0, width: 100, height: 100 });
+  });
+
+  it("falls back to DEFAULT_BOUNDS when there are no eligible descendants", () => {
+    expect(getGroupBounds(IDENTITY, [])).toEqual(DEFAULT_BOUNDS);
+    expect(getGroupBounds(IDENTITY, [groupRenderNode("nested", IDENTITY)])).toEqual(DEFAULT_BOUNDS);
+  });
+
+  it("falls back to DEFAULT_BOUNDS for a singular group matrix (e.g. 0 scale mid-drag)", () => {
+    const singular: Mat3 = [0, 0, 0, 0, 0, 0, 0, 0, 1];
+    const a = rectRenderNode("a", IDENTITY, 100, 100);
+    expect(getGroupBounds(singular, [a])).toEqual(DEFAULT_BOUNDS);
   });
 });
 
@@ -233,5 +324,40 @@ describe("gizmo preview math", () => {
     const moved = applyMat3(preview, { x: 20, y: 10 });
     expect(moved.x).toBeCloseTo(30);
     expect(moved.y).toBeCloseTo(10);
+  });
+});
+
+describe("measureTextRun", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function run(text: string): GlyphRun {
+    return { text, x: 0, y: 0, fontFamily: "Inter", fontSize: 64, weight: 400, color: { l: 1, c: 0, h: 0 } };
+  }
+
+  it("falls back to a per-character heuristic when document/Canvas is unavailable (vitest's Node environment)", () => {
+    const { width, height } = measureTextRun(run("Hello"));
+    expect(width).toBeCloseTo(5 * 64 * 0.6);
+    expect(height).toBeCloseTo(64 * 1.2);
+  });
+
+  it("uses Canvas measureText when document is available — matches Pixi's own text layout (scene-graph.ts)", () => {
+    const fakeCtx = { font: "", measureText: vi.fn() };
+    const fakeCanvas = { getContext: () => fakeCtx };
+    vi.stubGlobal("document", { createElement: () => fakeCanvas });
+
+    fakeCtx.measureText.mockReturnValueOnce({ width: 123.4, fontBoundingBoxAscent: 50, fontBoundingBoxDescent: 10 });
+    const a = measureTextRun(run("Hello"));
+    expect(fakeCtx.font).toBe("400 64px Inter");
+    expect(fakeCtx.measureText).toHaveBeenCalledWith("Hello");
+    expect(a.width).toBe(123.4);
+    expect(a.height).toBe(60); // fontBoundingBoxAscent + fontBoundingBoxDescent
+
+    // Falls back to actualBoundingBox*/a fontSize-based estimate if fontBoundingBox* metrics are unavailable.
+    fakeCtx.measureText.mockReturnValueOnce({ width: 50, actualBoundingBoxAscent: 40 });
+    const b = measureTextRun(run("Hi"));
+    expect(b.width).toBe(50);
+    expect(b.height).toBeCloseTo(40 + 64 * 0.2); // actualBoundingBoxAscent + fontSize-based descent fallback
   });
 });

@@ -1,8 +1,10 @@
 // apps/editor/src/components/LayerPanel.tsx
 import type { DragEvent, MouseEvent } from "react";
 import { useState } from "react";
+import { Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import type { Id } from "core";
 import { MediaPalette } from "./MediaPalette";
+import { getKindIcon } from "./kind-icons";
 import { reorderNode } from "../commands/reorder";
 import { setNodeHidden, setNodeLocked } from "../commands/toggle-node-flag";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -62,58 +64,64 @@ export function LayerPanel() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", borderRight: "1px solid #333", height: "100%" }}>
+    <div className="panel panel--left">
       <MediaPalette />
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div className="panel__header">Layers</div>
+      <div className="panel__body">
         {root.length === 0 ? (
-          <p style={{ opacity: 0.6, padding: 8 }}>No layers yet — add one from the toolbar.</p>
+          <p className="panel__empty">No layers yet — add one from the toolbar.</p>
         ) : (
-          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          <ul className="layer-list">
             {root.map((node, index) => {
               const hidden = Boolean(node.hidden);
               const locked = Boolean(node.locked);
+              const selected = selection.includes(node.id);
+              const Icon = getKindIcon(node.kind);
+              const classes = ["layer-row", selected && "selected", hidden && "hidden-layer", dragOverId === node.id && "dragover"]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <li
                   key={node.id}
+                  className={classes}
                   draggable={!locked}
                   onDragStart={(e) => handleDragStart(e, node.id)}
                   onDragOver={(e) => handleDragOver(e, node.id)}
                   onDragLeave={() => setDragOverId((id) => (id === node.id ? null : id))}
                   onDrop={(e) => handleDrop(e, index)}
                   onClick={(e) => handleSelect(e, node.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "2px 4px",
-                    cursor: locked ? "default" : "grab",
-                    opacity: hidden ? 0.5 : 1,
-                    background: selection.includes(node.id) ? "#2a3f5f" : "transparent",
-                    outline: dragOverId === node.id ? "1px dashed #888" : "none",
-                  }}
+                  style={{ cursor: locked ? "default" : "grab" }}
                 >
-                  <button
-                    aria-pressed={hidden}
-                    title={hidden ? "Show layer" : "Hide layer"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleHidden(node.id, hidden);
-                    }}
-                  >
-                    {hidden ? "Show" : "Hide"}
-                  </button>
-                  <button
-                    aria-pressed={locked}
-                    title={locked ? "Unlock layer" : "Lock layer"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleLocked(node.id, locked);
-                    }}
-                  >
-                    {locked ? "Unlock" : "Lock"}
-                  </button>
-                  <span style={{ flex: 1, fontWeight: selection.includes(node.id) ? "bold" : "normal" }}>
-                    {node.name} <small>({node.kind})</small>
+                  <span className="layer-row__icon">
+                    <Icon size={14} />
+                  </span>
+                  <span className="layer-row__name">
+                    {node.name}
+                    <span className="layer-row__kind">{node.kind}</span>
+                  </span>
+                  <span className="layer-row__actions">
+                    <button
+                      className="btn btn-icon"
+                      aria-pressed={hidden}
+                      title={hidden ? "Show layer" : "Hide layer"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleHidden(node.id, hidden);
+                      }}
+                    >
+                      {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
+                      className="btn btn-icon"
+                      aria-pressed={locked}
+                      title={locked ? "Unlock layer" : "Lock layer"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleLocked(node.id, locked);
+                      }}
+                    >
+                      {locked ? <Lock size={14} /> : <Unlock size={14} />}
+                    </button>
                   </span>
                 </li>
               );

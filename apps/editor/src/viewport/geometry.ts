@@ -34,6 +34,9 @@ export const DEFAULT_BOUNDS: Rect = { x: 0, y: 0, width: 200, height: 200 };
  * Per-line height estimate for text bounds, as a multiple of `fontSize` —
  * matches `packages/nodekinds/src/common.ts`'s `layout()` default
  * `lineHeight` (used there to space multi-line `GlyphRun.y` positions).
+ * Used as the HEIGHT fallback (and the only WIDTH fallback) in
+ * `measureTextRun` when `document`/Canvas isn't available (vitest runs in
+ * Node — see geometry.test.ts).
  */
 const TEXT_LINE_HEIGHT = 1.2;
 
@@ -159,6 +162,50 @@ export function getOrientedCorners(bounds: Rect, matrix: Mat3): [Vec2, Vec2, Vec
 /** The center of `bounds`, in local space — the rotate gizmo's pivot point. */
 export function getRectCenter(bounds: Rect): Vec2 {
   return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+}
+
+/**
+ * The bounding box of a "group" RenderNode, in the GROUP's local space —
+ * same convention as `getRenderNodeBounds` (a rect that, mapped through
+ * `groupMatrix` via `getOrientedCorners`, gives the group's comp-space
+ * outline; mapped via `getScaleHandles`, gives valid scale/rotate pivots).
+ *
+ * "group" RenderNodes carry no intrinsic content — `getRenderNodeBounds`
+ * falls back to `DEFAULT_BOUNDS` (200x200) for them, unrelated to where the
+ * group's children actually are (evaluate-node.ts's flat-array doc: a
+ * group's children are pushed as separate sibling RenderNodes with
+ * ABSOLUTE world matrices). The group's true extent is the union of those
+ * descendants' bounds, mapped into the group's local space via
+ * `invertMat3(groupMatrix)`.
+ *
+ * Falls back to `DEFAULT_BOUNDS` if there are no eligible descendants (all
+ * "group" themselves, or `descendants` is empty) or if `groupMatrix` is
+ * singular (e.g. a 0 scale produced mid-drag).
+ */
+export function getGroupBounds(groupMatrix: Mat3, descendants: RenderNode[]): Rect {
+  let inv: Mat3;
+  try {
+    inv = invertMat3(groupMatrix);
+  } catch {
+    return { ...DEFAULT_BOUNDS };
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const child of descendants) {
+    if (child.t === "group") continue; // no intrinsic bounds — see getRenderNodeBounds
+    for (const corner of getOrientedCorners(getRenderNodeBounds(child), child.matrix)) {
+      const local = applyMat3(inv, corner);
+      minX = Math.min(minX, local.x);
+      minY = Math.min(minY, local.y);
+      maxX = Math.max(maxX, local.x);
+      maxY = Math.max(maxY, local.y);
+    }
+  }
+  if (!Number.isFinite(minX)) return { ...DEFAULT_BOUNDS };
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
 /**

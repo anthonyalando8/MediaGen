@@ -24,6 +24,16 @@
 // rotation) so `transform.position` is solved to keep that point fixed —
 // matching the live preview and avoiding a post-release "jump".
 //
+// GROUPS: a "group" RenderNode is skipped by `reconcile()` (no visual of
+// its own — evaluate-node.ts's flat-array doc), so previewing just its own
+// matrix has no visible effect. When `nodeId` is a group, `descendantIds`
+// (this node's Tier1 descendant ids, store/node-tree.ts) is included in the
+// preview — <Viewport> re-derives each descendant's matrix relative to the
+// PREVIEW matrix, cascading the group's live transform to its children. The
+// bounding box itself is also group-aware: `getGroupBounds` (geometry.ts)
+// unions the descendants' bounds instead of `getRenderNodeBounds`'s
+// DEFAULT_BOUNDS fallback for "group".
+//
 // COORDINATE SPACES: `PointerEvent.clientX/Y` are PAGE coordinates, but
 // `fit`/`compToScreen`/`screenToComp` (viewport/geometry.ts) operate on
 // coordinates LOCAL to this <svg> overlay (which is flush with the canvas,
@@ -33,14 +43,15 @@
 // position — `toLocal` (below) subtracts the <svg>'s own
 // `getBoundingClientRect()` origin before any `fit`-based conversion.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Mat3, Rect, RenderTree } from "contract";
-import type { Id } from "core";
+import type { Id, Node } from "core";
 import { moveNode, rotateNode, scaleNode } from "../commands/transform-node";
 import {
   applyMat3,
   compToScreen,
   type FitTransform,
+  getGroupBounds,
   getOrientedCorners,
   getRectCenter,
   getRenderNodeBounds,
@@ -55,6 +66,7 @@ import {
   translationMat3,
   type Vec2,
 } from "../viewport/geometry";
+import { collectDescendantIds } from "../store/node-tree";
 import { useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
@@ -62,16 +74,24 @@ export interface DragPreview {
   nodeId: Id;
   /** A comp-space world matrix to substitute for this node's RenderTree.matrix while the drag is live. */
   matrix: Mat3;
+  /** For "group" nodes: Tier1 descendant ids (store/node-tree.ts) whose RenderTree matrices <Viewport> should re-derive relative to `matrix` — see module doc "GROUPS". */
+  descendantIds?: Set<Id>;
 }
 
 const HANDLE_RADIUS = 5;
 const ROTATE_HANDLE_OFFSET = 24; // screen px above the top edge
+
+// Gizmo stroke/handle colors match styles/theme.css's --accent/--surface-0
+// (SVG can't reference CSS custom properties from a JS-built `<svg>`'s
+// attribute strings here, so these are the same hex values inlined).
 
 /** Cursor per handle, in `getScaleHandles`'s fixed order: TL, TR, BR, BL, TOP, RIGHT, BOTTOM, LEFT. */
 const HANDLE_CURSORS = ["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resize", "ns-resize", "ew-resize", "ns-resize", "ew-resize"];
 
 interface TransformGizmoProps {
   nodeId: Id;
+  /** The selected node's Tier1 record — used only to derive `descendantIds` for "group" nodes (collectDescendantIds, store/node-tree.ts). */
+  selectedNode: Node;
   fit: FitTransform;
   canvasSize: Size;
   treeRef: React.RefObject<RenderTree | null>;
@@ -83,7 +103,7 @@ function toLocal(rect: DOMRect, clientX: number, clientY: number): Vec2 {
   return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
-export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: TransformGizmoProps) {
+export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef, onPreview }: TransformGizmoProps) {
   const store = useEditorStoreApi();
   const svgRef = useRef<SVGSVGElement>(null);
   const polygonRef = useRef<SVGPolygonElement>(null);
@@ -91,10 +111,15 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
   const rotateLineRef = useRef<SVGLineElement>(null);
   const rotateHandleRef = useRef<SVGCircleElement>(null);
 
+  // Tier1 descendant ids for "group" selections (store/node-tree.ts) —
+  // recomputed only when the selected node's record changes.
+  const descendantIds = useMemo(() => collectDescendantIds(selectedNode), [selectedNode]);
+
   // Latest local-space bounds + world matrix, written by the RAF loop and
   // read by pointer handlers at drag-start.
   const boundsRef = useRef<Rect | null>(null);
   const matrixRef = useRef<Mat3 | null>(null);
+  const isGroupRef = useRef(false);
 
   // Keeps pointer handlers (closed over `fit` at drag-start) correct across re-renders.
   const fitRef = useRef(fit);
@@ -106,8 +131,12 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
     const tick = (): void => {
       const tree = treeRef.current;
       const renderNode = tree?.nodes.find((n) => n.id === nodeId);
-      if (renderNode) {
-        const bounds = getRenderNodeBounds(renderNode);
+      if (renderNode && tree) {
+        const isGroup = renderNode.t === "group";
+        isGroupRef.current = isGroup;
+        const bounds = isGroup
+          ? getGroupBounds(renderNode.matrix, tree.nodes.filter((n) => descendantIds.has(n.id as unknown as Id)))
+          : getRenderNodeBounds(renderNode);
         boundsRef.current = bounds;
         matrixRef.current = renderNode.matrix;
 
@@ -143,7 +172,7 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [nodeId, fit, treeRef]);
+  }, [nodeId, fit, treeRef, descendantIds]);
 
   function handleMovePointerDown(e: React.PointerEvent): void {
     e.preventDefault();
@@ -158,7 +187,7 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
       const screenDelta = { x: ev.clientX - start.x, y: ev.clientY - start.y };
       lastDelta = screenDeltaToComp(screenDelta, fitRef.current);
       const matrix = transformAroundPivot(startMatrix!, { x: 0, y: 0 }, translationMat3(lastDelta.x, lastDelta.y));
-      onPreview({ nodeId, matrix });
+      onPreview({ nodeId, matrix, descendantIds: isGroupRef.current ? descendantIds : undefined });
     }
 
     function onUp(): void {
@@ -199,7 +228,7 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
       const sy = handle.axes.y ? (Math.abs(v0.y) < 1e-6 ? 1 : v1.y / v0.y) : 1;
       lastFactors = { x: sx, y: sy };
       const matrix = transformAroundPivot(startMatrix!, pivotWorld, scaleMat3(sx, sy));
-      onPreview({ nodeId, matrix });
+      onPreview({ nodeId, matrix, descendantIds: isGroupRef.current ? descendantIds : undefined });
     }
 
     function onUp(): void {
@@ -241,7 +270,7 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
     function onMove(ev: PointerEvent): void {
       lastDelta = ((angleTo(ev.clientX, ev.clientY) - startAngle) * 180) / Math.PI;
       const matrix = transformAroundPivot(startMatrix!, centerWorld, rotationMat3(lastDelta));
-      onPreview({ nodeId, matrix });
+      onPreview({ nodeId, matrix, descendantIds: isGroupRef.current ? descendantIds : undefined });
     }
 
     function onUp(): void {
@@ -269,17 +298,17 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
       <polygon
         ref={polygonRef}
         fill="transparent"
-        stroke="#4da3ff"
+        stroke="#35d6c1"
         strokeWidth={1.5}
         style={{ pointerEvents: "all", cursor: "move" }}
         onPointerDown={handleMovePointerDown}
       />
-      <line ref={rotateLineRef} stroke="#4da3ff" strokeWidth={1.5} />
+      <line ref={rotateLineRef} stroke="#35d6c1" strokeWidth={1.5} />
       <circle
         ref={rotateHandleRef}
         r={HANDLE_RADIUS}
-        fill="#fff"
-        stroke="#4da3ff"
+        fill="#0a0c0f"
+        stroke="#35d6c1"
         strokeWidth={1.5}
         style={{ pointerEvents: "all", cursor: "grab" }}
         onPointerDown={handleRotatePointerDown}
@@ -291,8 +320,8 @@ export function TransformGizmo({ nodeId, fit, canvasSize, treeRef, onPreview }: 
             handleRefs.current[i] = el;
           }}
           r={HANDLE_RADIUS}
-          fill="#fff"
-          stroke="#4da3ff"
+          fill="#0a0c0f"
+          stroke="#35d6c1"
           strokeWidth={1.5}
           style={{ pointerEvents: "all", cursor }}
           onPointerDown={(e) => {

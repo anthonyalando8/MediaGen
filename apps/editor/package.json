@@ -17,6 +17,7 @@
     "contract": "workspace:*",
     "renderer-webgl": "workspace:*",
     "nodekinds": "workspace:*",
+    "lucide-react": "^1.18.0",
     "media": "workspace:*",
     "schema": "workspace:*",
     "react": "^18.3.0",
