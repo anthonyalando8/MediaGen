@@ -22,5 +22,11 @@ export function activeComp(state: Pick<EditorState, "document">): Composition {
 
 /** Evaluates the active composition at `frame` into a RenderTree (Deliverable 07). */
 export function renderTreeAt(state: Pick<EditorState, "document">, frame: Frame, registry: NodeKindRegistry): RenderTree {
-  return evaluateComposition(activeComp(state), frame, registry);
+  const { assets } = state.document.project;
+  const resolveAsset = (assetId: string): { width: number; height: number } | undefined => {
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset || asset.width === undefined || asset.height === undefined) return undefined;
+    return { width: asset.width, height: asset.height };
+  };
+  return evaluateComposition(activeComp(state), frame, registry, resolveAsset);
 }

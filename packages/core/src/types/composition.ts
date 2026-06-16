@@ -1,15 +1,9 @@
 // packages/core/src/types/composition.ts
-import type { ColorOKLCH, Json } from "./primitives";
+import type { ColorOKLCH } from "./primitives";
 import type { Id } from "./ids";
 import type { Frame } from "./ids";
 import type { Node } from "./node";
-
-/** P2 — params a precomp instance can override; inert in Phase 1. */
-export interface PropBinding {
-  path: string;
-  exposedAs: string;
-  default: Json;
-}
+import type { PropBinding } from "./exposed";
 
 export interface Composition {
   id: Id;
@@ -20,5 +14,6 @@ export interface Composition {
   background?: ColorOKLCH;
   /** The layer tree; array order = z-order. */
   root: Node[];
+  /** Phase 2 §4.3 — which inner props a precomp instance of this Composition can override. */
   exposed?: PropBinding[];
 }

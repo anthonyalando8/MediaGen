@@ -40,7 +40,7 @@
 // but the canvas itself is offset within the page by the surrounding
 // layout — LayerPanel/Toolbar). MOVE uses a pointer-position DELTA, which
 // is offset-invariant, but SCALE/ROTATE need an absolute comp-space
-// position — `toLocal` (below) subtracts the <svg>'s own
+// position — `clientToLocal` (geometry.ts) subtracts the <svg>'s own
 // `getBoundingClientRect()` origin before any `fit`-based conversion.
 
 import { useEffect, useMemo, useRef } from "react";
@@ -49,6 +49,7 @@ import type { Id, Node } from "core";
 import { moveNode, rotateNode, scaleNode } from "../commands/transform-node";
 import {
   applyMat3,
+  clientToLocal,
   compToScreen,
   type FitTransform,
   getGroupBounds,
@@ -96,11 +97,6 @@ interface TransformGizmoProps {
   canvasSize: Size;
   treeRef: React.RefObject<RenderTree | null>;
   onPreview: (preview: DragPreview | null) => void;
-}
-
-/** Converts page coordinates (`PointerEvent.clientX/Y`) to coordinates local to `rect` (the gizmo `<svg>`'s `getBoundingClientRect()`). */
-function toLocal(rect: DOMRect, clientX: number, clientY: number): Vec2 {
-  return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
 export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef, onPreview }: TransformGizmoProps) {
@@ -222,7 +218,7 @@ export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef,
     let lastFactors: Vec2 = { x: 1, y: 1 };
 
     function onMove(ev: PointerEvent): void {
-      const newPoint = screenToComp(toLocal(localRect, ev.clientX, ev.clientY), fitRef.current);
+      const newPoint = screenToComp(clientToLocal(localRect, ev.clientX, ev.clientY), fitRef.current);
       const v1 = { x: newPoint.x - pivotWorld.x, y: newPoint.y - pivotWorld.y };
       const sx = handle.axes.x ? (Math.abs(v0.x) < 1e-6 ? 1 : v1.x / v0.x) : 1;
       const sy = handle.axes.y ? (Math.abs(v0.y) < 1e-6 ? 1 : v1.y / v0.y) : 1;
@@ -260,7 +256,7 @@ export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef,
     const centerScreen = compToScreen(centerWorld, fitRef.current);
 
     function angleTo(clientX: number, clientY: number): number {
-      const local = toLocal(localRect, clientX, clientY);
+      const local = clientToLocal(localRect, clientX, clientY);
       return Math.atan2(local.y - centerScreen.y, local.x - centerScreen.x);
     }
 

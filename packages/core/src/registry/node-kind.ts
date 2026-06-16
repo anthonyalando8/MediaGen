@@ -48,6 +48,21 @@ export interface EvalCtx {
    * see evaluate-composition.ts.
    */
   resolveComp(id: Id): Composition;
+  /**
+   * Looks up an asset's native decoded pixel dimensions by id (from
+   * `Project.assets[].width/height` — see project.ts's `AssetRef` doc).
+   * `image.ts`/`video.ts`'s `imageBox` uses this to size `RenderNode.box`
+   * to the asset's actual aspect ratio. Returns `undefined` if the asset
+   * is unknown or its dimensions haven't been recorded yet, in which case
+   * `imageBox` falls back to the composition's frame size (P1 default).
+   *
+   * Optional — `evaluateComposition` only supplies this when called with
+   * a `resolveAsset` of its own (apps/editor's `renderTreeAt` selector
+   * passes one built from `project.assets`); callers that don't care about
+   * accurate image/video boxes (most core/nodekinds unit tests) can omit
+   * it entirely.
+   */
+  resolveAsset?(assetId: Id): { width: number; height: number } | undefined;
 }
 
 /**

@@ -61,4 +61,21 @@ describe("renderTreeAt", () => {
     expect(at15.nodes[0].opacity).toBeCloseTo(0.5);
     expect(at0.nodes[0].opacity).not.toBe(at15.nodes[0].opacity);
   });
+
+  it("an image node's box reflects its asset's real dimensions (from project.assets), via the resolveAsset built here", () => {
+    const registry = createRegistry();
+    const project = createBlankProject();
+    const comp = project.comps[project.rootCompId];
+
+    const assetId = createId();
+    project.assets = [{ id: assetId, hash: "h", kind: "image", master: "data:image/png;base64,AA==", width: 1600, height: 900 }];
+
+    const node = registry.create("image", { source: { assetId } });
+    project.comps[project.rootCompId] = { ...comp, root: [node] };
+
+    const store = createEditorStore(project);
+    const tree = renderTreeAt(store.getState(), toFrame(0), registry);
+
+    expect(tree.nodes[0]).toMatchObject({ t: "image", box: { width: 1080, height: 607.5 } });
+  });
 });

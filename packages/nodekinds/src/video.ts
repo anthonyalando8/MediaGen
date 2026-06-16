@@ -38,8 +38,8 @@ export const videoKind: NodeKind = {
       t: "video",
       tex: { assetId: node.source?.assetId ?? "", frame: srcFrame(node, frame) },
       fit: (node.props.fit as Fit) ?? "contain",
-      box: imageBox(ctx),
+      box: imageBox(node, ctx),
     },
   ],
-  bounds: (_node, _frame, ctx) => imageBox(ctx), // P1 fallback — see image.ts's imageBox doc.
+  bounds: (node, _frame, ctx) => imageBox(node, ctx), // sized from the asset's real aspect ratio when known — see image.ts's imageBox doc.
 };

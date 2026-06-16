@@ -13,6 +13,18 @@ export interface AssetRef {
   proxy?: string;
   poster?: string;
   waveform?: string;
+  /**
+   * Native decoded pixel dimensions, for "image"/"video" assets — known at
+   * UPLOAD time (asset-upload.ts's `fileToAssetRef`), since the evaluator
+   * (core/evaluator) runs synchronously and can't await a browser decode.
+   * Used by image.ts/video.ts's `imageBox` to size an image/video node's
+   * `RenderNode.box` to the asset's actual aspect ratio — without this,
+   * `box` falls back to the composition's frame size, which letterboxes
+   * (for "contain") or otherwise looks wrong whenever the asset's aspect
+   * ratio doesn't match the composition's.
+   */
+  width?: number;
+  height?: number;
   provenance?: "upload" | "stock" | "generated";
   meta?: Record<string, Json>;
 }

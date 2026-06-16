@@ -11,7 +11,12 @@ import type { RenderTree } from "contract";
 import { IDENTITY } from "./compose-transform";
 import { evaluateNode } from "./evaluate-node";
 
-export function evaluateComposition(comp: Composition, frame: Frame, reg: NodeKindRegistry): RenderTree {
+export function evaluateComposition(
+  comp: Composition,
+  frame: Frame,
+  reg: NodeKindRegistry,
+  resolveAsset?: EvalCtx["resolveAsset"]
+): RenderTree {
   const ctx: EvalCtx = {
     fps: comp.fps,
     size: comp.size,
@@ -19,6 +24,7 @@ export function evaluateComposition(comp: Composition, frame: Frame, reg: NodeKi
       // P2 — precomp resolution. Phase 1 has no nested compositions.
       throw new Error(`resolveComp("${id}"): precomp resolution is not implemented in Phase 1`);
     },
+    resolveAsset,
   };
   const nodes = comp.root.flatMap((n) => evaluateNode(n, frame, IDENTITY, reg, ctx));
   return { size: comp.size, background: comp.background, nodes };

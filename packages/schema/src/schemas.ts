@@ -94,22 +94,47 @@ export const SourceSchema = z.object({
   compId: z.string().optional(),
 });
 
-// P2 — reserved, inert in P1
+// Phase 2 §4.1 — mirrors core/src/types/effect.ts.
 export const EffectRefSchema = z.object({
   id: z.string(),
-  kind: z.string(),
-  params: z.record(ScalarSchema),
+  effect: z.string(),
+  enabled: z.boolean(),
+  props: z.record(ScalarSchema),
+  channels: z.array(ChannelSchema).optional(),
+});
+
+export const TransitionRefSchema = z.object({
+  preset: z.string(),
+  durationF: z.number(),
+  props: z.record(ScalarSchema),
+});
+
+// Phase 2 §4.2 — mirrors core/src/types/mask.ts.
+export const BezierPointSchema = z.object({
+  point: Vec2Schema,
+  inHandle: Vec2Schema.optional(),
+  outHandle: Vec2Schema.optional(),
+});
+
+export const MaskPathSchema = z.object({
+  points: z.array(BezierPointSchema),
+  closed: z.boolean(),
 });
 
 export const MaskSchema = z.object({
   id: z.string(),
-  geom: JsonSchema,
   mode: z.enum(["add", "subtract", "intersect"]),
+  path: MaskPathSchema,
+  feather: z.number(),
+  opacity: z.number(),
+  inverted: z.boolean(),
+  channels: z.array(ChannelSchema).optional(),
 });
 
+// Phase 2 §4.2 — mirrors core/src/types/matte.ts.
 export const TrackMatteRefSchema = z.object({
-  nodeId: z.string(),
-  mode: z.enum(["alpha", "luma"]),
+  sourceNodeId: z.string(),
+  type: z.enum(["alpha", "luma", "alpha-inv", "luma-inv"]),
 });
 
 export interface NodeDoc {
@@ -133,6 +158,8 @@ export interface NodeDoc {
   masks?: z.infer<typeof MaskSchema>[];
   matte?: z.infer<typeof TrackMatteRefSchema>;
   isAdjustment?: boolean;
+  transitionIn?: z.infer<typeof TransitionRefSchema>;
+  transitionOut?: z.infer<typeof TransitionRefSchema>;
 }
 
 export const NodeSchema: z.ZodType<NodeDoc> = z.lazy(() =>
@@ -157,14 +184,17 @@ export const NodeSchema: z.ZodType<NodeDoc> = z.lazy(() =>
     masks: z.array(MaskSchema).optional(),
     matte: TrackMatteRefSchema.optional(),
     isAdjustment: z.boolean().optional(),
+    transitionIn: TransitionRefSchema.optional(),
+    transitionOut: TransitionRefSchema.optional(),
   })
 );
 
-/** P2 — precomp-overridable params; inert in P1. */
+// Phase 2 §4.3 — mirrors core/src/types/exposed.ts.
 export const PropBindingSchema = z.object({
-  path: z.string(),
-  exposedAs: z.string(),
-  default: JsonSchema,
+  key: z.string(),
+  label: z.string(),
+  target: z.object({ nodeId: z.string(), path: z.string() }),
+  type: z.enum(["scalar", "color", "text", "asset"]),
 });
 
 export const CompositionSchema = z.object({
@@ -186,6 +216,8 @@ export const AssetRefSchema = z.object({
   proxy: z.string().optional(),
   poster: z.string().optional(),
   waveform: z.string().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
   provenance: z.enum(["upload", "stock", "generated"]).optional(),
   meta: z.record(JsonSchema).optional(),
 });

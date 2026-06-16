@@ -11,6 +11,8 @@ import {
   getRectCenter,
   getRenderNodeBounds,
   getScaleHandles,
+  hitTestNode,
+  hitTestTree,
   invertMat3,
   measureTextRun,
   rotationMat3,
@@ -266,6 +268,69 @@ describe("getGroupBounds", () => {
     const singular: Mat3 = [0, 0, 0, 0, 0, 0, 0, 0, 1];
     const a = rectRenderNode("a", IDENTITY, 100, 100);
     expect(getGroupBounds(singular, [a])).toEqual(DEFAULT_BOUNDS);
+  });
+});
+
+describe("hitTestNode", () => {
+  it("returns true for a point inside an axis-aligned node's bounds", () => {
+    const node = rectRenderNode("a", IDENTITY, 100, 100);
+    expect(hitTestNode({ x: 50, y: 50 }, node)).toBe(true);
+    expect(hitTestNode({ x: 0, y: 0 }, node)).toBe(true); // inclusive edge
+    expect(hitTestNode({ x: 100, y: 100 }, node)).toBe(true); // inclusive edge
+  });
+
+  it("returns false for a point outside the bounds", () => {
+    const node = rectRenderNode("a", IDENTITY, 100, 100);
+    expect(hitTestNode({ x: 150, y: 50 }, node)).toBe(false);
+    expect(hitTestNode({ x: -1, y: 50 }, node)).toBe(false);
+  });
+
+  it("accounts for a translated/scaled matrix", () => {
+    // node's local box is 0,0-100,100; matrix translates by (200, 300) and scales by 2
+    // -> comp-space box is 200,300-400,500.
+    const matrix: Mat3 = [2, 0, 200, 0, 2, 300, 0, 0, 1];
+    const node = rectRenderNode("a", matrix, 100, 100);
+
+    expect(hitTestNode({ x: 300, y: 400 }, node)).toBe(true); // center of the comp-space box
+    expect(hitTestNode({ x: 50, y: 50 }, node)).toBe(false); // would hit if matrix were ignored
+  });
+
+  it("always returns false for a 'group' node (no intrinsic visual content)", () => {
+    const node = groupRenderNode("g", IDENTITY);
+    expect(hitTestNode({ x: 0, y: 0 }, node)).toBe(false);
+  });
+
+  it("returns false for a singular matrix rather than throwing", () => {
+    const singular: Mat3 = [0, 0, 0, 0, 0, 0, 0, 0, 1];
+    const node = rectRenderNode("a", singular, 100, 100);
+    expect(hitTestNode({ x: 0, y: 0 }, node)).toBe(false);
+  });
+});
+
+describe("hitTestTree", () => {
+  it("returns the topmost (highest-index) node when multiple overlap", () => {
+    const back = rectRenderNode("back", IDENTITY, 100, 100);
+    const front = rectRenderNode("front", IDENTITY, 100, 100);
+
+    expect(hitTestTree({ x: 50, y: 50 }, [back, front])?.id).toBe("front");
+  });
+
+  it("falls through to a lower node if the topmost doesn't cover the point", () => {
+    const back = rectRenderNode("back", IDENTITY, 100, 100);
+    const front = rectRenderNode("front", [1, 0, 500, 0, 1, 500, 0, 0, 1], 50, 50); // off to the side
+
+    expect(hitTestTree({ x: 50, y: 50 }, [back, front])?.id).toBe("back");
+  });
+
+  it("returns undefined when nothing is hit", () => {
+    const node = rectRenderNode("a", IDENTITY, 100, 100);
+    expect(hitTestTree({ x: 9999, y: 9999 }, [node])).toBeUndefined();
+  });
+
+  it("skips 'group' nodes even if they're on top", () => {
+    const back = rectRenderNode("back", IDENTITY, 100, 100);
+    const group = groupRenderNode("g", IDENTITY);
+    expect(hitTestTree({ x: 50, y: 50 }, [back, group])?.id).toBe("back");
   });
 });
 

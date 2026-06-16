@@ -85,6 +85,38 @@ describe("imageKind", () => {
     expect(imageKind.bounds?.(node, toFrame(0), ctx)).toEqual(expectedBox);
     expect(imageKind.render(node, toFrame(0), ctx)[0]).toMatchObject({ box: expectedBox });
   });
+
+  it("sizes box to the asset's real aspect ratio (centered, letterboxed) when ctx.resolveAsset knows its dimensions", () => {
+    const reg = new NodeKindRegistry();
+    registerBuiltins(reg);
+    const node = reg.create("image", { source: { assetId: "wide_asset" as Id } });
+
+    // a 1600x900 (16:9) image inside a 1080x1920 (9:16) comp frame:
+    // scale = min(1080/1600, 1920/900) = min(0.675, 2.133) = 0.675
+    // -> width = 1080, height = 607.5 -> centered vertically.
+    const ctxWithAsset: EvalCtx = {
+      ...ctx,
+      resolveAsset: (assetId) => (assetId === "wide_asset" ? { width: 1600, height: 900 } : undefined),
+    };
+
+    const box = imageKind.bounds?.(node, toFrame(0), ctxWithAsset);
+    expect(box?.width).toBeCloseTo(1080);
+    expect(box?.height).toBeCloseTo(607.5);
+    expect(box?.x).toBeCloseTo(0);
+    expect(box?.y).toBeCloseTo((1920 - 607.5) / 2);
+
+    // render() must emit the SAME box (the bug this whole feature fixed).
+    expect(imageKind.render(node, toFrame(0), ctxWithAsset)[0]).toMatchObject({ box });
+  });
+
+  it("falls back to the composition frame when resolveAsset doesn't know this asset", () => {
+    const reg = new NodeKindRegistry();
+    registerBuiltins(reg);
+    const node = reg.create("image", { source: { assetId: "unknown_asset" as Id } });
+    const ctxWithAsset: EvalCtx = { ...ctx, resolveAsset: () => undefined };
+
+    expect(imageKind.bounds?.(node, toFrame(0), ctxWithAsset)).toEqual({ x: 0, y: 0, width: 1080, height: 1920 });
+  });
 });
 
 describe("videoKind", () => {

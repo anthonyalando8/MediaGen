@@ -1,19 +1,21 @@
 // apps/editor/src/components/Viewport.tsx
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mul, toFrame } from "core";
-import type { Id } from "core";
+import type { Id, NodeKindRegistry } from "core";
 import { createWebGLRenderer } from "renderer-webgl";
 import type { MediaService, Renderer } from "renderer-webgl";
 import type { MediaAssetRef } from "media";
 import type { RenderTree } from "contract";
 import { CanvasHost } from "ui";
+import { appendNodeOp } from "../commands/add-node";
 import { useRegistry } from "../bootstrap/registry-context";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
-import type { EditorStore } from "../store";
+import type { EditorState, EditorStore } from "../store";
 import { activeComp, renderTreeAt } from "../store/selectors";
-import { computeFitTransform, type FitTransform, invertMat3, type Size } from "../viewport/geometry";
+import { clientToLocal, computeFitTransform, type FitTransform, hitTestTree, invertMat3, screenToComp, type Size, type Vec2 } from "../viewport/geometry";
 import { TransformGizmo } from "./TransformGizmo";
 import type { DragPreview } from "./TransformGizmo";
+import { ViewportFrame } from "./ViewportFrame";
 
 /**
  * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
@@ -79,6 +81,53 @@ function applyDragPreview(nodes: RenderTree["nodes"], preview: DragPreview): Ren
 }
 
 /**
+ * Click-to-select / click-to-place — the Toolbar's Select/Text/Shape tool
+ * row (store/selection.ts's `tool`) previously had no effect on the canvas
+ * at all: clicking a tool button only changed which button looked pressed.
+ *
+ * - "select": hit-tests `point` (via `hitTestTree`, in z-order — topmost
+ *   wins) against `tree.nodes` and selects that node, or clears the
+ *   selection if nothing was hit (clicking empty canvas to deselect).
+ * - "text" / "shape": creates a new node of that kind at `point`, then
+ *   switches back to "select" with the new node selected — matching the
+ *   click-to-place convention of most design tools, and complementing the
+ *   Toolbar's existing "Shape"/"Text" buttons (which always add at a fixed
+ *   default position with no placement step).
+ *
+ * Click position: `position` is the node's TOP-LEFT in local space
+ * (getRenderNodeBounds's convention — shape/text content is laid out from
+ * `(0,0)`), so a "shape" is offset by half its default size to center it
+ * under the click; "text" is left at the click point directly —
+ * `text.ts`'s GlyphRuns are also top-left anchored, so this matches a
+ * text-tool's usual "click = insertion point" behavior rather than needing
+ * to evaluate the (not-yet-existing) node to find its center.
+ *
+ * Extracted as a standalone function (rather than inlined in the
+ * `handleCanvasClick` callback below) so it's testable without a real DOM —
+ * `point` is already in comp space; the only DOM-dependent part
+ * (`clientToLocal`/`getBoundingClientRect`) stays in the React callback.
+ */
+export function handleViewportClick(state: EditorState, registry: NodeKindRegistry, tree: RenderTree | null, point: Vec2): void {
+  if (state.tool === "select") {
+    const hit = tree ? hitTestTree(point, tree.nodes) : undefined;
+    state.select(hit ? [hit.id as unknown as Id] : []);
+    return;
+  }
+
+  const comp = activeComp(state);
+  const kind = state.tool; // "text" | "shape" — narrowed by the check above
+  const position =
+    kind === "shape"
+      ? { x: point.x - 100, y: point.y - 100, z: 0 } // center a default 200x200 shape (shape.ts's defaults) under the click
+      : { x: point.x, y: point.y, z: 0 };
+  const op = appendNodeOp(comp, registry, kind, { transform: { position, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } } });
+  state.apply(op);
+  const node = op.after as unknown as { id: Id };
+  state.select([node.id]);
+  state.setTool("select");
+}
+
+/**
  * Hosts the injected Renderer + transform gizmos (Deliverable 09 §9.1).
  *
  * "THE RENDER LOOP STAYS OUT OF REACT": a single RAF loop reads
@@ -97,6 +146,7 @@ export function Viewport() {
   const lastViewportRef = useRef<FitTransform | null>(null);
   const treeRef = useRef<RenderTree | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
+  const clickLayerRef = useRef<HTMLDivElement>(null);
 
   const [canvasSize, setCanvasSize] = useState<Size>(ZERO_SIZE);
 
@@ -122,6 +172,17 @@ export function Viewport() {
   const handlePreview = useCallback((preview: DragPreview | null) => {
     dragPreviewRef.current = preview;
   }, []);
+
+  /** Thin DOM-coordinate wrapper around `handleViewportClick` (see its doc above). */
+  const handleCanvasClick = useCallback(
+    (e: React.PointerEvent) => {
+      const rect = clickLayerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const point = screenToComp(clientToLocal(rect, e.clientX, e.clientY), fit);
+      handleViewportClick(store.getState(), registry, treeRef.current, point);
+    },
+    [store, registry, fit]
+  );
 
   useEffect(() => {
     let raf = 0;
@@ -186,9 +247,21 @@ export function Viewport() {
     return () => cancelAnimationFrame(raf);
   }, [store, registry, canvasSize]);
 
+  const tool = useEditorStore((s) => s.tool);
+
   return (
     <>
       <CanvasHost createRenderer={createRenderer} onResize={handleResize} />
+      <ViewportFrame compSize={compSize} canvasSize={canvasSize} fit={fit} />
+      <div
+        ref={clickLayerRef}
+        onPointerDown={handleCanvasClick}
+        style={{
+          position: "absolute",
+          inset: 0,
+          cursor: tool === "select" ? "default" : "crosshair",
+        }}
+      />
       {selectedNode && !selectedNode.locked && (
         <TransformGizmo
           nodeId={selectedNode.id}

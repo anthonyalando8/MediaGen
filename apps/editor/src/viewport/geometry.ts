@@ -178,6 +178,44 @@ export function getRectCenter(bounds: Rect): Vec2 {
 }
 
 /**
+ * Whether comp-space point `point` falls within `node`'s bounds — used for
+ * click-to-select (Viewport.tsx). Maps `point` into the node's LOCAL space
+ * via `invertMat3(node.matrix)` (so rotation/scale are accounted for, not
+ * just an axis-aligned screen-space box) and tests against
+ * `getRenderNodeBounds(node)`. "group" nodes are skipped entirely — same
+ * as `getGroupBounds`'s callers, they have no own visual content
+ * (evaluate-node.ts's flat-array doc); a click "on" a group is really a
+ * click on one of its (separately flat, separately hit-testable)
+ * descendant RenderNodes.
+ */
+export function hitTestNode(point: Vec2, node: RenderNode): boolean {
+  if (node.t === "group") return false;
+  let inv: Mat3;
+  try {
+    inv = invertMat3(node.matrix);
+  } catch {
+    return false; // singular matrix (e.g. 0 scale mid-drag) — nothing to hit
+  }
+  const local = applyMat3(inv, point);
+  const bounds = getRenderNodeBounds(node);
+  return local.x >= bounds.x && local.x <= bounds.x + bounds.width && local.y >= bounds.y && local.y <= bounds.y + bounds.height;
+}
+
+/**
+ * The TOPMOST RenderNode in `nodes` whose bounds contain comp-space point
+ * `point`, or `undefined` if none do. "Topmost" = highest array index
+ * (`SceneGraphAdapter.reconcile`'s `display.zIndex = index` — later in the
+ * array paints on top), so this iterates in reverse and returns the first
+ * hit.
+ */
+export function hitTestTree(point: Vec2, nodes: RenderNode[]): RenderNode | undefined {
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    if (hitTestNode(point, nodes[i])) return nodes[i];
+  }
+  return undefined;
+}
+
+/**
  * The bounding box of a "group" RenderNode, in the GROUP's local space —
  * same convention as `getRenderNodeBounds` (a rect that, mapped through
  * `groupMatrix` via `getOrientedCorners`, gives the group's comp-space
@@ -298,6 +336,11 @@ export function compToScreen(p: Vec2, fit: FitTransform): Vec2 {
 
 export function screenToComp(p: Vec2, fit: FitTransform): Vec2 {
   return { x: (p.x - fit.x) / fit.scale, y: (p.y - fit.y) / fit.scale };
+}
+
+/** Converts page coordinates (`PointerEvent.clientX/Y`) to coordinates local to `rect` (an overlay element's `getBoundingClientRect()`) — the first step before `screenToComp`. Shared by <TransformGizmo> and <Viewport>'s click-to-select/click-to-place handling. */
+export function clientToLocal(rect: DOMRect, clientX: number, clientY: number): Vec2 {
+  return { x: clientX - rect.left, y: clientY - rect.top };
 }
 
 /** Converts a screen-space delta (pointer movement) to a comp-space delta — translation only, no offset. */
