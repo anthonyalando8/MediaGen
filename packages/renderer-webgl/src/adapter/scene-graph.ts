@@ -11,7 +11,10 @@ import { toPixiMatrix } from "../matrix";
 import type { TextureManager } from "../textures/manager";
 
 type Display = Container;
+
+/** Upper bound for `Text.resolution` (updateText) — caps texture memory for extreme zoom/scale. */
 const MAX_TEXT_RESOLUTION = 8;
+
 /**
  * Reconciles a flat RenderTree into a single flat Pixi Container (`root`),
  * keyed by `RenderNode.id`. The flat array IS the z-order (Deliverable 07:
@@ -86,8 +89,20 @@ export class SceneGraphAdapter {
   private createDisplay(node: RenderNode): Display {
     switch (node.t) {
       case "image":
-      case "video":
-        return new Sprite();
+      case "video": {
+        // A Container wrapping one child Sprite — NOT a bare Sprite — so
+        // `reconcile()`'s `setFromMatrix(toPixiMatrix(node.matrix))` (the
+        // node's own move/scale/rotate transform) can be applied to this
+        // outer Container while `updateSprite` independently positions/
+        // scales the inner Sprite to `node.box` per `fit`, exactly the
+        // pattern `updateText` already uses for its child `Text` objects.
+        // A single Sprite can't do both: `setFromMatrix` and a `fit` scale
+        // would both be writing to the same `position`/`scale`, clobbering
+        // one another.
+        const container = new Container();
+        container.addChild(new Sprite());
+        return container;
+      }
       case "text":
         return new Container(); // holds one PIXI.Text per GlyphRun
       case "shape":
@@ -102,7 +117,7 @@ export class SceneGraphAdapter {
     switch (node.t) {
       case "image":
       case "video":
-        this.updateSprite(display as Sprite, node);
+        this.updateSprite(display as Container, node);
         break;
       case "text":
         this.updateText(display, node.runs);
@@ -113,13 +128,57 @@ export class SceneGraphAdapter {
     }
   }
 
-  private updateSprite(sprite: Sprite, node: Extract<RenderNode, { t: "image" | "video" }>): void {
+  private updateSprite(container: Container, node: Extract<RenderNode, { t: "image" | "video" }>): void {
+    const sprite = container.children[0] as Sprite;
     const texture = this.textures.get(node.tex, this.fps);
     if (sprite.texture !== texture) sprite.texture = texture;
-    // P1: rendered at the texture's native size, scaled/positioned by
-    // `node.matrix` only. `fit` (cover/contain/fill) needs a target box that
-    // image/video RenderNodes don't carry yet — see the Week 5 design note
-    // (recommend an ADR adding `box: Rect` to these RenderNode variants).
+
+    // Sizes/positions the INNER sprite to `node.box` (its local-space
+    // target box, contract's render-node.ts doc) per `fit` — matches
+    // <TransformGizmo>'s outline, which reads the SAME box via
+    // NodeKind.bounds() (image.ts's `imageBox`/video.ts).
+    //
+    // This must NOT touch the OUTER `container`'s own position/scale —
+    // that's already set by `reconcile()`'s `setFromMatrix(toPixiMatrix(
+    // node.matrix))` (the node's move/scale/rotate transform from the
+    // gizmo). createDisplay's doc explains why a bare Sprite can't do
+    // both: a single Pixi object's `position`/`scale` can't carry both
+    // `node.matrix` and a `fit` scale at once without one clobbering the
+    // other — so this sprite is a CHILD of that container instead, with
+    // its own independent position/scale in the container's local space
+    // (where (0,0) is `node.matrix`'s origin, exactly the convention
+    // `getOrientedCorners` uses for every node kind's bounds).
+    const texW = texture.width || 1;
+    const texH = texture.height || 1;
+    const { width: boxW, height: boxH } = node.box;
+
+    let scaleX: number;
+    let scaleY: number;
+    switch (node.fit) {
+      case "fill":
+        scaleX = boxW / texW;
+        scaleY = boxH / texH;
+        break;
+      case "cover": {
+        const s = Math.max(boxW / texW, boxH / texH);
+        scaleX = scaleY = s;
+        break;
+      }
+      case "contain":
+      default: {
+        const s = Math.min(boxW / texW, boxH / texH);
+        scaleX = scaleY = s;
+        break;
+      }
+    }
+
+    // Anchored at the texture's center, then positioned at the box's
+    // center: this is correct for all three `fit` modes — including
+    // "cover"/"contain", where the scaled texture doesn't exactly fill the
+    // box and needs to be centered within it, not pinned to a corner.
+    sprite.anchor.set(0.5);
+    sprite.scale.set(scaleX, scaleY);
+    sprite.position.set(node.box.x + boxW / 2, node.box.y + boxH / 2);
   }
 
   private updateText(container: Container, runs: GlyphRun[]): void {

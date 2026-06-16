@@ -1,7 +1,7 @@
 // packages/nodekinds/src/video.ts
 import { z } from "zod";
 import type { NodeKind } from "core";
-import { FitSchema, type Fit } from "./image";
+import { FitSchema, imageBox, type Fit } from "./image";
 import { srcFrame } from "./common";
 
 /**
@@ -29,7 +29,7 @@ export const videoKind: NodeKind = {
     ],
   },
   defaults: () => ({ name: "Video", props: { fit: "contain", volume: 1 }, source: {} }),
-  render: (node, frame) => [
+  render: (node, frame, ctx) => [
     {
       id: node.id,
       matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], // placeholder — applyWorld overwrites
@@ -38,13 +38,8 @@ export const videoKind: NodeKind = {
       t: "video",
       tex: { assetId: node.source?.assetId ?? "", frame: srcFrame(node, frame) },
       fit: (node.props.fit as Fit) ?? "contain",
+      box: imageBox(ctx),
     },
   ],
-  bounds: (_node, _frame, ctx) => ({
-    // P1 fallback — see image.ts; native size comes from the TextureManager later.
-    x: 0,
-    y: 0,
-    width: ctx.size.width,
-    height: ctx.size.height,
-  }),
+  bounds: (_node, _frame, ctx) => imageBox(ctx), // P1 fallback — see image.ts's imageBox doc.
 };

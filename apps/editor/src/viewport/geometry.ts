@@ -109,8 +109,11 @@ export function invertMat3(m: Mat3): Mat3 {
  * The local-space bounding box a RenderNode occupies before `matrix` is
  * applied. "shape" derives exact bounds from `geom` (matching
  * `scene-graph.ts`'s drawing); "text" derives an approximate box from its
- * GlyphRuns; "image"/"video"/"group" have no intrinsic size in Phase 1
- * (Week 5's "fit is a no-op" note) and fall back to `DEFAULT_BOUNDS`.
+ * GlyphRuns; "image"/"video" return `node.box` (the same box
+ * `scene-graph.ts`'s `updateSprite` sizes/positions the sprite within per
+ * `fit` — contract's render-node.ts doc); "group" has no intrinsic size in
+ * Phase 1 and falls back to `DEFAULT_BOUNDS` (use `getGroupBounds` instead
+ * for an accurate group outline).
  */
 export function getRenderNodeBounds(node: RenderNode): Rect {
   if (node.t === "shape") {
@@ -144,7 +147,17 @@ export function getRenderNodeBounds(node: RenderNode): Rect {
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
-  // "image" | "video" | "group" — no intrinsic size in Phase 1.
+  if (node.t === "image" || node.t === "video") {
+    // Now sourced from the same `box` the renderer sizes/positions the
+    // sprite to (scene-graph.ts's `updateSprite`, contract's render-node.ts
+    // doc) — previously this fell back to a fixed-size DEFAULT_BOUNDS
+    // unrelated to where/how large the image/video actually rendered,
+    // which is why the gizmo outline didn't line up with the visible
+    // content.
+    return { ...node.box };
+  }
+
+  // "group" — no intrinsic size in Phase 1 (handled by getGroupBounds instead).
   return { ...DEFAULT_BOUNDS };
 }
 

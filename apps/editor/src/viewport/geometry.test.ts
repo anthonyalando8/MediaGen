@@ -123,8 +123,16 @@ describe("getRenderNodeBounds", () => {
     expect(bounds.height).toBeCloseTo(76.8 + 64 * 1.2); // second run's y + its line height
   });
 
-  it("empty text, image, video, and group fall back to DEFAULT_BOUNDS", () => {
+  it("empty text and group fall back to DEFAULT_BOUNDS", () => {
     const emptyText: RenderNode = { id: "t", matrix: IDENTITY, opacity: 1, blend: "normal", t: "text", runs: [] };
+    const group: RenderNode = { id: "g", matrix: IDENTITY, opacity: 1, blend: "normal", t: "group", children: [] };
+
+    expect(getRenderNodeBounds(emptyText)).toEqual(DEFAULT_BOUNDS);
+    expect(getRenderNodeBounds(group)).toEqual(DEFAULT_BOUNDS);
+  });
+
+  it("image/video return node.box verbatim (the same box scene-graph.ts's updateSprite sizes/positions the sprite within)", () => {
+    const box = { x: 10, y: 20, width: 300, height: 150 };
     const image: RenderNode = {
       id: "i",
       matrix: IDENTITY,
@@ -133,12 +141,21 @@ describe("getRenderNodeBounds", () => {
       t: "image",
       tex: { assetId: "a1" },
       fit: "contain",
+      box,
     };
-    const group: RenderNode = { id: "g", matrix: IDENTITY, opacity: 1, blend: "normal", t: "group", children: [] };
+    const video: RenderNode = {
+      id: "v",
+      matrix: IDENTITY,
+      opacity: 1,
+      blend: "normal",
+      t: "video",
+      tex: { assetId: "a2" },
+      fit: "cover",
+      box,
+    };
 
-    expect(getRenderNodeBounds(emptyText)).toEqual(DEFAULT_BOUNDS);
-    expect(getRenderNodeBounds(image)).toEqual(DEFAULT_BOUNDS);
-    expect(getRenderNodeBounds(group)).toEqual(DEFAULT_BOUNDS);
+    expect(getRenderNodeBounds(image)).toEqual(box);
+    expect(getRenderNodeBounds(video)).toEqual(box);
   });
 });
 

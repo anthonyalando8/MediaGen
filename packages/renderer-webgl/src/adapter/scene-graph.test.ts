@@ -8,6 +8,8 @@ import type { MediaAssetRef, TextureSource as MediaTextureSource } from "media";
 
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const;
 
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 /**
  * A TextureManager wired to fakes — avoids fetch/document/createImageBitmap
  * (media's real loadTexture needs a browser), and never throws on unknown
@@ -49,6 +51,7 @@ describe("SceneGraphAdapter", () => {
       t: "image",
       tex: { assetId: "asset1" },
       fit: "contain",
+      box: { x: 0, y: 0, width: 100, height: 100 },
     };
     const textNode: RenderNode = {
       id: "txt",
@@ -78,7 +81,13 @@ describe("SceneGraphAdapter", () => {
     expect(adapter.root.children).toHaveLength(3);
 
     const [img, txt, shp] = adapter.root.children;
-    expect(img).toBeInstanceOf(Sprite);
+    // image is now a Container wrapping one child Sprite (createDisplay's
+    // doc) — NOT a bare Sprite — so the outer Container can carry
+    // `node.matrix` (asserted below) independently of the inner Sprite's
+    // own box-fit position/scale (see the "fit" test further down).
+    expect(img).toBeInstanceOf(Container);
+    expect(img).not.toBeInstanceOf(Sprite);
+    expect((img as Container).children[0]).toBeInstanceOf(Sprite);
     expect(txt).toBeInstanceOf(Container);
     expect(txt).not.toBeInstanceOf(Sprite);
     expect(shp).toBeInstanceOf(Graphics);
@@ -220,5 +229,81 @@ describe("SceneGraphAdapter", () => {
     // which pads getLocalBounds() by half the stroke width (0.5) per side.
     expect(lBounds.maxX).toBeCloseTo(100.5);
     expect(lDisplay.context.instructions.length).toBeGreaterThan(0);
+  });
+
+  it("re-rasterizes text at a resolution covering the node's scale, capped at MAX_TEXT_RESOLUTION", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+
+    function textNode(matrix: number[]): RenderNode {
+      return {
+        id: "txt",
+        matrix: matrix as RenderNode["matrix"],
+        opacity: 1,
+        blend: "normal",
+        t: "text",
+        runs: [{ text: "hi", x: 0, y: 0, fontFamily: "Inter", fontSize: 64, weight: 400, color: { l: 1, c: 0, h: 0 } }],
+      };
+    }
+
+    // scale = 1 (identity) -> resolution stays at the dpr floor (1 in this headless test env).
+    adapter.reconcile(tree([textNode([...IDENTITY])]));
+    const container = adapter.root.children[0] as Container;
+    const text = container.children[0] as Text;
+    expect(text.resolution).toBeCloseTo(1);
+
+    // scale = 6 -> resolution follows the scale (still under the cap).
+    adapter.reconcile(tree([textNode([6, 0, 0, 0, 6, 0, 0, 0, 1])]));
+    expect(text.resolution).toBeCloseTo(6);
+
+    // scale = 20 -> resolution is capped at MAX_TEXT_RESOLUTION (8), not 20.
+    adapter.reconcile(tree([textNode([20, 0, 0, 0, 20, 0, 0, 0, 1])]));
+    expect(text.resolution).toBeCloseTo(8);
+  });
+
+  it("sizes/positions the inner sprite to node.box per fit, leaving the outer Container's own matrix-derived position untouched", async () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+
+    function imageNode(fit: "cover" | "contain" | "fill", box: { x: number; y: number; width: number; height: number }): RenderNode {
+      return {
+        id: "img",
+        matrix: [1, 0, 200, 0, 1, 300, 0, 0, 1], // outer position should stay (200, 300) regardless of fit
+        opacity: 1,
+        blend: "normal",
+        t: "image",
+        tex: { assetId: "asset1" },
+        fit,
+        box,
+      };
+    }
+
+    // texture is 10x10 (makeTextureManager's fakeSource); needs one reconcile
+    // to kick off the async load, then a flush + second reconcile to pick up
+    // the resolved (non-EMPTY) texture — same pattern as manager.test.ts.
+    adapter.reconcile(tree([imageNode("contain", { x: 0, y: 0, width: 100, height: 50 })]));
+    await flush();
+    adapter.reconcile(tree([imageNode("contain", { x: 0, y: 0, width: 100, height: 50 })]));
+
+    const container = adapter.root.children[0] as Container;
+    const sprite = container.children[0] as Sprite;
+
+    // outer Container carries node.matrix's translation — untouched by fit.
+    expect(container.position.x).toBe(200);
+    expect(container.position.y).toBe(300);
+
+    // contain: scale = min(100/10, 50/10) = 5 on both axes; centered in the box.
+    expect(sprite.scale.x).toBeCloseTo(5);
+    expect(sprite.scale.y).toBeCloseTo(5);
+    expect(sprite.position.x).toBeCloseTo(50); // box center: 0 + 100/2
+    expect(sprite.position.y).toBeCloseTo(25); // box center: 0 + 50/2
+
+    // cover: scale = max(100/10, 50/10) = 10 on both axes.
+    adapter.reconcile(tree([imageNode("cover", { x: 0, y: 0, width: 100, height: 50 })]));
+    expect(sprite.scale.x).toBeCloseTo(10);
+    expect(sprite.scale.y).toBeCloseTo(10);
+
+    // fill: independent per-axis scale = (100/10, 50/10) = (10, 5).
+    adapter.reconcile(tree([imageNode("fill", { x: 0, y: 0, width: 100, height: 50 })]));
+    expect(sprite.scale.x).toBeCloseTo(10);
+    expect(sprite.scale.y).toBeCloseTo(5);
   });
 });

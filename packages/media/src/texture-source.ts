@@ -65,8 +65,20 @@ export async function loadImageTexture(asset: MediaAssetRef): Promise<ImageTextu
   };
 }
 
-/** Creates a hidden `<video>`-backed texture source for `asset` (MVP shortcut — see above). */
-export function createVideoTexture(asset: MediaAssetRef): VideoTextureSource {
+/**
+ * Creates a hidden `<video>`-backed texture source for `asset` (MVP
+ * shortcut — see above). ASYNC, unlike a bare `new HTMLVideoElement()`
+ * call would be: resolves only once the element has decoded at least one
+ * PAINTABLE frame (`loadeddata`), not merely `loadedmetadata` (which only
+ * guarantees `videoWidth`/`videoHeight`/`duration` are known, NOT that a
+ * frame exists to read pixels from). `TextureManager.load` (manager.ts)
+ * calls `Texture.from(source.element)` on whatever this returns — calling
+ * that before a frame is decoded creates a texture backed by an empty/
+ * blank video element, which uploads as solid black and is never
+ * refreshed again, since nothing re-triggers a GPU re-upload once the
+ * first real frame eventually does arrive.
+ */
+export async function createVideoTexture(asset: MediaAssetRef): Promise<VideoTextureSource> {
   const element = document.createElement("video");
 
   // `data:` URLs are what `AssetRef.master` persists for an uploaded asset
@@ -85,6 +97,17 @@ export function createVideoTexture(asset: MediaAssetRef): VideoTextureSource {
 
   const ready = new Promise<void>((resolve, reject) => {
     element.addEventListener("loadedmetadata", () => resolve(), { once: true });
+    element.addEventListener(
+      "error",
+      () => reject(new Error(`failed to load video asset "${asset.id}" from ${asset.url}`)),
+      { once: true }
+    );
+  });
+
+  // Awaited HERE (not just inside `seek()`) so `loadTexture` — and thus
+  // `TextureManager.load` — only resolves once a frame actually exists.
+  await new Promise<void>((resolve, reject) => {
+    element.addEventListener("loadeddata", () => resolve(), { once: true });
     element.addEventListener(
       "error",
       () => reject(new Error(`failed to load video asset "${asset.id}" from ${asset.url}`)),

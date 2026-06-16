@@ -71,15 +71,19 @@ describe("imageKind", () => {
         t: "image",
         tex: { assetId: "asset_123" },
         fit: "contain",
+        box: { x: 0, y: 0, width: 1080, height: 1920 },
       },
     ]);
   });
 
-  it("falls back to the composition size for bounds (P1)", () => {
+  it("falls back to the composition size for box/bounds (P1) — render() and bounds() agree", () => {
     const reg = new NodeKindRegistry();
     registerBuiltins(reg);
     const node = reg.create("image");
-    expect(imageKind.bounds?.(node, toFrame(0), ctx)).toEqual({ x: 0, y: 0, width: 1080, height: 1920 });
+    const expectedBox = { x: 0, y: 0, width: 1080, height: 1920 };
+
+    expect(imageKind.bounds?.(node, toFrame(0), ctx)).toEqual(expectedBox);
+    expect(imageKind.render(node, toFrame(0), ctx)[0]).toMatchObject({ box: expectedBox });
   });
 });
 
@@ -102,6 +106,7 @@ describe("videoKind", () => {
         t: "video",
         tex: { assetId: "video_123", frame: 10 }, // in(5) + (15 - start(10))
         fit: "contain",
+        box: { x: 0, y: 0, width: 1080, height: 1920 },
       },
     ]);
   });
@@ -113,6 +118,16 @@ describe("videoKind", () => {
     // baseNode() default: time = { start: 0, duration: 150 }
     const out = videoKind.render(node, toFrame(20), ctx);
     expect(out[0]).toMatchObject({ t: "video", tex: { assetId: "video_123", frame: 20 } });
+  });
+
+  it("falls back to the composition size for box/bounds (P1) — render() and bounds() agree", () => {
+    const reg = new NodeKindRegistry();
+    registerBuiltins(reg);
+    const node = reg.create("video");
+    const expectedBox = { x: 0, y: 0, width: 1080, height: 1920 };
+
+    expect(videoKind.bounds?.(node, toFrame(0), ctx)).toEqual(expectedBox);
+    expect(videoKind.render(node, toFrame(0), ctx)[0]).toMatchObject({ box: expectedBox });
   });
 });
 

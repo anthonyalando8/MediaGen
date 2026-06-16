@@ -4,25 +4,41 @@ import { mul, toFrame } from "core";
 import type { Id } from "core";
 import { createWebGLRenderer } from "renderer-webgl";
 import type { MediaService, Renderer } from "renderer-webgl";
+import type { MediaAssetRef } from "media";
 import type { RenderTree } from "contract";
 import { CanvasHost } from "ui";
 import { useRegistry } from "../bootstrap/registry-context";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
+import type { EditorStore } from "../store";
 import { activeComp, renderTreeAt } from "../store/selectors";
 import { computeFitTransform, type FitTransform, invertMat3, type Size } from "../viewport/geometry";
 import { TransformGizmo } from "./TransformGizmo";
 import type { DragPreview } from "./TransformGizmo";
 
 /**
- * P1: no asset library UI yet — image/video nodes resolve to no texture
- * (TextureManager falls back to Texture.EMPTY). The add-media palette
- * (MediaPalette.tsx, Week 7) only lists `project.assets`, which stays empty
- * until upload/import lands. Replace with a MediaService built from
- * `project.assets` once that does.
+ * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
+ * `createWebGLRenderer(canvas, media: MediaService)`) from `project.assets`
+ * (core's `AssetRef`) — exit criterion 02 ("User adds an image from
+ * upload; it appears in canvas"). `resolveAsset` reads `store.getState()`
+ * directly (not a prop/closure snapshot), so newly-uploaded assets resolve
+ * correctly even though `createRenderer` (passed to <CanvasHost>, which
+ * mounts the renderer once) only runs on initial mount.
+ *
+ * `media`'s `MediaAssetRef.kind` is `"image" | "video" | "audio"` — a
+ * narrower set than core's `AssetRef.kind` (which also covers
+ * font/lottie/rig/glb/svg). `TextureManager.get` is only ever called for
+ * image/video `TexRef`s (the only kinds `addMediaNode`, add-media.ts,
+ * turns into nodes), so the cast below is safe in practice.
  */
-const NO_ASSETS: MediaService = {
-  resolveAsset: () => undefined,
-};
+function createMediaService(store: EditorStore): MediaService {
+  return {
+    resolveAsset(assetId) {
+      const asset = store.getState().document.project.assets.find((a) => a.id === assetId);
+      if (!asset) return undefined;
+      return { id: asset.id, kind: asset.kind as MediaAssetRef["kind"], url: asset.proxy ?? asset.master };
+    },
+  };
+}
 
 const ZERO_SIZE: Size = { width: 0, height: 0 };
 
@@ -94,10 +110,10 @@ export function Viewport() {
   const fit = computeFitTransform(compSize, canvasSize, zoom);
 
   const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
-    const renderer = createWebGLRenderer(canvas, NO_ASSETS);
+    const renderer = createWebGLRenderer(canvas, createMediaService(store));
     rendererRef.current = renderer;
     return renderer;
-  }, []);
+  }, [store]);
 
   const handleResize = useCallback((size: Size) => {
     setCanvasSize(size);
