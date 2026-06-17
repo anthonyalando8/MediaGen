@@ -54,6 +54,13 @@ module.exports = {
       from: { path: "^packages/ui" },
       to: { path: "^packages/renderer-webgl" },
     },
+    {
+      name: "effects-no-renderer-webgl",
+      comment: "effects → renderer-webgl ❌ (Phase 2 §2/§12.1) — effects ship GLSL + param schema as DATA; renderer-webgl/passes compiles and runs it. Keeps an effect addable without ever touching a renderer.",
+      severity: "error",
+      from: { path: "^packages/effects" },
+      to: { path: "^packages/renderer-" },
+    },
   ],
   options: {
     tsPreCompilationDeps: true,

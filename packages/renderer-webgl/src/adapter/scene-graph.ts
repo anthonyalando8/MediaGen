@@ -5,32 +5,52 @@
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
 import { Container, Graphics, Sprite, Text } from "pixi.js";
-import type { ColorOKLCH, GlyphRun, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
+import type { Filter } from "pixi.js";
+import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
 import { toPixiMatrix } from "../matrix";
 import type { TextureManager } from "../textures/manager";
+import { resolvePass } from "../passes/pass-resolver";
 
 type Display = Container;
+
+/** Per-effectGroup nested reconciliation state — see SceneGraphAdapter's `groups` map doc. */
+interface EffectGroupState {
+  displays: Map<string, Display>;
+  kinds: Map<string, RenderNode["t"]>;
+}
 
 /** Upper bound for `Text.resolution` (updateText) — caps texture memory for extreme zoom/scale. */
 const MAX_TEXT_RESOLUTION = 8;
 
 /**
- * Reconciles a flat RenderTree into a single flat Pixi Container (`root`),
- * keyed by `RenderNode.id`. The flat array IS the z-order (Deliverable 07:
- * "Iterates root in z-order"), applied via `zIndex` on `root`
- * (`sortableChildren = true`).
+ * Reconciles a RenderTree into Pixi Container/Sprite/Text/Graphics, keyed
+ * by `RenderNode.id`. The top-level `tree.nodes` array IS the z-order
+ * (Deliverable 07: "Iterates root in z-order"), applied via `zIndex` on
+ * `root` (`sortableChildren = true`).
  *
- * "group" RenderNodes carry no visual content in P1 — `children` is always
- * `[]` and a group only contributes its transform/opacity to descendants
- * during evaluation (see the flat-array note in
+ * "group" RenderNodes carry no visual content — `children` is always `[]`
+ * and a group only contributes its transform/opacity to descendants during
+ * evaluation (see the flat-array note in
  * core/src/evaluator/evaluate-node.ts). They are skipped here entirely;
  * nothing is created or destroyed for them.
+ *
+ * "effectGroup" (Phase 2 §5) is the opposite: genuinely RECURSIVE —
+ * `children` stays nested, and this adapter creates a real Pixi `Container`
+ * holding its own nested keyed-diff of `children`, exactly as it does for
+ * the top-level `tree.nodes`. The shared recursion lives in
+ * `reconcileChildren` (below) so the top-level `reconcile()` and a nested
+ * `effectGroup` use identical create/update/destroy logic — the only
+ * difference is which `Map`s (displays/kinds) and which target `Container`
+ * they operate against, since each level needs its OWN keyed-diff state
+ * (a node id is only unique within its level — see `EffectGroupState`).
  */
 export class SceneGraphAdapter {
   readonly root = new Container();
   private displays = new Map<string, Display>();
   private kinds = new Map<string, RenderNode["t"]>();
+  /** Per-effectGroup nested reconciliation state, keyed by the effectGroup's own RenderNode.id. */
+  private groups = new Map<string, EffectGroupState>();
 
   constructor(
     private readonly textures: TextureManager,
@@ -44,22 +64,33 @@ export class SceneGraphAdapter {
   }
 
   reconcile(tree: RenderTree): void {
+    this.reconcileChildren(this.root, tree.nodes, this.displays, this.kinds);
+  }
+
+  /**
+   * The shared keyed-diff loop — operates on `nodes` (in z-order) against
+   * `target` (a Pixi Container), using `displays`/`kinds` as this level's
+   * own identity maps. Used for both the top-level `tree.nodes` (via
+   * `reconcile`) and a nested `effectGroup.children` (via
+   * `reconcileEffectGroup`).
+   */
+  private reconcileChildren(target: Container, nodes: RenderNode[], displays: Map<string, Display>, kinds: Map<string, RenderNode["t"]>): void {
     const seen = new Set<string>();
 
-    tree.nodes.forEach((node, index) => {
+    nodes.forEach((node, index) => {
       if (node.t === "group") return; // P1: no visual content — see class doc.
       seen.add(node.id);
 
-      let display = this.displays.get(node.id);
-      if (display && this.kinds.get(node.id) !== node.t) {
-        this.destroyDisplay(node.id, display);
+      let display = displays.get(node.id);
+      if (display && kinds.get(node.id) !== node.t) {
+        this.destroyDisplay(node.id, display, displays, kinds);
         display = undefined;
       }
       if (!display) {
         display = this.createDisplay(node);
-        this.displays.set(node.id, display);
-        this.kinds.set(node.id, node.t);
-        this.root.addChild(display);
+        displays.set(node.id, display);
+        kinds.set(node.id, node.t);
+        target.addChild(display);
       }
 
       display.zIndex = index;
@@ -69,21 +100,32 @@ export class SceneGraphAdapter {
       this.updateContent(display, node);
     });
 
-    for (const [id, display] of [...this.displays]) {
-      if (!seen.has(id)) this.destroyDisplay(id, display);
+    for (const [id, display] of [...displays]) {
+      if (!seen.has(id)) this.destroyDisplay(id, display, displays, kinds);
     }
   }
 
-  /** Releases every Pixi display object owned by this adapter. */
+  /** Releases every Pixi display object owned by this adapter, including nested effectGroups. */
   destroy(): void {
-    for (const [id, display] of [...this.displays]) this.destroyDisplay(id, display);
+    for (const [id, display] of [...this.displays]) this.destroyDisplay(id, display, this.displays, this.kinds);
   }
 
-  private destroyDisplay(id: string, display: Display): void {
-    this.root.removeChild(display);
+  private destroyDisplay(id: string, display: Display, displays: Map<string, Display>, kinds: Map<string, RenderNode["t"]>): void {
+    const group = this.groups.get(id);
+    if (group) {
+      // Recursively tear down the nested level FIRST — its own children's
+      // displays are children of `display` (this group's Container) and
+      // would otherwise be destroyed redundantly/in an undefined order by
+      // the outer `display.destroy({children:true})` below.
+      for (const [childId, childDisplay] of [...group.displays]) {
+        this.destroyDisplay(childId, childDisplay, group.displays, group.kinds);
+      }
+      this.groups.delete(id);
+    }
+    display.parent?.removeChild(display);
     display.destroy({ children: true });
-    this.displays.delete(id);
-    this.kinds.delete(id);
+    displays.delete(id);
+    kinds.delete(id);
   }
 
   private createDisplay(node: RenderNode): Display {
@@ -107,8 +149,13 @@ export class SceneGraphAdapter {
         return new Container(); // holds one PIXI.Text per GlyphRun
       case "shape":
         return new Graphics();
+      case "effectGroup":
+        // An ordinary Container — `reconcileEffectGroup` (called from
+        // `updateContent`) populates it with this group's own nested
+        // keyed-diff of `children`, and assigns `filters` from `passes`.
+        return new Container();
       default:
-        // "group" is filtered out by reconcile() before this is called.
+        // "group" is filtered out by reconcileChildren() before this is called.
         throw new Error(`unhandled RenderNode type: ${(node as RenderNode).t}`);
     }
   }
@@ -125,7 +172,45 @@ export class SceneGraphAdapter {
       case "shape":
         this.updateShape(display as Graphics, node.geom, node.fill, node.stroke);
         break;
+      case "effectGroup":
+        this.reconcileEffectGroup(display, node);
+        break;
     }
+  }
+
+  /**
+   * Recurses into an "effectGroup" RenderNode: keyed-diffs `node.children`
+   * into `container` using this group's OWN identity maps (a fresh
+   * `EffectGroupState` per group id, created lazily and reused across
+   * frames — exactly like the top-level `displays`/`kinds`, just scoped to
+   * this nesting level instead of global), then assigns `container.filters`
+   * from `node.passes` (resolved via `resolvePass`, passes/pass-resolver.ts
+   * — Week 1-2 ships the mechanism only; real effect/mask/matte/adjustment
+   * shaders land in their scheduled weeks per the Phase 2 blueprint §12).
+   *
+   * `node.isolate` is currently always honored by virtue of Pixi's own
+   * `filters` mechanism: ANY non-empty `container.filters` already renders
+   * `container`'s full subtree to a pooled texture before compositing
+   * (Pixi's documented filter behavior — see Filter.d.ts). When
+   * `node.passes` is empty (e.g. a `comp` precomp instance with no
+   * mask/effect/matte of its own, Week 7-8), `isolate: true` still implies
+   * an isolated composite — Week 1-2's test proves this specific case via
+   * an explicit identity-shader pass, since an EMPTY `filters` array
+   * degrades to "no isolation at all" in Pixi (nothing to prove the RTT
+   * path executed). A real `isolate`-without-passes precomp will need that
+   * same identity-pass fallback; tracked for Week 7-8.
+   */
+  private reconcileEffectGroup(container: Container, node: Extract<RenderNode, { t: "effectGroup" }>): void {
+    let group = this.groups.get(node.id);
+    if (!group) {
+      group = { displays: new Map(), kinds: new Map() };
+      this.groups.set(node.id, group);
+    }
+
+    this.reconcileChildren(container, node.children, group.displays, group.kinds);
+
+    const filters = node.passes.map((pass) => resolvePass(pass)).filter((f): f is Filter => f !== null);
+    container.filters = filters;
   }
 
   private updateSprite(container: Container, node: Extract<RenderNode, { t: "image" | "video" }>): void {

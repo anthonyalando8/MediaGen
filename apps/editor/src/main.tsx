@@ -2,16 +2,18 @@
 import { createRoot } from "react-dom/client";
 // @ts-ignore CSS side-effect import type declarations are handled by the bundler.
 import "./styles/theme.css";
-
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";
+import { createEffectRegistry } from "./bootstrap/register-effects";
+import { EffectRegistryProvider } from "./bootstrap/effect-registry-context";
 import { loadProject, saveProject } from "./persistence/local-storage";
 import { createEditorStore } from "./store";
 import { StoreProvider } from "./store/context";
 import { App } from "./components/App";
 
 const registry = createRegistry();
+const effectRegistry = createEffectRegistry();
 
 // Exit criterion 10: "User reloads; project persists and re-renders
 // identically." `loadProject()` validates against ProjectSchema and returns
@@ -37,8 +39,10 @@ if (!rootEl) throw new Error('main.tsx: no element with id="root" found');
 
 createRoot(rootEl).render(
   <RegistryProvider value={registry}>
-    <StoreProvider value={store}>
-      <App />
-    </StoreProvider>
+    <EffectRegistryProvider value={effectRegistry}>
+      <StoreProvider value={store}>
+        <App />
+      </StoreProvider>
+    </EffectRegistryProvider>
   </RegistryProvider>
 );

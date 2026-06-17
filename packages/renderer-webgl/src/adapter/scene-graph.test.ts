@@ -1,9 +1,11 @@
 // packages/renderer-webgl/src/adapter/scene-graph.test.ts
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Container, Graphics, Sprite, Text, Texture, TextureSource } from "pixi.js";
-import type { RenderNode, RenderTree } from "contract";
+import type { Filter } from "pixi.js";
+import type { PassSpec, RenderNode, RenderTree } from "contract";
 import { SceneGraphAdapter } from "./scene-graph";
 import { TextureManager } from "../textures/manager";
+import * as passResolverModule from "../passes/pass-resolver";
 import type { MediaAssetRef, TextureSource as MediaTextureSource } from "media";
 
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const;
@@ -305,5 +307,187 @@ describe("SceneGraphAdapter", () => {
     adapter.reconcile(tree([imageNode("fill", { x: 0, y: 0, width: 100, height: 50 })]));
     expect(sprite.scale.x).toBeCloseTo(10);
     expect(sprite.scale.y).toBeCloseTo(5);
+  });
+});
+
+describe("SceneGraphAdapter — effectGroup (Phase 2 §5, Week 1-2)", () => {
+  function effectGroupNode(id: string, children: RenderNode[], passes: PassSpec[] = []): RenderNode {
+    return { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "effectGroup", children, passes, isolate: true };
+  }
+
+  it("is genuinely RECURSIVE, unlike 'group' — children render INSIDE the group's own Container, not flattened to root", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const child: RenderNode = {
+      id: "child",
+      matrix: [...IDENTITY],
+      opacity: 1,
+      blend: "normal",
+      t: "shape",
+      geom: { kind: "rect", width: 10, height: 10, radius: 0 },
+    };
+    const group = effectGroupNode("grp", [child]);
+
+    adapter.reconcile(tree([group]));
+
+    // exactly one top-level display — the group's own Container — NOT two
+    // (which "group" RenderNodes would have produced via flattening).
+    expect(adapter.root.children).toHaveLength(1);
+    const groupDisplay = adapter.root.children[0] as Container;
+    expect(groupDisplay).toBeInstanceOf(Container);
+
+    // the child is nested INSIDE the group's Container, not a root sibling.
+    expect(groupDisplay.children).toHaveLength(1);
+    expect(groupDisplay.children[0]).toBeInstanceOf(Graphics);
+  });
+
+  it("nested group renders to texture then composites — passes resolve via resolvePass and the result is assigned to the group's Container.filters (Week 1-2's exit test)", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const child: RenderNode = {
+      id: "child",
+      matrix: [...IDENTITY],
+      opacity: 1,
+      blend: "normal",
+      t: "shape",
+      geom: { kind: "rect", width: 10, height: 10, radius: 0 },
+    };
+    const passSpec: PassSpec = { kind: "effect", ref: "identity", uniforms: {} };
+    const group = effectGroupNode("grp", [child], [passSpec]);
+
+    // A fake Filter stand-in — what THIS test verifies is the WIRING
+    // (reconcileEffectGroup calls `resolvePass` once per `node.passes`
+    // entry, in order, and assigns the non-null results to the real Pixi
+    // Container's `filters`), not whether a REAL GlProgram compiles in
+    // this headless Node test env (GlProgram probes shader precision via
+    // an actual WebGL context — unavailable here, same class of issue
+    // vitest.setup.ts documents for `navigator`; covered by
+    // pass-resolver.test.ts instead, which only asserts resolvePass
+    // degrades to `null` rather than throwing in that case).
+    const fakeFilter = {} as Filter;
+    const spy = vi.spyOn(passResolverModule, "resolvePass").mockReturnValue(fakeFilter);
+
+    try {
+      adapter.reconcile(tree([group]));
+
+      expect(spy).toHaveBeenCalledWith(passSpec);
+      const groupDisplay = adapter.root.children[0] as Container;
+      // a non-empty `filters` array is exactly what makes Pixi render this
+      // Container's subtree to a pooled texture FIRST, then composite that
+      // texture back via the filter's shader (Filter.d.ts's documented
+      // 5-step behavior) — i.e. genuine render-to-texture-then-composite,
+      // not just nested Containers with no isolation.
+      expect(groupDisplay.filters).toEqual([fakeFilter]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("an unrecognized pass ref is skipped (resolves to no Filter) rather than throwing", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const group = effectGroupNode("grp", [], [{ kind: "effect", ref: "not-implemented-yet", uniforms: {} }]);
+
+    expect(() => adapter.reconcile(tree([group]))).not.toThrow();
+    const groupDisplay = adapter.root.children[0] as Container;
+    expect(groupDisplay.filters).toEqual([]);
+  });
+
+  it("an effectGroup with no passes has an empty filters array (no isolation cost when nothing needs it)", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const group = effectGroupNode("grp", []);
+
+    adapter.reconcile(tree([group]));
+    const groupDisplay = adapter.root.children[0] as Container;
+    expect(groupDisplay.filters).toEqual([]);
+  });
+
+  it("keyed-diffs children WITHIN the group across reconciles — reuses unchanged ids, destroys stale ones, independent of any top-level node sharing the same id", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    function rect(id: string): RenderNode {
+      return { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width: 10, height: 10, radius: 0 } };
+    }
+
+    // a child "a" inside the group, AND a top-level node also id "a" —
+    // ids are only unique WITHIN a nesting level (EffectGroupState's doc).
+    const topLevelA = rect("a");
+    adapter.reconcile(tree([topLevelA, effectGroupNode("grp", [rect("a"), rect("b")])]));
+
+    const groupDisplay1 = adapter.root.children[1] as Container;
+    const [childA1, childB1] = groupDisplay1.children;
+    expect(groupDisplay1.children).toHaveLength(2);
+
+    // re-reconcile: child "b" -> "c" inside the group; child "a" unchanged.
+    adapter.reconcile(tree([topLevelA, effectGroupNode("grp", [rect("a"), rect("c")])]));
+    const groupDisplay2 = adapter.root.children[1] as Container;
+    expect(groupDisplay2).toBe(groupDisplay1); // same group Container, reused
+    expect(groupDisplay2.children).toHaveLength(2);
+    expect(groupDisplay2.children).toContain(childA1); // reused, same instance
+    expect(groupDisplay2.children).not.toContain(childB1);
+    expect(childB1.destroyed).toBe(true);
+
+    // the top-level "a" was never touched by the group's own diff.
+    expect(adapter.root.children[0].destroyed).toBe(false);
+  });
+
+  it("destroying the group recursively tears down its nested children first", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const child: RenderNode = {
+      id: "child",
+      matrix: [...IDENTITY],
+      opacity: 1,
+      blend: "normal",
+      t: "shape",
+      geom: { kind: "rect", width: 10, height: 10, radius: 0 },
+    };
+    adapter.reconcile(tree([effectGroupNode("grp", [child])]));
+    const groupDisplay = adapter.root.children[0] as Container;
+    const childDisplay = groupDisplay.children[0];
+
+    adapter.destroy();
+
+    expect(adapter.root.children).toHaveLength(0);
+    expect(groupDisplay.destroyed).toBe(true);
+    expect(childDisplay.destroyed).toBe(true);
+  });
+
+  it("removing the group node entirely (not just emptying its children) tears down nested state too", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const child: RenderNode = {
+      id: "child",
+      matrix: [...IDENTITY],
+      opacity: 1,
+      blend: "normal",
+      t: "shape",
+      geom: { kind: "rect", width: 10, height: 10, radius: 0 },
+    };
+    adapter.reconcile(tree([effectGroupNode("grp", [child])]));
+    const groupDisplay = adapter.root.children[0] as Container;
+    const childDisplay = groupDisplay.children[0];
+
+    adapter.reconcile(tree([])); // group node gone entirely
+
+    expect(adapter.root.children).toHaveLength(0);
+    expect(groupDisplay.destroyed).toBe(true);
+    expect(childDisplay.destroyed).toBe(true);
+  });
+
+  it("nested effectGroups (a group inside a group) work recursively", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    const leaf: RenderNode = {
+      id: "leaf",
+      matrix: [...IDENTITY],
+      opacity: 1,
+      blend: "normal",
+      t: "shape",
+      geom: { kind: "rect", width: 10, height: 10, radius: 0 },
+    };
+    const inner = effectGroupNode("inner", [leaf]);
+    const outer = effectGroupNode("outer", [inner]);
+
+    adapter.reconcile(tree([outer]));
+
+    const outerDisplay = adapter.root.children[0] as Container;
+    expect(outerDisplay.children).toHaveLength(1);
+    const innerDisplay = outerDisplay.children[0] as Container;
+    expect(innerDisplay.children).toHaveLength(1);
+    expect(innerDisplay.children[0]).toBeInstanceOf(Graphics);
   });
 });

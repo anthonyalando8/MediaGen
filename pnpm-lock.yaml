@@ -48,6 +48,9 @@ importers:
       core:
         specifier: workspace:*
         version: link:../../packages/core
+      effects:
+        specifier: workspace:*
+        version: link:../../packages/effects
       immer:
         specifier: ^10.1.0
         version: 10.2.0
@@ -194,6 +197,9 @@ importers:
       core:
         specifier: workspace:*
         version: link:../core
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.0
@@ -309,6 +315,9 @@ importers:
       contract:
         specifier: workspace:*
         version: link:../contract
+      effects:
+        specifier: workspace:*
+        version: link:../effects
       media:
         specifier: workspace:*
         version: link:../media
