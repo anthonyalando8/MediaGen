@@ -34,13 +34,12 @@ export interface Renderer {
 
 export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaService): Renderer {
   const textures = new TextureManager(media);
-  const adapter = new SceneGraphAdapter(textures);
-
   const host = createCanvasHost(canvas, {
     width: canvas.width || 1,
     height: canvas.height || 1,
     dpr: typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1,
   });
+  const adapter = new SceneGraphAdapter(textures, () => host.renderer);
   host.stage.addChild(adapter.root);
 
   return {

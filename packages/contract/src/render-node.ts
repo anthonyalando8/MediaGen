@@ -79,6 +79,45 @@ export type RenderNode =
       passes: PassSpec[];
       /** When true, `children` render to their own FBO first (precomp / isolated group) before any pass runs — see PassSpec's "renderer decides how" doc. When false, passes run directly over the accumulator (e.g. a bare adjustment layer, which has no children of its own to isolate). */
       isolate: boolean;
+    })
+  | (RenderCommon & {
+      t: "transitionGroup";
+      /**
+       * The ONE two-input case in this contract — every other compositing
+       * primitive (effect/mask/matte/adjustment, all via "effectGroup")
+       * operates on a SINGLE accumulator texture, which is exactly what
+       * `PassSpec` is shaped for (`uniforms` + one implicit input).
+       * `vec4 trans(sampler2D from, sampler2D to, float progress)`
+       * (TransitionDef's doc, effects package) genuinely needs TWO
+       * independently-rendered source textures composited together — not
+       * expressible as a `PassSpec`, however many fields are added to it,
+       * without it secretly becoming "an effect with a hidden second
+       * input" (a special case PassSpec's consumers would all need to
+       * know about). A dedicated RenderNode variant makes the two-input
+       * shape explicit and type-safe instead.
+       *
+       * `from`/`to` are each a COMPLETE RenderNode (subtree) — typically
+       * the two z-order-adjacent siblings the Evaluator paired via
+       * `Node.transitionIn`/`transitionOut` (evaluate-composition.ts's
+       * `applyTransitions`), already independently evaluated exactly as
+       * they would be without a transition. `matrix`/`opacity`/`blend` on
+       * THIS wrapper are this group's own composited-result values (same
+       * convention as "effectGroup" — a parent further up composes with
+       * this node exactly as it would an unwrapped one); `from`/`to`
+       * themselves carry their OWN world matrices (no local-space
+       * re-rooting needed, unlike "effectGroup": the renderer renders each
+       * to its own full-frame texture independently, not into a shared
+       * nested Container, so there's no parent transform for them to
+       * inherit here).
+       */
+      from: RenderNode;
+      to: RenderNode;
+      /** Registry key the renderer resolves to a two-sampler shader (TransitionDef.preset, e.g. "wipe" | "dip" | "slam"). */
+      ref: string;
+      /** Sampled, JSON-safe uniform values for the transition's OWN params (TransitionRef.props, e.g. a wipe's angle) — distinct from `progress`. */
+      uniforms: Json;
+      /** 0 at the start of the transition (fully "from") to 1 at the end (fully "to") — sampled once per frame from the transition's time span, never a Channel itself (TransitionRef has no `channels` field; only `durationF`). */
+      progress: number;
     });
 
 /**

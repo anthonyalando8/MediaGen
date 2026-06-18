@@ -10,6 +10,7 @@ import type { NodeKindRegistry } from "../registry/registry";
 import type { RenderTree } from "contract";
 import { IDENTITY } from "./compose-transform";
 import { evaluateNode } from "./evaluate-node";
+import { applyTransitions } from "./transitions";
 
 export function evaluateComposition(
   comp: Composition,
@@ -26,6 +27,13 @@ export function evaluateComposition(
     },
     resolveAsset,
   };
-  const nodes = comp.root.flatMap((n) => evaluateNode(n, frame, IDENTITY, reg, ctx));
+  // Each sibling evaluated independently FIRST (kept as an array of
+  // arrays, NOT flattened yet) so applyTransitions can pair z-order-
+  // adjacent ones by index — see its doc on why this can't operate on an
+  // already-flattened RenderNode[] (per-node boundaries would be lost for
+  // any sibling whose own evaluation fans out to more than one
+  // RenderNode, e.g. a plain "group" with children).
+  const perNode = comp.root.map((n) => evaluateNode(n, frame, IDENTITY, reg, ctx));
+  const nodes = applyTransitions(comp.root, perNode, frame);
   return { size: comp.size, background: comp.background, nodes };
 }

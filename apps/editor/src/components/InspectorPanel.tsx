@@ -24,6 +24,7 @@ import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { getKindIcon } from "./kind-icons";
 import { EffectStackPanel } from "./EffectStackPanel";
+import { TransitionPanel } from "./TransitionPanel";
 import { FieldRow, Section } from "./inspector-fields";
 export { FieldControl, FieldRow } from "./inspector-fields";
 
@@ -128,6 +129,7 @@ export function InspectorPanel() {
           </Section>
         )}
         <EffectStackPanel node={node} />
+        <TransitionPanel node={node} root={root} />
       </div>
     </div>
   );

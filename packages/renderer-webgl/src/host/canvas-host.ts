@@ -13,6 +13,7 @@
 // entry: the literal Deliverable 08 signature predates Pixi v8's async init.
 
 import { Application, Container } from "pixi.js";
+import type { Renderer } from "pixi.js";
 
 export interface CanvasHostOptions {
   width: number;
@@ -25,6 +26,21 @@ export interface CanvasHostOptions {
 export interface CanvasHost {
   /** Available immediately — add the scene graph's root container to this. */
   readonly stage: Container;
+  /**
+   * The real Pixi `Renderer` — `undefined` until `ready` resolves (Pixi
+   * v8's async `Application.init()`, see this module's doc), `Renderer`
+   * thereafter. Needed for "transitionGroup"'s two-texture mechanism
+   * (scene-graph.ts's `renderToTexture`): a transition genuinely needs to
+   * call `renderer.render({container, target})` to rasterize each side
+   * independently before compositing, which a plain `Container` (the
+   * `stage` field) can't do on its own — only the renderer itself can
+   * execute a render pass. Before `ready` resolves, a transitionGroup
+   * simply doesn't render that frame (same "degrade gracefully, never
+   * throw" pattern `getIdentityProgram`/`getEffectProgram`
+   * (pass-resolver.ts) already use for their own GL-context-dependent
+   * construction).
+   */
+  readonly renderer: Renderer | undefined;
   /** Resolves once the GPU context is ready and the first resize has been applied. */
   readonly ready: Promise<void>;
   resize(width: number, height: number, dpr: number): void;
@@ -82,6 +98,9 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
 
   return {
     stage: app.stage,
+    get renderer() {
+      return isReady ? app.renderer : undefined;
+    },
     ready,
     resize(width, height, dpr) {
       if (!isReady) {

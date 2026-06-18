@@ -355,15 +355,15 @@ describe("SceneGraphAdapter — effectGroup (Phase 2 §5, Week 1-2)", () => {
 
     // A fake Filter stand-in — what THIS test verifies is the WIRING
     // (reconcileEffectGroup calls `resolvePass` once per `node.passes`
-    // entry, in order, and assigns the non-null results to the real Pixi
+    // entry, in order, and assigns the flattened results to the real Pixi
     // Container's `filters`), not whether a REAL GlProgram compiles in
     // this headless Node test env (GlProgram probes shader precision via
     // an actual WebGL context — unavailable here, same class of issue
     // vitest.setup.ts documents for `navigator`; covered by
     // pass-resolver.test.ts instead, which only asserts resolvePass
-    // degrades to `null` rather than throwing in that case).
+    // degrades to `[]` rather than throwing in that case).
     const fakeFilter = {} as Filter;
-    const spy = vi.spyOn(passResolverModule, "resolvePass").mockReturnValue(fakeFilter);
+    const spy = vi.spyOn(passResolverModule, "resolvePass").mockReturnValue([fakeFilter]);
 
     try {
       adapter.reconcile(tree([group]));
@@ -489,5 +489,174 @@ describe("SceneGraphAdapter — effectGroup (Phase 2 §5, Week 1-2)", () => {
     const innerDisplay = outerDisplay.children[0] as Container;
     expect(innerDisplay.children).toHaveLength(1);
     expect(innerDisplay.children[0]).toBeInstanceOf(Graphics);
+  });
+
+  describe("wrapper/child id collision (real bug: infinite recursion on teardown)", () => {
+    // This is EXACTLY the shape core/evaluator/evaluate-node.ts produces
+    // for a node with one enabled effect: the effectGroup wrapper takes
+    // `id: node.id`, and its sole child (the node's own un-wrapped
+    // RenderNode) ALSO carries that same id — by design, not a bug in the
+    // evaluator. The renderer must tolerate this without crashing.
+    function sameIdGroup(id: string): RenderNode {
+      const child: RenderNode = { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width: 10, height: 10, radius: 0 } };
+      return { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "effectGroup", children: [child], passes: [], isolate: true };
+    }
+
+    it("reconciles without throwing when the wrapper and its child share the same id", () => {
+      const adapter = new SceneGraphAdapter(makeTextureManager());
+      expect(() => adapter.reconcile(tree([sameIdGroup("n1")]))).not.toThrow();
+
+      const groupDisplay = adapter.root.children[0] as Container;
+      expect(groupDisplay.children).toHaveLength(1);
+      expect(groupDisplay.children[0]).toBeInstanceOf(Graphics);
+    });
+
+    it("removing the effectGroup entirely (e.g. the user disabled/removed the effect) tears down WITHOUT infinite recursion — the original crash", () => {
+      const adapter = new SceneGraphAdapter(makeTextureManager());
+      adapter.reconcile(tree([sameIdGroup("n1")]));
+      const groupDisplay = adapter.root.children[0] as Container;
+      const childDisplay = groupDisplay.children[0];
+
+      // reconciling to a plain (unwrapped) shape with the SAME id — exactly
+      // what happens when the user removes the node's last enabled effect
+      // (evaluate-node.ts returns the bare RenderNode again, `id` unchanged).
+      const plainShape: RenderNode = { id: "n1", matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width: 10, height: 10, radius: 0 } };
+      expect(() => adapter.reconcile(tree([plainShape]))).not.toThrow();
+
+      expect(groupDisplay.destroyed).toBe(true);
+      expect(childDisplay.destroyed).toBe(true);
+      expect(adapter.root.children).toHaveLength(1);
+      expect(adapter.root.children[0]).toBeInstanceOf(Graphics);
+    });
+
+    it("removing the node entirely also tears down without infinite recursion", () => {
+      const adapter = new SceneGraphAdapter(makeTextureManager());
+      adapter.reconcile(tree([sameIdGroup("n1")]));
+      const groupDisplay = adapter.root.children[0] as Container;
+      const childDisplay = groupDisplay.children[0];
+
+      expect(() => adapter.reconcile(tree([]))).not.toThrow();
+
+      expect(groupDisplay.destroyed).toBe(true);
+      expect(childDisplay.destroyed).toBe(true);
+      expect(adapter.root.children).toHaveLength(0);
+    });
+
+    it("destroy() (full adapter teardown) also tolerates the same-id collision without infinite recursion", () => {
+      const adapter = new SceneGraphAdapter(makeTextureManager());
+      adapter.reconcile(tree([sameIdGroup("n1")]));
+      const groupDisplay = adapter.root.children[0] as Container;
+      const childDisplay = groupDisplay.children[0];
+
+      expect(() => adapter.destroy()).not.toThrow();
+
+      expect(groupDisplay.destroyed).toBe(true);
+      expect(childDisplay.destroyed).toBe(true);
+    });
+
+    it("toggling back and forth (wrapped -> plain -> wrapped again) across multiple reconciles never throws", () => {
+      const adapter = new SceneGraphAdapter(makeTextureManager());
+      const plainShape: RenderNode = { id: "n1", matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width: 10, height: 10, radius: 0 } };
+
+      expect(() => {
+        adapter.reconcile(tree([sameIdGroup("n1")]));
+        adapter.reconcile(tree([plainShape]));
+        adapter.reconcile(tree([sameIdGroup("n1")]));
+        adapter.reconcile(tree([plainShape]));
+      }).not.toThrow();
+
+      expect(adapter.root.children).toHaveLength(1);
+      expect(adapter.root.children[0]).toBeInstanceOf(Graphics);
+    });
+  });
+});
+
+describe("SceneGraphAdapter — transitionGroup (Phase 2 §5/§13 acceptance test 08)", () => {
+  function shapeNode(id: string): RenderNode {
+    return { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "shape", geom: { kind: "rect", width: 10, height: 10, radius: 0 } };
+  }
+
+  function transitionGroupNode(id: string, from: RenderNode, to: RenderNode, ref = "wipe-linear", progress = 0.5): RenderNode {
+    return { id, matrix: [...IDENTITY], opacity: 1, blend: "normal", t: "transitionGroup", from, to, ref, uniforms: {}, progress };
+  }
+
+  it("creates a Container for the FROM side, keyed-diffs both FROM and TO subtrees, and never throws even with no Renderer available (headless test env — degrades to no filter that frame)", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager()); // no getRenderer passed -> always undefined
+    const group = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"));
+
+    expect(() => adapter.reconcile(tree([group]))).not.toThrow();
+
+    const display = adapter.root.children[0] as Container;
+    expect(display).toBeInstanceOf(Container);
+    // FROM side's keyed-diff result IS this display's own child:
+    expect(display.children).toHaveLength(1);
+    expect(display.children[0]).toBeInstanceOf(Graphics);
+    // no renderer available -> no filter applied this frame, but nothing thrown:
+    expect(display.filters).toEqual([]);
+  });
+
+  it("with a real (mocked) Renderer available, calls renderer.render({container, target}) to rasterize the TO side into a RenderTexture, then applies a transition Filter to the FROM side", () => {
+    const renderSpy = vi.fn();
+    const fakeRenderer = { render: renderSpy } as unknown as import("pixi.js").Renderer;
+    const adapter = new SceneGraphAdapter(makeTextureManager(), () => fakeRenderer);
+    const group = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"));
+
+    adapter.reconcile(tree([group]));
+
+    expect(renderSpy).toHaveBeenCalledTimes(1);
+    const call = renderSpy.mock.calls[0][0];
+    expect(call.container).toBeInstanceOf(Container);
+    expect(call.target).toBeDefined();
+    // the TO side's Container passed to render() is NOT the same as the
+    // FROM side's display added to the visible tree — they're genuinely
+    // separate Containers (TO never appears directly in the visible tree):
+    const display = adapter.root.children[0] as Container;
+    expect(call.container).not.toBe(display);
+  });
+
+  it("resizes the TO-side RenderTexture to match the comp's actual size (tree.size), not a placeholder", () => {
+    const renderSpy = vi.fn();
+    const fakeRenderer = { render: renderSpy } as unknown as import("pixi.js").Renderer;
+    const adapter = new SceneGraphAdapter(makeTextureManager(), () => fakeRenderer);
+    const group = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"));
+
+    adapter.reconcile({ size: { width: 640, height: 480 }, nodes: [group] });
+
+    const target = renderSpy.mock.calls[0][0].target;
+    expect(target.width).toBe(640);
+    expect(target.height).toBe(480);
+  });
+
+  it("removing a transitionGroup entirely tears down WITHOUT throwing (both FROM and TO nested levels, plus the TO RenderTexture)", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    adapter.reconcile(tree([transitionGroupNode("t1", shapeNode("a"), shapeNode("b"))]));
+    const display = adapter.root.children[0];
+
+    expect(() => adapter.reconcile(tree([]))).not.toThrow();
+    expect(display.destroyed).toBe(true);
+    expect(adapter.root.children).toHaveLength(0);
+  });
+
+  it("full adapter destroy() tears down a transitionGroup without throwing", () => {
+    const adapter = new SceneGraphAdapter(makeTextureManager());
+    adapter.reconcile(tree([transitionGroupNode("t1", shapeNode("a"), shapeNode("b"))]));
+
+    expect(() => adapter.destroy()).not.toThrow();
+  });
+
+  it("re-reconciling the same transitionGroup id across frames reuses its RenderTexture/Containers rather than recreating them (no duplicate renderer.render() targets)", () => {
+    const renderSpy = vi.fn();
+    const fakeRenderer = { render: renderSpy } as unknown as import("pixi.js").Renderer;
+    const adapter = new SceneGraphAdapter(makeTextureManager(), () => fakeRenderer);
+    const group1 = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"), "wipe-linear", 0.2);
+    const group2 = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"), "wipe-linear", 0.8); // same id, different progress (next frame)
+
+    adapter.reconcile(tree([group1]));
+    adapter.reconcile(tree([group2]));
+
+    expect(renderSpy).toHaveBeenCalledTimes(2);
+    const firstTarget = renderSpy.mock.calls[0][0].target;
+    const secondTarget = renderSpy.mock.calls[1][0].target;
+    expect(firstTarget).toBe(secondTarget); // same RenderTexture instance reused, not recreated.
   });
 });

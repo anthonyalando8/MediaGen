@@ -55,6 +55,7 @@ import { inSpan } from "../types/time";
 import { sampleChannels } from "./sample-channels";
 import { sampleEffectProps } from "./sample-effects";
 import { composeTransform, IDENTITY, mul } from "./compose-transform";
+import { applyTransitions } from "./transitions";
 
 export function evaluateNode(
   node: Node,
@@ -84,7 +85,13 @@ export function evaluateNode(
   // keeps the exact pre-Phase-2 behavior.
   const alreadyConsumedChildren = out.some((n) => n.t === "effectGroup");
   if (node.children && !alreadyConsumedChildren) {
-    out.push(...node.children.flatMap((c) => evaluateNode(c, frame, world, reg, ctx, opacity))); // recurse
+    // Each child evaluated independently first (kept as an array of
+    // arrays — see applyTransitions's doc on why), THEN
+    // transitions among z-order-adjacent children are resolved, exactly
+    // like evaluate-composition.ts does for comp.root — a transition
+    // works at any nesting level, not just between top-level siblings.
+    const perChild = node.children.map((c) => evaluateNode(c, frame, world, reg, ctx, opacity));
+    out.push(...applyTransitions(node.children, perChild, frame));
   }
 
   const passes = effectPasses(node, frame);

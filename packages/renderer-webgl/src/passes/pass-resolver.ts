@@ -46,8 +46,26 @@ import type { EffectDef } from "effects";
  * behavior to Pixi's internal filters for anything that doesn't otherwise
  * distort `vTextureCoord`. Every EFFECT pass (below) pairs with this same
  * vertex stage too — only the fragment shader differs per effect.
+ *
+ * IMPORTANT — `uInputSize` precision: `GlProgram.defaultOptions` (Pixi)
+ * prepends `precision highp float;` to every VERTEX shader and `precision
+ * mediump float;` to every FRAGMENT shader by default. GLSL ES linking
+ * requires a uniform declared in BOTH stages to have the SAME effective
+ * precision; an unqualified `uniform vec4 uInputSize;` in a fragment
+ * shader inherits the fragment default (mediump) while this vertex
+ * shader's copy inherits highp — a mismatch that fails to LINK (not
+ * compile), surfacing as Pixi's "Precisions of uniform 'uInputSize'
+ * differ between VERTEX and FRAGMENT shaders" warning immediately
+ * followed by a hard "Could not initialize shader" failure. Pixi's own
+ * bundled blur filter avoids this entirely by never referencing
+ * `uInputSize` in its fragment at all (it precomputes offset UVs in the
+ * vertex stage instead — generateBlurFragSource.mjs). Any effect fragment
+ * in THIS package that needs `uInputSize` (blur/drop-shadow/glow/rgb-split)
+ * must declare it as `uniform highp vec4 uInputSize;` explicitly — matching
+ * this vertex shader's precision exactly — rather than leaving it
+ * unqualified.
  */
-const DEFAULT_VERTEX = `in vec2 aPosition;
+export const DEFAULT_VERTEX = `in vec2 aPosition;
 out vec2 vTextureCoord;
 
 uniform vec4 uInputSize;
@@ -190,37 +208,68 @@ export function buildEffectUniforms(props: Record<string, Json>): Record<string,
   return uniforms;
 }
 
-/** Builds a real, compiled `Filter` for an "effect" PassSpec — `pass.uniforms` (the Evaluator's sampled `EffectRef.props`) become this Filter's uniform values. */
-function buildEffectFilter(pass: PassSpec): Filter | null {
+/** Builds one Filter per pass `index` (0-based) out of `def.passes` (defaults to 1) for an "effect" PassSpec. Each pass gets the SAME sampled `pass.uniforms`, PLUS a per-pass `uDirection` override — see `directionForPass`'s doc — which is how a separable multi-pass effect (blur: horizontal then vertical) differentiates its passes; a single-pass effect's shader simply never reads `uDirection`, so the override is harmless to include unconditionally. */
+function buildEffectFilters(pass: PassSpec): Filter[] {
   const def = effectRegistry.tryGet(pass.ref);
-  if (!def) return null; // not yet implemented — see resolvePass's doc.
+  if (!def) return []; // not yet implemented — see resolvePass's doc.
 
   const program = getEffectProgram(def);
-  if (!program) return null; // GlProgram construction failed (headless test env) — see getIdentityProgram's doc.
+  if (!program) return []; // GlProgram construction failed (headless test env) — see getIdentityProgram's doc.
 
   const props = pass.uniforms && typeof pass.uniforms === "object" && !Array.isArray(pass.uniforms) ? pass.uniforms : {};
-  const uniforms = buildEffectUniforms(props as Record<string, Json>);
+  const baseUniforms = buildEffectUniforms(props as Record<string, Json>);
 
-  return new Filter({ glProgram: program, resources: { effectUniforms: uniforms } });
+  const passCount = def.passes ?? 1;
+  const filters: Filter[] = [];
+  for (let index = 0; index < passCount; index++) {
+    const uniforms = { ...baseUniforms, uDirection: directionForPass(index, passCount) };
+    filters.push(new Filter({ glProgram: program, resources: { effectUniforms: uniforms } }));
+  }
+  return filters;
 }
 
 /**
- * Resolves one `PassSpec` to a compiled `Filter`, or `null` if `ref` isn't
- * recognized yet (the renderer should skip it rather than throw — an
- * unrecognized pass is "not implemented yet," not a corrupt document; this
- * also keeps a Phase 1 RenderTree, which never has `effectGroup`s, fully
- * unaffected, and lets a project reference a not-yet-implemented effect
- * without crashing the whole frame).
+ * Per-pass direction override for a separable multi-pass effect (blur's
+ * `passes: 2`): pass 0 -> horizontal (1,0), pass 1 -> vertical (0,1). A
+ * single-pass effect (`passCount === 1`) never actually reads `uDirection`
+ * in its shader, so this returns an arbitrary-but-harmless (0,0) for that
+ * case — included unconditionally rather than branching on `passCount`
+ * here, since a uniform a shader doesn't declare/use is simply ignored by
+ * the GL driver, keeping `buildEffectFilters` itself effect-agnostic
+ * (it doesn't need to know WHICH effects care about direction).
+ * Effects needing more than 2 distinct per-pass directions don't exist
+ * yet — extend this (or replace it with a per-effect callback on
+ * `EffectDef`) if one ever does.
  */
-export function resolvePass(pass: PassSpec): Filter | null {
+function directionForPass(index: number, passCount: number): { value: [number, number]; type: string } {
+  if (passCount <= 1) return { value: [0, 0], type: "vec2<f32>" };
+  return { value: index === 0 ? [1, 0] : [0, 1], type: "vec2<f32>" };
+}
+
+/**
+ * Resolves one `PassSpec` to zero or more compiled `Filter`s (zero if
+ * `ref` isn't recognized yet, or `def.passes` for a multi-pass effect) —
+ * the renderer should skip an unrecognized pass rather than throw (it's
+ * "not implemented yet," not a corrupt document; this also keeps a Phase
+ * 1 RenderTree, which never has `effectGroup`s, fully unaffected, and
+ * lets a project reference a not-yet-implemented effect without crashing
+ * the whole frame). Returns an array (not `Filter | null`) specifically
+ * so a SINGLE `PassSpec` can expand into MULTIPLE sequential
+ * `container.filters` entries for a separable multi-pass effect (blur's
+ * horizontal-then-vertical) — Pixi runs each entry in `filters` as its own
+ * sequential render-to-texture pass, feeding one's output into the next's
+ * input automatically (the same mechanism Pixi's own bundled multi-pass
+ * filters rely on).
+ */
+export function resolvePass(pass: PassSpec): Filter[] {
   if (pass.ref === "identity") {
     const program = getIdentityProgram();
-    return program ? new Filter({ glProgram: program, resources: {} }) : null;
+    return program ? [new Filter({ glProgram: program, resources: {} })] : [];
   }
   if (pass.kind === "effect") {
-    return buildEffectFilter(pass);
+    return buildEffectFilters(pass);
   }
   // Week 3-4: "transition" passes need a two-texture pass mechanism not yet built — see module doc.
   // Week 5-6: "mask" / "matte" / "adjustment" passes.
-  return null;
+  return [];
 }

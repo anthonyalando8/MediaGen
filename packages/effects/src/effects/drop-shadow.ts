@@ -12,7 +12,7 @@ const FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
 uniform sampler2D uTexture;
-uniform vec4 uInputSize;
+uniform highp vec4 uInputSize;
 uniform vec2 uOffset;
 uniform float uBlur;
 uniform float uOpacity;

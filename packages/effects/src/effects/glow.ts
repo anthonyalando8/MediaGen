@@ -15,7 +15,7 @@ const FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
 uniform sampler2D uTexture;
-uniform vec4 uInputSize;
+uniform highp vec4 uInputSize;
 uniform float uThreshold;
 uniform float uIntensity;
 uniform float uRadius;

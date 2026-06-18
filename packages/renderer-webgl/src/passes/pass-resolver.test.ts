@@ -3,21 +3,26 @@ import { describe, expect, it } from "vitest";
 import { buildEffectUniforms, resolvePass } from "./pass-resolver";
 
 describe("resolvePass", () => {
-  it("returns null for an unrecognized pass ref (not yet implemented), rather than throwing", () => {
-    expect(resolvePass({ kind: "effect", ref: "not-implemented-yet", uniforms: {} })).toBeNull();
-    expect(resolvePass({ kind: "mask", ref: "pen-path", uniforms: {} })).toBeNull();
-    expect(resolvePass({ kind: "matte", ref: "luma", uniforms: {}, srcNodeId: "n1" })).toBeNull();
-    expect(resolvePass({ kind: "adjustment", ref: "grade", uniforms: {} })).toBeNull();
-    expect(resolvePass({ kind: "transition", ref: "wipe", uniforms: {} })).toBeNull();
+  it("returns an empty array for an unrecognized pass ref (not yet implemented), rather than throwing", () => {
+    expect(resolvePass({ kind: "effect", ref: "not-implemented-yet", uniforms: {} })).toEqual([]);
+    expect(resolvePass({ kind: "mask", ref: "pen-path", uniforms: {} })).toEqual([]);
+    expect(resolvePass({ kind: "matte", ref: "luma", uniforms: {}, srcNodeId: "n1" })).toEqual([]);
+    expect(resolvePass({ kind: "adjustment", ref: "grade", uniforms: {} })).toEqual([]);
+    expect(resolvePass({ kind: "transition", ref: "wipe", uniforms: {} })).toEqual([]);
   });
 
   it("never throws for an 'identity' pass, even in an environment where GlProgram construction fails (e.g. this package's headless Node test env — no real WebGL context for GlProgram's shader-precision probe)", () => {
-    // Whether this resolves to a real Filter or null depends on whether a
+    // Whether this resolves to a real [Filter] or [] depends on whether a
     // WebGL-capable context exists in the current environment (it does in
     // a real browser; it doesn't here) — `getIdentityProgram`'s doc in
     // pass-resolver.ts explains the fallback. The one invariant that must
     // hold EVERYWHERE is "never throws."
     expect(() => resolvePass({ kind: "effect", ref: "identity", uniforms: {} })).not.toThrow();
+  });
+
+  it("an identity pass resolves to AT MOST one Filter (single-pass, never multiple)", () => {
+    const result = resolvePass({ kind: "effect", ref: "identity", uniforms: {} });
+    expect(result.length).toBeLessThanOrEqual(1);
   });
 
   it("reuses the same identity Filter program across multiple calls (doesn't recompile per pass)", () => {
@@ -26,7 +31,7 @@ describe("resolvePass", () => {
     // Either both resolved (real GL context available) or both didn't
     // (headless) — never a mix, since the underlying GlProgram is a
     // memoized singleton (getIdentityProgram).
-    expect(a === null).toBe(b === null);
+    expect(a.length).toBe(b.length);
   });
 });
 
@@ -37,8 +42,22 @@ describe("resolvePass — effect passes (Week 3-4)", () => {
     expect(() => resolvePass({ kind: "effect", ref: "blur", uniforms: { amount: 5, someFutureStringProp: "x" } })).not.toThrow();
   });
 
-  it("returns null for a not-yet-registered effect ref", () => {
-    expect(resolvePass({ kind: "effect", ref: "definitely-not-a-real-effect", uniforms: {} })).toBeNull();
+  it("returns an empty array for a not-yet-registered effect ref", () => {
+    expect(resolvePass({ kind: "effect", ref: "definitely-not-a-real-effect", uniforms: {} })).toEqual([]);
+  });
+
+  it("a single-pass effect (e.g. grade) resolves to AT MOST one Filter", () => {
+    const result = resolvePass({ kind: "effect", ref: "grade", uniforms: {} });
+    expect(result.length).toBeLessThanOrEqual(1);
+  });
+
+  it("a multi-pass effect (blur, EffectDef.passes=2) resolves to AT MOST two Filters — never collapsed to one, never more than declared", () => {
+    const result = resolvePass({ kind: "effect", ref: "blur", uniforms: { amount: 5 } });
+    expect(result.length).toBeLessThanOrEqual(2);
+    // if a real GL context IS available (not the case in this headless
+    // test env, but asserting the invariant for whenever it is): exactly
+    // 2, matching blurEffect.passes — never silently collapsed to 1.
+    if (result.length > 0) expect(result.length).toBe(2);
   });
 });
 

@@ -651,4 +651,288 @@ describe("evaluateComposition", () => {
       expect(tree.nodes[0].t).toBe("shape");
     });
   });
+
+  describe("Phase 2 §12.1 fitness gate — adding an effect needs no edit to core/the evaluator", () => {
+    // The renderer-side half of this same gate lives in
+    // renderer-webgl/src/passes/fitness-gate.test.ts (NOT here — importing
+    // `core` from `renderer-webgl` would itself violate the
+    // `renderer-webgl-no-core` dependency rule). This half proves the
+    // EVALUATOR's contribution: `node.effects[]` -> PassSpec works for ANY
+    // string `effect` key, including one that has never been registered
+    // anywhere, isn't a real builtin, and means nothing to `core` —
+    // because the evaluator's job is purely to sample and forward data, it
+    // never looks up or validates against an EffectRegistry (that
+    // resolution happens entirely in renderer-webgl/passes/pass-resolver.ts,
+    // a different package `core` doesn't import).
+    it("a node referencing a brand-new, never-registered-anywhere effect key still produces a real PassSpec — the evaluator has no registry to consult, so nothing about it needs to change for a new effect to exist", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(60),
+        root: [
+          makeNode("rect1", {
+            effects: [{ id: "fx1" as Id, effect: "fitness-gate-tint-never-seen-before", enabled: true, props: { amount: 0.5 } }],
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(0), reg);
+      const group = tree.nodes[0];
+      if (group.t !== "effectGroup") throw new Error("expected effectGroup");
+      expect(group.passes).toEqual([{ kind: "effect", ref: "fitness-gate-tint-never-seen-before", uniforms: { amount: 0.5 } }]);
+    });
+  });
+
+  describe("transitions (Phase 2 §4.4/§5/§13 acceptance test 08) — Node.transitionIn/transitionOut span the boundary between two z-order-adjacent siblings", () => {
+    it("two siblings with NO transition declared evaluate completely unaffected — Phase 1 documents (which never set transitionIn/Out) are unchanged", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }), makeNode("b", { time: { start: toFrame(60), duration: toFrame(60) } })],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(30), reg);
+      expect(tree.nodes).toHaveLength(1); // "b" is time-gated out at frame 30 — only "a" renders, exactly as in Phase 1.
+      expect(tree.nodes[0].t).toBe("shape");
+    });
+
+    it("a transitionIn with a real overlap window produces ONE transitionGroup wrapping both siblings' own evaluated output, replacing their two separate entries", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }),
+          makeNode("b", {
+            time: { start: toFrame(50), duration: toFrame(60) }, // overlaps "a" by 10 frames: [50, 60)
+            transitionIn: { preset: "wipe", durationF: toFrame(10), props: { angle: 0 } },
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(55), reg); // mid-overlap
+      expect(tree.nodes).toHaveLength(1);
+      const group = tree.nodes[0];
+      if (group.t !== "transitionGroup") throw new Error(`expected transitionGroup, got ${group.t}`);
+      expect(group.ref).toBe("wipe");
+      expect(group.uniforms).toEqual({ angle: 0 });
+      expect(group.from.t).toBe("shape");
+      expect(group.to.t).toBe("shape");
+    });
+
+    it("progress is 0 at the start of the overlap window and 1 at its end (exclusive), increasing monotonically across it", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }),
+          makeNode("b", {
+            time: { start: toFrame(50), duration: toFrame(60) }, // overlap [50, 60)
+            transitionIn: { preset: "wipe", durationF: toFrame(10), props: {} },
+          }),
+        ],
+      };
+
+      function progressAt(frame: number): number {
+        const tree = evaluateComposition(comp, toFrame(frame), reg);
+        const group = tree.nodes[0];
+        if (group.t !== "transitionGroup") throw new Error(`expected transitionGroup at frame ${frame}, got ${group.t}`);
+        return group.progress;
+      }
+
+      expect(progressAt(50)).toBe(0);
+      expect(progressAt(55)).toBeCloseTo(0.5, 5);
+      expect(progressAt(59)).toBeCloseTo(0.9, 5);
+      // strictly increasing across the window:
+      expect(progressAt(52)).toBeLessThan(progressAt(57));
+    });
+
+    it("transitionOut on the OUTGOING sibling works exactly like transitionIn on the incoming one when the incoming sibling sets neither", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", {
+            time: { start: toFrame(0), duration: toFrame(60) },
+            transitionOut: { preset: "dip", durationF: toFrame(10), props: {} },
+          }),
+          makeNode("b", { time: { start: toFrame(50), duration: toFrame(60) } }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(55), reg);
+      expect(tree.nodes).toHaveLength(1);
+      const group = tree.nodes[0];
+      if (group.t !== "transitionGroup") throw new Error(`expected transitionGroup, got ${group.t}`);
+      expect(group.ref).toBe("dip");
+    });
+
+    it("transitionIn on the incoming sibling takes precedence over transitionOut on the outgoing one when BOTH are set (avoids double-applying two different transitions to the same boundary)", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", {
+            time: { start: toFrame(0), duration: toFrame(60) },
+            transitionOut: { preset: "dip", durationF: toFrame(10), props: {} },
+          }),
+          makeNode("b", {
+            time: { start: toFrame(50), duration: toFrame(60) },
+            transitionIn: { preset: "wipe", durationF: toFrame(10), props: {} },
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(55), reg);
+      const group = tree.nodes[0];
+      if (group.t !== "transitionGroup") throw new Error(`expected transitionGroup, got ${group.t}`);
+      expect(group.ref).toBe("wipe");
+    });
+
+    it("a transitionIn declared but with NO actual overlap between the two siblings' TimeSpans produces no transitionGroup — the two siblings evaluate independently instead", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }), // ends at 60, no overlap with b
+          makeNode("b", {
+            time: { start: toFrame(60), duration: toFrame(60) },
+            transitionIn: { preset: "wipe", durationF: toFrame(10), props: {} },
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(60), reg);
+      expect(tree.nodes).toHaveLength(1); // only "b" is time-active at frame 60; no transitionGroup since there's no overlap window at all.
+      expect(tree.nodes[0].t).toBe("shape");
+    });
+
+    it("a transition between two GROUP children (not just top-level comp.root siblings) is resolved at that nesting level too", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("group1", {
+            kind: "group",
+            children: [
+              makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }),
+              makeNode("b", {
+                time: { start: toFrame(50), duration: toFrame(60) },
+                transitionIn: { preset: "wipe", durationF: toFrame(10), props: {} },
+              }),
+            ],
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(55), reg);
+      // groupKind's own render() always emits its own placeholder "group"
+      // RenderNode (per the flat-array convention — see evaluate-node.ts's
+      // module doc), with children flattened in as ADDITIONAL siblings
+      // alongside it, not nested under it: [group-placeholder,
+      // transitionGroup], not just [transitionGroup].
+      expect(tree.nodes).toHaveLength(2);
+      expect(tree.nodes[0].t).toBe("group");
+      expect(tree.nodes[1].t).toBe("transitionGroup");
+    });
+
+    it("a transition between two clips renders via shader (blueprint §13 acceptance test 08) — the renderer-side proof lives in renderer-webgl/src/passes/transition-resolver.test.ts; this confirms the evaluator's contribution (a real transitionGroup with a resolvable ref) is in place", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(120),
+        root: [
+          makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }),
+          makeNode("b", {
+            time: { start: toFrame(50), duration: toFrame(60) },
+            transitionIn: { preset: "wipe", durationF: toFrame(10), props: { angle: 0, feather: 0 } },
+          }),
+        ],
+      };
+
+      const tree = evaluateComposition(comp, toFrame(55), reg);
+      const group = tree.nodes[0];
+      if (group.t !== "transitionGroup") throw new Error("expected transitionGroup");
+      // everything a renderer needs to resolve and draw this transition is present:
+      expect(typeof group.ref).toBe("string");
+      expect(group.progress).toBeGreaterThanOrEqual(0);
+      expect(group.progress).toBeLessThanOrEqual(1);
+      expect(group.from).toBeDefined();
+      expect(group.to).toBeDefined();
+    });
+
+    it("REGRESSION (found via manual browser testing): a MIDDLE node with BOTH transitionIn (from the previous sibling) and transitionOut (to the next sibling) set must be able to participate in EACH transition at its own window, not have transitionIn unconditionally starve transitionOut", () => {
+      const reg = makeRegistry();
+      const comp: Composition = {
+        id: "comp1" as Id,
+        name: "Test",
+        size: { width: 1080, height: 1920 },
+        fps: 30,
+        duration: toFrame(200),
+        root: [
+          makeNode("a", { time: { start: toFrame(0), duration: toFrame(60) } }), // [0, 60)
+          makeNode("b", {
+            time: { start: toFrame(50), duration: toFrame(60) }, // [50, 110) — overlaps "a" by [50,60), overlaps "c" by [100,110)
+            transitionIn: { preset: "wipe-radial", durationF: toFrame(10), props: {} }, // boundary with "a": window [50,60)
+            transitionOut: { preset: "wipe-linear", durationF: toFrame(10), props: {} }, // boundary with "c": window [100,110)
+          }),
+          makeNode("c", { time: { start: toFrame(100), duration: toFrame(60) } }), // [100, 160)
+        ],
+      };
+
+      // At frame 55: only the A-B boundary's window [50,60) is active.
+      const atAB = evaluateComposition(comp, toFrame(55), reg);
+      const abGroup = atAB.nodes.find((n) => n.t === "transitionGroup");
+      if (!abGroup || abGroup.t !== "transitionGroup") throw new Error("expected an A-B transitionGroup at frame 55");
+      expect(abGroup.ref).toBe("wipe-radial");
+      // "c" is NOT yet time-active at frame 55 (starts at 100) — only 1 other node ("b"-wrapped) renders alongside the group? No: "a"/"b" are consumed into the group; "c" isn't time-active yet, so nothing else renders.
+      expect(atAB.nodes).toHaveLength(1);
+
+      // At frame 105: only the B-C boundary's window [100,110) is active — THIS is the case the bug broke (transitionIn used to win regardless of frame).
+      const atBC = evaluateComposition(comp, toFrame(105), reg);
+      const bcGroup = atBC.nodes.find((n) => n.t === "transitionGroup");
+      if (!bcGroup || bcGroup.t !== "transitionGroup") throw new Error("expected a B-C transitionGroup at frame 105 — this is the exact bug: transitionIn previously starved transitionOut unconditionally");
+      expect(bcGroup.ref).toBe("wipe-linear");
+      // "a" is no longer time-active at frame 105 (ended at 60) — only the B-C group renders.
+      expect(atBC.nodes).toHaveLength(1);
+
+      // At frame 80 (between both windows): neither boundary's window is active — "b" renders alone, untransitioned.
+      const between = evaluateComposition(comp, toFrame(80), reg);
+      expect(between.nodes.some((n) => n.t === "transitionGroup")).toBe(false);
+      expect(between.nodes).toHaveLength(1); // "a" ended at 60, "c" starts at 100 — only "b" is time-active.
+    });
+  });
 });

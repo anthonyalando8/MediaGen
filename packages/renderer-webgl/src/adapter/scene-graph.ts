@@ -4,20 +4,64 @@
 // (keyed diff)" (Deliverable 08). NO domain types cross this boundary —
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
-import { Container, Graphics, Sprite, Text } from "pixi.js";
-import type { Filter } from "pixi.js";
+import { Container, Graphics, RenderTexture, Sprite, Text } from "pixi.js";
+import type { Renderer } from "pixi.js";
 import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
 import { toPixiMatrix } from "../matrix";
 import type { TextureManager } from "../textures/manager";
 import { resolvePass } from "../passes/pass-resolver";
+import { resolveTransitionFilter } from "../passes/transition-resolver";
 
 type Display = Container;
 
-/** Per-effectGroup nested reconciliation state — see SceneGraphAdapter's `groups` map doc. */
-interface EffectGroupState {
+/**
+ * One nesting level's complete keyed-diff state, bundled together. A node
+ * id is only unique WITHIN its level — an effectGroup wrapper and the
+ * single child it wraps even share the exact same id by construction
+ * (core/evaluator/evaluate-node.ts: the wrapper takes `id: node.id`, and
+ * so does its sole un-wrapped child). Bundling `displays`/`kinds`/`groups`
+ * into one object that's threaded through the recursion as a single unit
+ * (rather than three separately-defaulted parameters, where `groups`
+ * previously silently fell back to a single always-global `this.groups`)
+ * makes it IMPOSSIBLE to accidentally pair a child level's
+ * `displays`/`kinds` with the WRONG level's `groups` map — exactly the bug
+ * that caused `destroyDisplay` to recurse into itself infinitely when an
+ * effectGroup's id collided with its own child's id across two different
+ * levels. An effectGroup's own nested state (`EffectGroupState`) is the
+ * exact same shape — a group is itself just another complete level — so
+ * the two are the same type, not two parallel ones.
+ */
+interface LevelState {
   displays: Map<string, Display>;
   kinds: Map<string, RenderNode["t"]>;
+  groups: Map<string, LevelState>;
+  /** Per-id "transitionGroup" state — see TransitionGroupState's doc. Threaded through the recursion exactly like `groups`, for the identical id-scoping reason (LevelState's own doc). */
+  transitionGroups: Map<string, TransitionGroupState>;
+}
+
+/** An effectGroup's own nested reconciliation state — structurally identical to a LevelState (a group IS a level), kept as a named alias for readability at call sites that specifically mean "one group's state." */
+type EffectGroupState = LevelState;
+
+function createLevelState(): LevelState {
+  return { displays: new Map(), kinds: new Map(), groups: new Map(), transitionGroups: new Map() };
+}
+
+/**
+ * Per-"transitionGroup" state — kept in its own map (`transitionGroups`,
+ * parallel to `LevelState.groups`) rather than folded into `LevelState`
+ * itself, since a transitionGroup's shape is genuinely different: TWO
+ * independent nested levels (`fromLevel`/`toLevel`, one per side) plus a
+ * persistent GPU resource (`toTexture`) that needs explicit `.destroy()`
+ * on teardown — none of which any other RenderNode variant needs.
+ */
+interface TransitionGroupState {
+  fromLevel: LevelState;
+  toLevel: LevelState;
+  /** The TO side's offscreen render target — re-rendered every reconcile (its content may itself be animated), destroyed when this transitionGroup is torn down. */
+  toTexture: RenderTexture;
+  /** A throwaway Container the TO side's keyed-diff renders into, then is rendered (via the real Pixi Renderer) into `toTexture` — never added to the visible tree itself. */
+  toContainer: Container;
 }
 
 /** Upper bound for `Text.resolution` (updateText) — caps texture memory for extreme zoom/scale. */
@@ -47,13 +91,14 @@ const MAX_TEXT_RESOLUTION = 8;
  */
 export class SceneGraphAdapter {
   readonly root = new Container();
-  private displays = new Map<string, Display>();
-  private kinds = new Map<string, RenderNode["t"]>();
-  /** Per-effectGroup nested reconciliation state, keyed by the effectGroup's own RenderNode.id. */
-  private groups = new Map<string, EffectGroupState>();
+  /** The top-level keyed-diff state — see LevelState's doc. */
+  private level: LevelState = createLevelState();
+  /** `tree.size` from the most recent `reconcile()` call — needed to size a "transitionGroup"'s render-textures correctly (reconcileTransitionGroup). Defaults to a harmless placeholder before the first reconcile. */
+  private compSize = { width: 1, height: 1 };
 
   constructor(
     private readonly textures: TextureManager,
+    private readonly getRenderer: () => Renderer | undefined = () => undefined,
     private fps = 30
   ) {
     this.root.sortableChildren = true;
@@ -64,17 +109,20 @@ export class SceneGraphAdapter {
   }
 
   reconcile(tree: RenderTree): void {
-    this.reconcileChildren(this.root, tree.nodes, this.displays, this.kinds);
+    this.compSize = tree.size;
+    this.reconcileChildren(this.root, tree.nodes, this.level);
   }
 
   /**
    * The shared keyed-diff loop — operates on `nodes` (in z-order) against
-   * `target` (a Pixi Container), using `displays`/`kinds` as this level's
-   * own identity maps. Used for both the top-level `tree.nodes` (via
-   * `reconcile`) and a nested `effectGroup.children` (via
-   * `reconcileEffectGroup`).
+   * `target` (a Pixi Container), using `level`'s own identity maps. Used
+   * for both the top-level `tree.nodes` (via `reconcile`) and a nested
+   * `effectGroup.children` (via `reconcileEffectGroup`) — each call site
+   * passes ITS OWN `LevelState`, never a parent's or a global default (see
+   * LevelState's doc on why that distinction is load-bearing).
    */
-  private reconcileChildren(target: Container, nodes: RenderNode[], displays: Map<string, Display>, kinds: Map<string, RenderNode["t"]>): void {
+  private reconcileChildren(target: Container, nodes: RenderNode[], level: LevelState): void {
+    const { displays, kinds } = level;
     const seen = new Set<string>();
 
     nodes.forEach((node, index) => {
@@ -83,7 +131,7 @@ export class SceneGraphAdapter {
 
       let display = displays.get(node.id);
       if (display && kinds.get(node.id) !== node.t) {
-        this.destroyDisplay(node.id, display, displays, kinds);
+        this.destroyDisplay(node.id, display, level);
         display = undefined;
       }
       if (!display) {
@@ -97,35 +145,63 @@ export class SceneGraphAdapter {
       display.setFromMatrix(toPixiMatrix(node.matrix));
       display.alpha = node.opacity;
       display.blendMode = node.blend;
-      this.updateContent(display, node);
+      this.updateContent(display, node, level);
     });
 
     for (const [id, display] of [...displays]) {
-      if (!seen.has(id)) this.destroyDisplay(id, display, displays, kinds);
+      if (!seen.has(id)) this.destroyDisplay(id, display, level);
     }
   }
 
   /** Releases every Pixi display object owned by this adapter, including nested effectGroups. */
   destroy(): void {
-    for (const [id, display] of [...this.displays]) this.destroyDisplay(id, display, this.displays, this.kinds);
+    for (const [id, display] of [...this.level.displays]) this.destroyDisplay(id, display, this.level);
   }
 
-  private destroyDisplay(id: string, display: Display, displays: Map<string, Display>, kinds: Map<string, RenderNode["t"]>): void {
-    const group = this.groups.get(id);
+  /**
+   * Tears down `id`'s display, recursing into its nested effectGroup state
+   * FIRST if it has one — looked up from `level.groups` (THIS level's own
+   * map), never a different level's. Previously this looked up a single
+   * always-global `this.groups`, which meant tearing down a CHILD whose id
+   * happened to collide with its OWN PARENT effectGroup's id (exactly the
+   * wrapper/child id-sharing case above) would incorrectly find the
+   * parent's group state again and recurse into destroying it — which
+   * recurses into destroying ITS child again — infinitely. Threading the
+   * correct `level` through eliminates the collision: the child's
+   * `level.groups` (its OWN level) simply has no entry for that id unless
+   * the child itself is genuinely an effectGroup.
+   */
+  private destroyDisplay(id: string, display: Display, level: LevelState): void {
+    const group = level.groups.get(id);
     if (group) {
       // Recursively tear down the nested level FIRST — its own children's
       // displays are children of `display` (this group's Container) and
       // would otherwise be destroyed redundantly/in an undefined order by
       // the outer `display.destroy({children:true})` below.
       for (const [childId, childDisplay] of [...group.displays]) {
-        this.destroyDisplay(childId, childDisplay, group.displays, group.kinds);
+        this.destroyDisplay(childId, childDisplay, group);
       }
-      this.groups.delete(id);
+      level.groups.delete(id);
+    }
+    const transitionGroup = level.transitionGroups.get(id);
+    if (transitionGroup) {
+      // Both nested levels (FROM is a child of `display` itself; TO is a
+      // child of the off-tree `toContainer`) torn down the same way —
+      // plus the persistent GPU resources only a transitionGroup owns.
+      for (const [childId, childDisplay] of [...transitionGroup.fromLevel.displays]) {
+        this.destroyDisplay(childId, childDisplay, transitionGroup.fromLevel);
+      }
+      for (const [childId, childDisplay] of [...transitionGroup.toLevel.displays]) {
+        this.destroyDisplay(childId, childDisplay, transitionGroup.toLevel);
+      }
+      transitionGroup.toContainer.destroy({ children: true });
+      transitionGroup.toTexture.destroy(true);
+      level.transitionGroups.delete(id);
     }
     display.parent?.removeChild(display);
     display.destroy({ children: true });
-    displays.delete(id);
-    kinds.delete(id);
+    level.displays.delete(id);
+    level.kinds.delete(id);
   }
 
   private createDisplay(node: RenderNode): Display {
@@ -154,13 +230,23 @@ export class SceneGraphAdapter {
         // `updateContent`) populates it with this group's own nested
         // keyed-diff of `children`, and assigns `filters` from `passes`.
         return new Container();
+      case "transitionGroup":
+        // The FROM side's own Container — `reconcileTransitionGroup`
+        // (called from `updateContent`) populates it with the FROM
+        // subtree's keyed-diff and assigns the transition `Filter` to it.
+        // The TO side gets its OWN separate, off-tree Container
+        // (`TransitionGroupState.toContainer`, created lazily inside
+        // `reconcileTransitionGroup` itself, not here) — never added to
+        // this display's children, since it's rendered to a texture
+        // instead of drawn directly.
+        return new Container();
       default:
         // "group" is filtered out by reconcileChildren() before this is called.
         throw new Error(`unhandled RenderNode type: ${(node as RenderNode).t}`);
     }
   }
 
-  private updateContent(display: Display, node: RenderNode): void {
+  private updateContent(display: Display, node: RenderNode, level: LevelState): void {
     switch (node.t) {
       case "image":
       case "video":
@@ -173,20 +259,31 @@ export class SceneGraphAdapter {
         this.updateShape(display as Graphics, node.geom, node.fill, node.stroke);
         break;
       case "effectGroup":
-        this.reconcileEffectGroup(display, node);
+        this.reconcileEffectGroup(display, node, level);
+        break;
+      case "transitionGroup":
+        this.reconcileTransitionGroup(display, node, level);
         break;
     }
   }
 
   /**
    * Recurses into an "effectGroup" RenderNode: keyed-diffs `node.children`
-   * into `container` using this group's OWN identity maps (a fresh
-   * `EffectGroupState` per group id, created lazily and reused across
-   * frames — exactly like the top-level `displays`/`kinds`, just scoped to
-   * this nesting level instead of global), then assigns `container.filters`
-   * from `node.passes` (resolved via `resolvePass`, passes/pass-resolver.ts
-   * — Week 1-2 ships the mechanism only; real effect/mask/matte/adjustment
-   * shaders land in their scheduled weeks per the Phase 2 blueprint §12).
+   * into `container` using a FRESH, NESTED `LevelState` of its own (created
+   * lazily and reused across frames, exactly like the top-level `level`,
+   * just scoped one level deeper) — registered into `parentLevel.groups`
+   * (the level the effectGroup ITSELF was just reconciled within, passed
+   * in from `updateContent`/`reconcileChildren`), never a single global
+   * map. This is what makes the wrapper/child id-sharing case safe: the
+   * wrapper's entry lives in `parentLevel.groups`, while its child's
+   * (possibly identical) id is looked up against THIS group's OWN
+   * `level.groups` one level down — two distinct maps, so a shared id
+   * between them can never collide.
+   *
+   * Then assigns `container.filters` from `node.passes` (resolved via
+   * `resolvePass`, passes/pass-resolver.ts — Week 3-4 ships real "effect"
+   * passes; mask/matte/adjustment shaders land in their scheduled weeks
+   * per the Phase 2 blueprint §12).
    *
    * `node.isolate` is currently always honored by virtue of Pixi's own
    * `filters` mechanism: ANY non-empty `container.filters` already renders
@@ -200,17 +297,79 @@ export class SceneGraphAdapter {
    * path executed). A real `isolate`-without-passes precomp will need that
    * same identity-pass fallback; tracked for Week 7-8.
    */
-  private reconcileEffectGroup(container: Container, node: Extract<RenderNode, { t: "effectGroup" }>): void {
-    let group = this.groups.get(node.id);
+  private reconcileEffectGroup(container: Container, node: Extract<RenderNode, { t: "effectGroup" }>, parentLevel: LevelState): void {
+    let group = parentLevel.groups.get(node.id);
     if (!group) {
-      group = { displays: new Map(), kinds: new Map() };
-      this.groups.set(node.id, group);
+      group = createLevelState();
+      parentLevel.groups.set(node.id, group);
     }
 
-    this.reconcileChildren(container, node.children, group.displays, group.kinds);
+    this.reconcileChildren(container, node.children, group);
 
-    const filters = node.passes.map((pass) => resolvePass(pass)).filter((f): f is Filter => f !== null);
+    const filters = node.passes.flatMap((pass) => resolvePass(pass));
     container.filters = filters;
+  }
+
+  /**
+   * Recurses into a "transitionGroup" RenderNode (contract's doc — the
+   * one two-input compositing primitive): keyed-diffs `node.from` into
+   * `container` (THIS display, added to the visible tree exactly like any
+   * other node) and `node.to` into a separate, lazily-created, never-
+   * added-to-the-tree `toContainer`. Every reconcile, `toContainer` is
+   * rendered into a `RenderTexture` (`toTexture`, resized to the comp's
+   * own `compSize` — see its field doc) via the REAL Pixi Renderer
+   * (`this.getRenderer()` — see canvas-host.ts's doc on why this can be
+   * `undefined` before the GPU context is ready, degrading to "this
+   * transitionGroup doesn't render this frame" rather than throwing, the
+   * same tolerance every GL-context-dependent construction in this
+   * package already has). `container.filters` is then set to the
+   * transition's own `Filter` (transition-resolver.ts's
+   * `resolveTransitionFilter`) — which reads `container`'s own rendered
+   * subtree (the FROM side) as its implicit input, and `toTexture` as an
+   * added resource (`uTo`).
+   *
+   * `node.from`/`node.to` are each a COMPLETE RenderNode (contract's doc:
+   * "typically the two z-order-adjacent siblings... already independently
+   * evaluated") — keyed-diffed via `reconcileChildren` against a
+   * single-element array, exactly like any other nested level, so a
+   * "from"/"to" side that's itself a "group" or "effectGroup" recurses
+   * correctly through the EXACT same machinery as everywhere else in this
+   * file.
+   */
+  private reconcileTransitionGroup(container: Container, node: Extract<RenderNode, { t: "transitionGroup" }>, parentLevel: LevelState): void {
+    let state = parentLevel.transitionGroups.get(node.id);
+    if (!state) {
+      const toContainer = new Container();
+      const toTexture = RenderTexture.create({ width: this.compSize.width, height: this.compSize.height });
+      state = { fromLevel: createLevelState(), toLevel: createLevelState(), toTexture, toContainer };
+      parentLevel.transitionGroups.set(node.id, state);
+    }
+
+    // `toTexture`'s size can only be known once `compSize` has actually
+    // been set by a real `reconcile()` call (constructor-time default is
+    // a harmless 1x1 placeholder) — resize whenever the comp's own output
+    // size changes (composition resize, or simply differs from the
+    // placeholder on this transitionGroup's first real frame).
+    if (state.toTexture.width !== this.compSize.width || state.toTexture.height !== this.compSize.height) {
+      state.toTexture.resize(this.compSize.width, this.compSize.height);
+    }
+
+    this.reconcileChildren(state.toContainer, [node.to], state.toLevel);
+    this.reconcileChildren(container, [node.from], state.fromLevel);
+
+    const renderer = this.getRenderer();
+    if (!renderer) {
+      // GPU context not ready yet (canvas-host.ts's async-init doc) —
+      // degrade to "no filter this frame" rather than throwing; the FROM
+      // side still renders normally (just without the transition blend),
+      // and the next reconcile (once ready) picks up correctly.
+      container.filters = [];
+      return;
+    }
+    renderer.render({ container: state.toContainer, target: state.toTexture });
+
+    const filter = resolveTransitionFilter(node.ref, node.uniforms, node.progress, state.toTexture);
+    container.filters = filter ? [filter] : [];
   }
 
   private updateSprite(container: Container, node: Extract<RenderNode, { t: "image" | "video" }>): void {

@@ -571,6 +571,73 @@ p {
   margin-top: var(--space-2);
 }
 
+/* ── Transition panel ─────────────────────────────────────────────────── */
+
+.transition-panel__row {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.transition-panel__row:first-of-type {
+  border-top: none;
+}
+
+.transition-panel__row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+.transition-panel__neighbor {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.transition-panel__hint {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.transition-panel__row--disabled {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-2);
+}
+
+.transition-panel__active {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.transition-panel__duration {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-1);
+}
+
+.transition-panel__duration input[type="number"] {
+  width: 60px;
+}
+
+.transition-panel__remove {
+  background: none;
+  border: none;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: var(--text-md);
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.transition-panel__remove:hover {
+  color: var(--text-1);
+}
+
 /* ── Form controls ────────────────────────────────────────────────────── */
 
 input[type="text"],
@@ -686,4 +753,144 @@ input[type="range"]::-moz-range-track {
   height: 4px;
   background: var(--surface-3);
   border-radius: 2px;
+}
+
+/* ── Clip-arrangement timeline (new scope — see TimelineTrack.tsx) ──────── */
+
+.timeline-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  max-height: 260px;
+}
+
+.timeline-panel .timeline {
+  border-top: none;
+  flex-shrink: 0;
+}
+
+.timeline-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.timeline-ruler {
+  position: relative;
+  height: 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.timeline-ruler__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid var(--border-strong);
+}
+
+.timeline-ruler__tick-label {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.timeline-ruler__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.timeline-track {
+  position: relative;
+}
+
+.timeline-track__row {
+  position: relative;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-track__row--selected {
+  background: var(--accent-soft);
+}
+
+.timeline-track__bar {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  background: var(--surface-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  overflow: hidden;
+  user-select: none;
+}
+
+.timeline-track__bar--selected {
+  border-color: var(--accent);
+}
+
+.timeline-track__bar-icon {
+  display: inline-flex;
+  color: var(--text-1);
+  flex-shrink: 0;
+}
+
+.timeline-track__bar-label {
+  font-size: var(--text-xs);
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-track__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.timeline-track__handle--left {
+  left: 0;
+}
+
+.timeline-track__handle--right {
+  right: 0;
+}
+
+.timeline-track__transition-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--text-2);
+  flex-shrink: 0;
+}
+
+.timeline-track__transition-marker--left {
+  left: 0;
+}
+
+.timeline-track__transition-marker--right {
+  right: 0;
+}
+
+.timeline-track__transition-marker--active {
+  background: var(--accent);
 }

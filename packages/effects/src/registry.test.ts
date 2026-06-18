@@ -93,6 +93,14 @@ describe("builtin effects — structural sanity (§6: '~7 effects')", () => {
       expect(def.passes ?? 1, def.effect).toBe(1);
     }
   });
+
+  it("every effect referencing uInputSize declares it with an explicit 'highp' qualifier — an unqualified declaration mismatches the vertex shader's precision default and fails to LINK (not compile), the exact 'Precisions of uniform differ between VERTEX and FRAGMENT shaders' failure (pass-resolver.ts's DEFAULT_VERTEX doc)", () => {
+    for (const def of builtinEffects) {
+      if (!def.glsl.includes("uInputSize")) continue;
+      expect(def.glsl, def.effect).toContain("uniform highp vec4 uInputSize;");
+      expect(def.glsl, `${def.effect}: must not declare an unqualified uInputSize`).not.toContain("uniform vec4 uInputSize;");
+    }
+  });
 });
 
 describe("builtin transitions — structural sanity (§6: '~6 transitions')", () => {
