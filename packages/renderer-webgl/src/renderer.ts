@@ -24,7 +24,7 @@ import type { MediaService } from "./textures/manager";
  * (see scene-graph.ts).
  */
 export interface Renderer {
-  render(tree: RenderTree): void;
+  render(tree: RenderTree, playing?: boolean): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
   /** See CanvasHost.setViewport — maps comp-space coordinates to canvas pixels for `<TransformGizmo>` (Week 7). */
@@ -43,8 +43,8 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
   host.stage.addChild(adapter.root);
 
   return {
-    render(tree) {
-      adapter.reconcile(tree);
+    render(tree, playing = false) {
+      adapter.reconcile(tree, playing);
       if (tree.background) {
         host.setBackground(oklchToHex(tree.background), tree.background.alpha ?? 1);
       }

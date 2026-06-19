@@ -19,12 +19,18 @@ function makeImageSource(id: string, dispose: () => void = () => {}): MediaTextu
 }
 
 function makeVideoSource(id: string, seek: (frame: number, fps: number) => Promise<void>): MediaTextureSource {
+  const element = {
+    currentTime: 0,
+    paused: true,
+    pause: vi.fn(),
+    play: vi.fn(async () => {}),
+  } as unknown as HTMLVideoElement;
   return {
     kind: "video",
     assetId: id,
     width: 10,
     height: 10,
-    element: {} as unknown as HTMLVideoElement,
+    element,
     seek,
     currentFrame: () => ({}) as unknown as CanvasImageSource,
     dispose: () => {},
@@ -89,7 +95,7 @@ describe("TextureManager", () => {
     expect(dispose3).not.toHaveBeenCalled();
   });
 
-  it("seeks the video source and marks the texture for re-upload on frame change", async () => {
+  it("seeks (via seek()) when the requested frame is far from the element's current position — scrubbing, loop, clip skip", async () => {
     const asset: MediaAssetRef = { id: "v1", kind: "video", url: "blob:v1" };
     const seek = vi.fn(async () => {});
     const source = makeVideoSource("v1", seek);
@@ -106,14 +112,47 @@ describe("TextureManager", () => {
       }
     );
 
+    // First call to populate the cache (frame 0, element also at 0 — no seek expected here)
     manager.get({ assetId: "v1", frame: 0 }, 30);
     await flush();
 
     const updateSpy = vi.spyOn(texture!.source, "update");
+    // Large jump: element.currentTime=0, requesting frame 30 (1s away) — seek should fire
     manager.get({ assetId: "v1", frame: 30 }, 30);
     await flush();
 
     expect(seek).toHaveBeenCalledWith(30, 30);
+    expect(updateSpy).toHaveBeenCalled();
+  });
+
+  it("does NOT seek during sequential playback (element already close to target frame) — just updates the GPU texture", async () => {
+    const asset: MediaAssetRef = { id: "v2", kind: "video", url: "blob:v2" };
+    const seek = vi.fn(async () => {});
+    const source = makeVideoSource("v2", seek);
+    // Simulate the element already being at the right position (currentTime matches frame 1 at 30fps exactly)
+    (source as unknown as { element: { currentTime: number } }).element.currentTime = 1 / 30;
+    let texture: Texture | undefined;
+
+    const manager = new TextureManager(
+      { resolveAsset: () => asset },
+      {
+        loadTexture: async () => source,
+        createTexture: () => {
+          texture = makeTexture();
+          return texture;
+        },
+      }
+    );
+
+    manager.get({ assetId: "v2", frame: 0 }, 30);
+    await flush();
+
+    const updateSpy = vi.spyOn(texture!.source, "update");
+    // Sequential: element.currentTime=1/30, requesting frame 1 — within tolerance, no seek
+    manager.get({ assetId: "v2", frame: 1 }, 30);
+    await flush();
+
+    expect(seek).not.toHaveBeenCalled();
     expect(updateSpy).toHaveBeenCalled();
   });
 

@@ -187,6 +187,7 @@ export function Viewport() {
   useEffect(() => {
     let raf = 0;
     let last: number | null = null;
+    let fractional = 0; // sub-frame accumulator — elapsed is fractional at 60fps (~0.5 frames/tick at 30fps); discarding it every tick via Math.trunc meant the playhead never advanced past 0 until a GC pause caused a single long tick.
 
     const tick = (now: number): void => {
       const comp = activeComp(store.getState());
@@ -194,12 +195,18 @@ export function Viewport() {
       if (store.getState().playing) {
         if (last !== null) {
           const elapsed = ((now - last) / 1000) * comp.fps;
-          const next = store.getState().playhead + elapsed;
-          store.getState().setPlayhead(toFrame(next >= comp.duration ? 0 : next));
+          fractional += elapsed;
+          const advance = Math.trunc(fractional);
+          if (advance >= 1) {
+            fractional -= advance;
+            const next = store.getState().playhead + advance;
+            store.getState().setPlayhead(toFrame(next >= comp.duration ? 0 : next));
+          }
         }
         last = now;
       } else {
         last = null;
+        fractional = 0;
       }
 
       const renderer = rendererRef.current;

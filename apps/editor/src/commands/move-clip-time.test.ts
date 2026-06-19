@@ -5,7 +5,7 @@ import type { Json } from "core";
 import { createBlankProject } from "../bootstrap/create-project";
 import { createRegistry } from "../bootstrap/register-kinds";
 import { appendNodeOp } from "./add-node";
-import { moveClipOp, trimClipOp } from "./move-clip-time";
+import { calcCompDuration, moveClipOp, setCompDurationOp, trimClipOp } from "./move-clip-time";
 
 function setupCompWithOneShape() {
   const project = createBlankProject();
@@ -109,5 +109,54 @@ describe("trimClipOp", () => {
   it("throws for an unknown node id", () => {
     const { comp } = setupCompWithOneShape();
     expect(() => trimClipOp(comp, "nonexistent" as never, 0, 10)).toThrow();
+  });
+});
+
+describe("calcCompDuration", () => {
+  it("returns 1 for a comp with no clips", () => {
+    const project = createBlankProject();
+    const comp = project.comps[project.rootCompId];
+    expect(calcCompDuration(comp)).toBe(1);
+  });
+
+  it("returns the end frame of the furthest clip (start + duration)", () => {
+    const { comp, nodeId } = setupCompWithOneShape();
+    const moved = applyOp(comp, moveClipOp(comp, nodeId, 100));
+    const trimmed = applyOp(moved, trimClipOp(moved, nodeId, 100, 50));
+    expect(calcCompDuration(trimmed)).toBe(150); // 100 + 50
+  });
+
+  it("accounts for ALL clips, not just the last in z-order", () => {
+    const project = createBlankProject();
+    const registry = createRegistry();
+    const comp0 = project.comps[project.rootCompId];
+    const w1 = applyOp(comp0, appendNodeOp(comp0, registry, "shape"));
+    const comp = applyOp(w1, appendNodeOp(w1, registry, "shape"));
+    // move second clip to start at 200, first stays at 0 with default duration 150
+    const moved = applyOp(comp, moveClipOp(comp, comp.root[1].id, 200));
+    // calcCompDuration should return 200 + 150 = 350, driven by the second clip
+    expect(calcCompDuration(moved)).toBe(350);
+  });
+});
+
+describe("setCompDurationOp", () => {
+  it("sets comp.duration to the given value", () => {
+    const { comp } = setupCompWithOneShape();
+    const next = applyOp(comp, setCompDurationOp(comp, 300));
+    expect(next.duration).toBe(300);
+  });
+
+  it("floors at 1 (never zero)", () => {
+    const { comp } = setupCompWithOneShape();
+    const next = applyOp(comp, setCompDurationOp(comp, 0));
+    expect(next.duration).toBe(1);
+  });
+
+  it("invertOp restores the original duration", () => {
+    const { comp } = setupCompWithOneShape();
+    const op = setCompDurationOp(comp, 300);
+    const extended = applyOp(comp, op);
+    const restored = applyOp(extended, invertOp(op));
+    expect(restored.duration).toBe(comp.duration);
   });
 });

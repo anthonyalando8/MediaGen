@@ -29,7 +29,7 @@
 import { useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Id, Node } from "core";
-import { moveClipOp, trimClipOp } from "../commands/move-clip-time";
+import { moveClipOp, trimClipOp, calcCompDuration, setCompDurationOp } from "../commands/move-clip-time";
 import { getKindIcon } from "./kind-icons";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
@@ -114,6 +114,12 @@ function ClipBar({
         state.apply(moveClipOp(comp, node.id, lastStart));
       } else {
         state.apply(trimClipOp(comp, node.id, lastStart, lastDuration));
+      }
+      // Auto-extend or shrink comp.duration to cover all clip ends.
+      const afterComp = activeComp(store.getState());
+      const needed = calcCompDuration(afterComp);
+      if (needed !== (afterComp.duration as number)) {
+        store.getState().apply(setCompDurationOp(afterComp, needed));
       }
     }
 

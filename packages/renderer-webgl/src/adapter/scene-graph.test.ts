@@ -659,4 +659,30 @@ describe("SceneGraphAdapter — transitionGroup (Phase 2 §5/§13 acceptance tes
     const secondTarget = renderSpy.mock.calls[1][0].target;
     expect(firstTarget).toBe(secondTarget); // same RenderTexture instance reused, not recreated.
   });
+
+  it("REGRESSION (found via manual browser testing): the FROM container's filterArea is forced to the FULL comp size, not left to Pixi's default bounds-auto-fit — without this, a small shape's filter input gets sized to its OWN small bounding box while uTo is comp-sized, so vTextureCoord samples uTo through the wrong region (effectively invisible/transparent for most of the frame)", () => {
+    const fakeRenderer = { render: vi.fn() } as unknown as import("pixi.js").Renderer;
+    const adapter = new SceneGraphAdapter(makeTextureManager(), () => fakeRenderer);
+    // A deliberately small shape (10x10, see shapeNode) inside a much larger comp —
+    // exactly the case that broke: the shape's own bounds are tiny relative to the comp.
+    adapter.reconcile({ size: { width: 1080, height: 1920 }, nodes: [transitionGroupNode("t1", shapeNode("a"), shapeNode("b"))] });
+
+    const display = adapter.root.children[0] as Container;
+    expect(display.filterArea).toBeDefined();
+    expect(display.filterArea?.width).toBe(1080);
+    expect(display.filterArea?.height).toBe(1920);
+  });
+
+  it("filterArea stays in sync with the comp size across reconciles (e.g. a composition resize)", () => {
+    const fakeRenderer = { render: vi.fn() } as unknown as import("pixi.js").Renderer;
+    const adapter = new SceneGraphAdapter(makeTextureManager(), () => fakeRenderer);
+    const group = transitionGroupNode("t1", shapeNode("a"), shapeNode("b"));
+
+    adapter.reconcile({ size: { width: 1080, height: 1920 }, nodes: [group] });
+    adapter.reconcile({ size: { width: 640, height: 480 }, nodes: [group] });
+
+    const display = adapter.root.children[0] as Container;
+    expect(display.filterArea?.width).toBe(640);
+    expect(display.filterArea?.height).toBe(480);
+  });
 });

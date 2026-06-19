@@ -5,16 +5,11 @@ import { imageKind } from "./image";
 import { videoKind } from "./video";
 import { textKind } from "./text";
 import { shapeKind } from "./shape";
+import { nullKind } from "./null";
 
-/** All five Phase 1 NodeKinds, in registration order. */
-export const builtinKinds = [groupKind, imageKind, videoKind, textKind, shapeKind] as const;
+/** All Phase 1 + Phase 2 §4.4 NodeKinds, in registration order. */
+export const builtinKinds = [groupKind, imageKind, videoKind, textKind, shapeKind, nullKind] as const;
 
-/**
- * Registers every Phase 1 NodeKind into `reg`. Called once at bootstrap
- * (apps/editor/src/bootstrap/register-kinds.ts, and again in the render
- * worker) — see the "bootstrap, not global singleton" note on
- * NodeKindRegistry.
- */
 export function registerBuiltins(reg: NodeKindRegistry): void {
   for (const kind of builtinKinds) {
     reg.register(kind);

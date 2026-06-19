@@ -1,7 +1,8 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, MousePointer2, Redo2, Square, Trash2, Type, Undo2, Ungroup, Waves } from "lucide-react";
+import { Group, MousePointer2, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup, Waves } from "lucide-react";
 import type { Id, NodeKindId } from "core";
-import { addNode } from "../commands/add-node";
+import { addNode, appendNodeOp } from "../commands/add-node";
+import { setNodeProp } from "../commands/set-node-prop";
 import { groupNodes } from "../commands/group-nodes";
 import { ungroupNode } from "../commands/ungroup-node";
 import { useRegistry } from "../bootstrap/registry-context";
@@ -14,6 +15,7 @@ const ADDABLE_KINDS: { kind: NodeKindId; label: string; icon: typeof Square }[] 
   { kind: "shape", label: "Shape", icon: Square },
   { kind: "text", label: "Text", icon: Type },
   { kind: "group", label: "Group", icon: Group },
+  { kind: "null", label: "Null", icon: MousePointer2 },
 ];
 
 const TOOLS: { tool: Tool; label: string; icon: typeof Square }[] = [
@@ -40,6 +42,11 @@ export function Toolbar() {
   function handleAdd(kind: NodeKindId): void {
     const state = store.getState();
     state.apply(addNode(activeComp(state), registry, kind));
+  }
+
+  function handleAddAdjustment(): void {
+    const state = store.getState();
+    state.apply(appendNodeOp(activeComp(state), registry, "shape", { isAdjustment: true, name: "Adjustment" }));
   }
 
   function handleGroup(): void {
@@ -79,6 +86,10 @@ export function Toolbar() {
             {label}
           </button>
         ))}
+        <button className="btn" title="Add Adjustment Layer" onClick={handleAddAdjustment}>
+          <Sliders size={ICON_SIZE} />
+          Adj
+        </button>
       </div>
 
       <button className="btn" disabled={selection.length < 2} onClick={handleGroup} title="Group the selected layers">

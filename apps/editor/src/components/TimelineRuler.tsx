@@ -20,6 +20,14 @@ export function TimelineRuler({ pixelsPerFrame }: { pixelsPerFrame: number }) {
   const store = useEditorStoreApi();
   const playhead = useEditorStore((s) => s.playhead);
   const duration = useEditorStore((s) => activeComp(s).duration);
+  const visibleDuration = useEditorStore((s) => {
+    const comp = activeComp(s);
+    const maxEnd = comp.root.reduce(
+      (max, n) => Math.max(max, (n.time.start as number) + (n.time.duration as number)),
+      comp.duration as number
+    );
+    return Math.max(comp.duration as number, maxEnd);
+  });
   const rulerRef = useRef<HTMLDivElement>(null);
 
   function frameAtClientX(clientX: number): number {
@@ -27,7 +35,7 @@ export function TimelineRuler({ pixelsPerFrame }: { pixelsPerFrame: number }) {
     if (!rect) return 0;
     const px = clientX - rect.left;
     const frame = Math.round(px / pixelsPerFrame);
-    return Math.min(Math.max(0, frame), Math.max(0, duration - 1));
+    return Math.min(Math.max(0, frame), Math.max(0, visibleDuration - 1));
   }
 
   function handlePointerDown(e: ReactPointerEvent): void {
@@ -46,16 +54,18 @@ export function TimelineRuler({ pixelsPerFrame }: { pixelsPerFrame: number }) {
   }
 
   const ticks: number[] = [];
-  for (let f = 0; f <= duration; f += TICK_INTERVAL_FRAMES) ticks.push(f);
+  for (let f = 0; f <= visibleDuration; f += TICK_INTERVAL_FRAMES) ticks.push(f);
 
   return (
-    <div ref={rulerRef} className="timeline-ruler" style={{ width: duration * pixelsPerFrame }} onPointerDown={handlePointerDown}>
+    <div ref={rulerRef} className="timeline-ruler" style={{ width: visibleDuration * pixelsPerFrame }} onPointerDown={handlePointerDown}>
       {ticks.map((f) => (
         <div key={f} className="timeline-ruler__tick" style={{ left: f * pixelsPerFrame }}>
           <span className="timeline-ruler__tick-label">{f}</span>
         </div>
       ))}
-      <div className="timeline-ruler__playhead" style={{ left: playhead * pixelsPerFrame }} />
+      {/* comp.duration end marker — shows the playback loop boundary, which may be shorter than the visible ruler when clips extend past it before auto-extending on pointer-up */}
+      <div className="timeline-ruler__end-marker" style={{ left: (duration as number) * pixelsPerFrame }} />
+      <div className="timeline-ruler__playhead" style={{ left: (playhead as number) * pixelsPerFrame }} />
     </div>
   );
 }

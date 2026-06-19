@@ -46,7 +46,7 @@
 // unaffected — `out` returns exactly as it would have in Phase 1.
 
 import type { BlendMode, Mat3 } from "../types/primitives";
-import type { Frame } from "../types/ids";
+import type { Frame, Id } from "../types/ids";
 import type { Node, Scalar } from "../types/node";
 import type { EvalCtx } from "../registry/node-kind";
 import type { NodeKindRegistry } from "../registry/registry";
@@ -56,6 +56,7 @@ import { sampleChannels } from "./sample-channels";
 import { sampleEffectProps } from "./sample-effects";
 import { composeTransform, IDENTITY, mul } from "./compose-transform";
 import { applyTransitions } from "./transitions";
+import { applyAdjustments } from "./adjustments";
 
 export function evaluateNode(
   node: Node,
@@ -63,12 +64,22 @@ export function evaluateNode(
   parentMat: Mat3,
   reg: NodeKindRegistry,
   ctx: EvalCtx,
-  parentOpacity = 1
+  parentOpacity = 1,
+  parentMatrices: Map<Id, Mat3> = new Map()
 ): RenderNode[] {
   if (node.hidden || !inSpan(node.time, frame)) return []; // time gate
 
   const sampled = sampleChannels(node, frame); // static ⊕ channels
-  const world = mul(parentMat, composeTransform(sampled.transform));
+  const localMat = composeTransform(sampled.transform);
+
+  // parentId overrides the call-stack parentMat — a parented node's world
+  // matrix is built from its NAMED parent's pre-computed world matrix, not
+  // from its tree position's parentMat. Only affects nodes with parentId set;
+  // all others continue using the call-stack parentMat unchanged (zero cost
+  // for Phase 1 documents).
+  const effectiveParentMat = node.parentId ? (parentMatrices.get(node.parentId) ?? IDENTITY) : parentMat;
+
+  const world = mul(effectiveParentMat, localMat);
   const opacity = parentOpacity * sampled.opacity;
   const out = reg.get(node.kind).render({ ...node, ...sampled }, frame, ctx);
   applyWorld(out, world, opacity, node.blend); // stamp matrix/opacity/blend
@@ -85,13 +96,13 @@ export function evaluateNode(
   // keeps the exact pre-Phase-2 behavior.
   const alreadyConsumedChildren = out.some((n) => n.t === "effectGroup");
   if (node.children && !alreadyConsumedChildren) {
-    // Each child evaluated independently first (kept as an array of
-    // arrays — see applyTransitions's doc on why), THEN
-    // transitions among z-order-adjacent children are resolved, exactly
-    // like evaluate-composition.ts does for comp.root — a transition
-    // works at any nesting level, not just between top-level siblings.
-    const perChild = node.children.map((c) => evaluateNode(c, frame, world, reg, ctx, opacity));
-    out.push(...applyTransitions(node.children, perChild, frame));
+    const perChild = node.children.map((c) => evaluateNode(c, frame, world, reg, ctx, opacity, parentMatrices));
+    const hasChildAdjustments = node.children.some((c) => c.isAdjustment);
+    if (hasChildAdjustments) {
+      out.push(...applyAdjustments(node.children, perChild, frame));
+    } else {
+      out.push(...applyTransitions(node.children, perChild, frame));
+    }
   }
 
   const passes = effectPasses(node, frame);
@@ -142,7 +153,8 @@ function applyWorld(out: RenderNode[], world: Mat3, opacity: number, blend: Blen
  * 0), which still gets a real pass (cheap for "identity"-like values, and
  * keeps "enabled" the one authoritative on/off switch a user toggles).
  */
-function effectPasses(node: Node, frame: Frame): PassSpec[] {
+/** Exported for use by applyAdjustments (adjustments.ts) — same sampling logic applies when an adjustment node's effects wrap siblings below it. */
+export function effectPasses(node: Node, frame: Frame): PassSpec[] {
   if (!node.effects) return [];
   return node.effects
     .filter((ref) => ref.enabled)

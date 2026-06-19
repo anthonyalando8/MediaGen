@@ -3,7 +3,7 @@
 // "Resolve TexRef → Pixi Texture via media; LRU cache; video frame upload"
 // (Deliverable 08).
 
-import { Texture } from "pixi.js";
+import { Texture, VideoSource } from "pixi.js";
 import { loadTexture as defaultLoadTexture } from "media";
 import type { MediaAssetRef, TextureSource as MediaTextureSource } from "media";
 import type { TexRef } from "contract";
@@ -21,7 +21,16 @@ export interface MediaService {
 }
 
 function defaultCreateTexture(source: MediaTextureSource): Texture {
-  return source.kind === "image" ? Texture.from(source.bitmap) : Texture.from(source.element);
+  if (source.kind === "video") {
+    // `Texture.from(videoElement)` creates a VideoSource with `autoPlay: true`
+    // by default — Pixi's VideoSource calls `element.play()` immediately,
+    // starting the video independently of the timeline. Instead, construct the
+    // VideoSource explicitly with `autoPlay: false` so the timeline is the
+    // single source of truth for playback state (Viewport.tsx's RAF loop drives
+    // playhead; TextureManager.get drives seeks/play/pause from there).
+    return new Texture(new VideoSource({ resource: source.element, autoPlay: false }));
+  }
+  return Texture.from(source.bitmap);
 }
 
 export interface TextureManagerOptions {
@@ -62,8 +71,21 @@ export class TextureManager {
    * yet, kicks off an async load (deduped by assetId) and returns
    * `Texture.EMPTY` — the next `render()` call (the editor's RAF loop
    * re-renders every frame, Deliverable 09) will pick up the real texture
-   * once it resolves. For video assets with `tex.frame` set, seeks the
-   * underlying element to that frame and marks the texture for re-upload.
+   * once it resolves. For video assets with `tex.frame` set, drives
+   * playback via one of two paths:
+   *
+   * 1. SEQUENTIAL PLAYBACK (frame is close to the element's current decoded
+   *    position): the element is already playing naturally at the right rate;
+   *    just push the latest decoded frame to the GPU via `texture.source.update()`
+   *    without touching `currentTime`. Calling `seek()` every RAF tick at 60fps
+   *    fires a codec seek every ~16ms, stacking up `seeked` event handlers and
+   *    causing ~1s freezes at clip/loop boundaries (the decoder can't keep up).
+   *
+   * 2. LARGE JUMP (scrubbing, loop restart, clip skip): the element's current
+   *    decoded position differs from the requested frame by more than a small
+   *    tolerance, so a real codec seek is needed. The element is paused before
+   *    seeking and resumed after (or left paused if the store says not playing)
+   *    to avoid the browser fighting between the seek and its own natural playback.
    *
    * A load that REJECTS (decode error, unresolvable asset, network
    * failure) is logged once via `console.error` and remembered in
@@ -73,12 +95,31 @@ export class TextureManager {
    * `failed`, `get()` would retry the same failing load every frame
    * (~60/s), spamming the console.
    */
-  get(tex: TexRef, fps: number): Texture {
+  get(tex: TexRef, fps: number, playing = false): Texture {
     const entry = this.cache.get(tex.assetId);
     if (entry) {
       entry.lastUsed = ++this.clock;
       if (entry.source.kind === "video" && tex.frame !== undefined) {
-        void entry.source.seek(tex.frame, fps).then(() => entry.texture.source.update());
+        const el = entry.source.element;
+        const targetTime = tex.frame / fps;
+        const halfFrame = 1 / (fps * 2);
+        const delta = Math.abs(el.currentTime - targetTime);
+        // SEQUENTIAL PLAYBACK: element is already close to the right position —
+        // let it play naturally, just push the decoded frame to the GPU.
+        if (delta <= halfFrame * 4) {
+          if (playing && el.paused) void el.play();
+          else if (!playing && !el.paused) el.pause();
+          entry.texture.source.update();
+        } else {
+          // LARGE JUMP (scrubbing/loop/skip): pause first so the browser isn't
+          // fighting between the seek and its own natural playback advance, then
+          // seek, then resume if the timeline is playing.
+          el.pause();
+          void entry.source.seek(tex.frame, fps).then(() => {
+            entry.texture.source.update();
+            if (playing) void el.play();
+          });
+        }
       }
       return entry.texture;
     }

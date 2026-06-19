@@ -45,3 +45,24 @@ export function trimClipOp(comp: Composition, nodeId: Id, newStart: number, newD
     txn: createId(),
   });
 }
+
+/** The minimum `comp.duration` that covers all clips' end frames — used by TimelineTrack after a move/trim to auto-extend (or shrink) the composition's playback duration so it always matches the actual content. A composition with no clips returns `toFrame(1)` (never zero — the playback loop divides by duration). */
+export function calcCompDuration(comp: Composition): number {
+  if (comp.root.length === 0) return 1;
+  return Math.max(
+    1,
+    ...comp.root.map((n) => (n.time.start as number) + (n.time.duration as number))
+  );
+}
+
+/** Sets `comp.duration` directly — emitted after a move/trim op when the new clip end extends beyond (or allows shrinking of) the current comp duration. Fully undoable via the same op-log as every other change. */
+export function setCompDurationOp(comp: Composition, newDuration: number): Op {
+  return createOp({
+    type: "set",
+    compId: comp.id,
+    path: "/duration",
+    before: comp.duration as unknown as Json,
+    after: Math.max(1, newDuration) as unknown as Json,
+    txn: createId(),
+  });
+}

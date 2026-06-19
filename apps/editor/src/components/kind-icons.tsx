@@ -6,7 +6,7 @@
 // kinds fall back to `Boxes` rather than rendering nothing, so a future
 // NodeKind (gate 12.1's "6th NodeKind") still gets an icon for free.
 
-import { Boxes, Group, Image, Square, Type, Video } from "lucide-react";
+import { Boxes, Group, Image, MousePointer2, Square, Type, Video } from "lucide-react";
 import type { NodeKindId } from "core";
 
 const KIND_ICONS: Record<string, typeof Square> = {
@@ -15,6 +15,7 @@ const KIND_ICONS: Record<string, typeof Square> = {
   group: Group,
   image: Image,
   video: Video,
+  null: MousePointer2,
 };
 
 export function getKindIcon(kind: NodeKindId): typeof Square {

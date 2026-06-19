@@ -21,11 +21,11 @@ const ctx: EvalCtx = {
 const PLACEHOLDER_MATRIX = [1, 0, 0, 0, 1, 0, 0, 0, 1];
 
 describe("registerBuiltins", () => {
-  it("registers all five Phase 1 kinds without collision", () => {
+  it("registers all Phase 1 + Phase 2 §4.4 kinds without collision", () => {
     const reg = new NodeKindRegistry();
     registerBuiltins(reg);
-    expect(reg.list()).toHaveLength(5);
-    expect(builtinKinds.map((k) => k.kind).sort()).toEqual(["group", "image", "shape", "text", "video"]);
+    expect(reg.list()).toHaveLength(6);
+    expect(builtinKinds.map((k) => k.kind).sort()).toEqual(["group", "image", "null", "shape", "text", "video"]);
     for (const kind of builtinKinds) {
       expect(reg.get(kind.kind)).toBe(kind);
     }

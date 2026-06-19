@@ -25,6 +25,7 @@ import { activeComp } from "../store/selectors";
 import { getKindIcon } from "./kind-icons";
 import { EffectStackPanel } from "./EffectStackPanel";
 import { TransitionPanel } from "./TransitionPanel";
+import { ParentPicker } from "./ParentPicker";
 import { FieldRow, Section } from "./inspector-fields";
 export { FieldControl, FieldRow } from "./inspector-fields";
 
@@ -130,6 +131,17 @@ export function InspectorPanel() {
         )}
         <EffectStackPanel node={node} />
         <TransitionPanel node={node} root={root} />
+        <ParentPicker node={node} root={root} />
+        <Section title="Layer">
+          <label className="inspector-checkbox-row">
+            <input
+              type="checkbox"
+              checked={Boolean(node.isAdjustment)}
+              onChange={(e) => handleChange("isAdjustment", e.target.checked)}
+            />
+            Adjustment layer (effects apply to layers below)
+          </label>
+        </Section>
       </div>
     </div>
   );

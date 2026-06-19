@@ -4,7 +4,7 @@
 // (keyed diff)" (Deliverable 08). NO domain types cross this boundary —
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
-import { Container, Graphics, RenderTexture, Sprite, Text } from "pixi.js";
+import { Container, Graphics, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
 import type { Renderer } from "pixi.js";
 import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
@@ -96,6 +96,9 @@ export class SceneGraphAdapter {
   /** `tree.size` from the most recent `reconcile()` call — needed to size a "transitionGroup"'s render-textures correctly (reconcileTransitionGroup). Defaults to a harmless placeholder before the first reconcile. */
   private compSize = { width: 1, height: 1 };
 
+  /** Whether the timeline is currently playing — passed down to `textures.get()` so video elements play naturally during playback rather than being seek-driven every frame. */
+  private playing = false;
+
   constructor(
     private readonly textures: TextureManager,
     private readonly getRenderer: () => Renderer | undefined = () => undefined,
@@ -108,8 +111,9 @@ export class SceneGraphAdapter {
     this.fps = fps;
   }
 
-  reconcile(tree: RenderTree): void {
+  reconcile(tree: RenderTree, playing = false): void {
     this.compSize = tree.size;
+    this.playing = playing;
     this.reconcileChildren(this.root, tree.nodes, this.level);
   }
 
@@ -357,6 +361,28 @@ export class SceneGraphAdapter {
     this.reconcileChildren(state.toContainer, [node.to], state.toLevel);
     this.reconcileChildren(container, [node.from], state.fromLevel);
 
+    // CRITICAL — without this, Pixi's default filter-bounds behavior
+    // (FilterSystem.mjs's `_calculateFilterArea`: no `filterArea` set ->
+    // `getGlobalRenderableBounds`/`getFastGlobalBounds`) sizes the
+    // filter's OWN input texture (and the `uOutputFrame`/`uInputSize`
+    // uniforms DEFAULT_VERTEX derives `vTextureCoord` from) to the FROM
+    // content's own rendered bounding box — e.g. a single 200x200 shape,
+    // NOT the full composition. `uTo` (this.compSize-sized, built
+    // independently above) and `uFrom` (Pixi's implicit input) would then
+    // be sampled with the SAME `vTextureCoord` but represent two
+    // DIFFERENT coordinate spaces — `uTo` ends up sampled through a tiny
+    // sliver of itself, reading transparent/garbage pixels for most of
+    // the frame. This is the actual cause of a transitioning shape
+    // rendering as fully invisible once a real overlap existed (only
+    // reachable with a real GPU — the headless mocked-renderer tests
+    // never executed Pixi's actual bounds-fitting code, so this never
+    // surfaced until manual browser testing). Fixing the filter's input
+    // area to the WHOLE comp guarantees `vTextureCoord` is in the same
+    // comp-pixel space for both samplers, matching the convention every
+    // transition's own GLSL already assumes (`uFrom`/`uTo` sampled at the
+    // SAME `vTextureCoord` — dip.ts/wipe.ts/etc.).
+    container.filterArea = new Rectangle(0, 0, this.compSize.width, this.compSize.height);
+
     const renderer = this.getRenderer();
     if (!renderer) {
       // GPU context not ready yet (canvas-host.ts's async-init doc) —
@@ -374,7 +400,7 @@ export class SceneGraphAdapter {
 
   private updateSprite(container: Container, node: Extract<RenderNode, { t: "image" | "video" }>): void {
     const sprite = container.children[0] as Sprite;
-    const texture = this.textures.get(node.tex, this.fps);
+    const texture = this.textures.get(node.tex, this.fps, this.playing);
     if (sprite.texture !== texture) sprite.texture = texture;
 
     // Sizes/positions the INNER sprite to `node.box` (its local-space
