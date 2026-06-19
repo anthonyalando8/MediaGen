@@ -37,6 +37,8 @@ import { Filter, GlProgram } from "pixi.js";
 import type { Json, PassSpec } from "contract";
 import { EffectRegistry, registerBuiltinEffects } from "effects";
 import type { EffectDef } from "effects";
+import { buildMatteFilter } from "./matte-pass";
+import type { MatteType } from "./matte-pass";
 
 /**
  * Pixi's own default filter vertex shader, verbatim — handles the
@@ -261,7 +263,7 @@ function directionForPass(index: number, passCount: number): { value: [number, n
  * input automatically (the same mechanism Pixi's own bundled multi-pass
  * filters rely on).
  */
-export function resolvePass(pass: PassSpec): Filter[] {
+export function resolvePass(pass: PassSpec, getMatteTexture?: (srcNodeId: string) => import("pixi.js").Texture | undefined): Filter[] {
   if (pass.ref === "identity") {
     const program = getIdentityProgram();
     return program ? [new Filter({ glProgram: program, resources: {} })] : [];
@@ -269,7 +271,12 @@ export function resolvePass(pass: PassSpec): Filter[] {
   if (pass.kind === "effect") {
     return buildEffectFilters(pass);
   }
-  // Week 3-4: "transition" passes need a two-texture pass mechanism not yet built — see module doc.
-  // Week 5-6: "mask" / "matte" / "adjustment" passes.
+  if (pass.kind === "matte" && pass.srcNodeId && getMatteTexture) {
+    const tex = getMatteTexture(pass.srcNodeId);
+    if (!tex) return []; // source not rendered yet — degrade gracefully (next frame will pick it up)
+    const type = (pass.uniforms as { type?: string }).type ?? "alpha";
+    const filter = buildMatteFilter(type as import("./matte-pass").MatteType, tex);
+    return filter ? [filter] : [];
+  }
   return [];
 }

@@ -368,7 +368,7 @@ describe("SceneGraphAdapter — effectGroup (Phase 2 §5, Week 1-2)", () => {
     try {
       adapter.reconcile(tree([group]));
 
-      expect(spy).toHaveBeenCalledWith(passSpec);
+      expect(spy).toHaveBeenCalledWith(passSpec, expect.any(Function));
       const groupDisplay = adapter.root.children[0] as Container;
       // a non-empty `filters` array is exactly what makes Pixi render this
       // Container's subtree to a pooled texture FIRST, then composite that

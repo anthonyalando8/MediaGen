@@ -155,10 +155,50 @@ function applyWorld(out: RenderNode[], world: Mat3, opacity: number, blend: Blen
  */
 /** Exported for use by applyAdjustments (adjustments.ts) — same sampling logic applies when an adjustment node's effects wrap siblings below it. */
 export function effectPasses(node: Node, frame: Frame): PassSpec[] {
-  if (!node.effects) return [];
-  return node.effects
-    .filter((ref) => ref.enabled)
-    .map((ref) => ({ kind: "effect" as const, ref: ref.effect, uniforms: toJsonUniforms(sampleEffectProps(ref, frame)) }));
+  const passes: PassSpec[] = [];
+
+  // ORDER per blueprint Deliverable 07: masks → matte → effects.
+
+  // MASKS — node.masks[]: bezier paths, add/sub/intersect, feather.
+  if (node.masks) {
+    for (const mask of node.masks) {
+      passes.push({
+        kind: "mask",
+        ref: "mask",
+        uniforms: {
+          path: mask.path as unknown as PassSpec["uniforms"],
+          feather: mask.feather,
+          mode: mask.mode,
+          opacity: mask.opacity,
+          inverted: mask.inverted,
+        } as PassSpec["uniforms"],
+      });
+    }
+  }
+
+  // MATTE — node.matte: a sibling's alpha/luma stencils this node.
+  if (node.matte) {
+    passes.push({
+      kind: "matte",
+      ref: "matte",
+      uniforms: { type: node.matte.type } as PassSpec["uniforms"],
+      srcNodeId: node.matte.sourceNodeId,
+    });
+  }
+
+  // EFFECTS — ordered stack of compositor effects.
+  if (node.effects) {
+    for (const ref of node.effects) {
+      if (!ref.enabled) continue;
+      passes.push({
+        kind: "effect",
+        ref: ref.effect,
+        uniforms: toJsonUniforms(sampleEffectProps(ref, frame)),
+      });
+    }
+  }
+
+  return passes;
 }
 
 /**

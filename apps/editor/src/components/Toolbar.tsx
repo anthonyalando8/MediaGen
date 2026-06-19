@@ -1,5 +1,5 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, MousePointer2, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup, Waves } from "lucide-react";
+import { Group, MousePointer2, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup, Waves } from "lucide-react";
 import type { Id, NodeKindId } from "core";
 import { addNode, appendNodeOp } from "../commands/add-node";
 import { setNodeProp } from "../commands/set-node-prop";
@@ -114,6 +114,15 @@ export function Toolbar() {
             <Icon size={ICON_SIZE} />
           </button>
         ))}
+        <button
+          className="btn btn-icon"
+          aria-pressed={tool === "mask"}
+          title="Mask pen tool (M)"
+          disabled={selection.length === 0}
+          onClick={() => store.getState().setTool(tool === "mask" ? "select" : "mask")}
+        >
+          <PenLine size={ICON_SIZE} />
+        </button>
       </div>
 
       <span className="toolbar__spacer" />

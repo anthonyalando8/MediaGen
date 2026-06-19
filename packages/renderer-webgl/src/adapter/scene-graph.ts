@@ -12,6 +12,8 @@ import { toPixiMatrix } from "../matrix";
 import type { TextureManager } from "../textures/manager";
 import { resolvePass } from "../passes/pass-resolver";
 import { resolveTransitionFilter } from "../passes/transition-resolver";
+import { buildMaskFilter } from "../passes/mask-pass";
+import type { MaskSpec } from "../passes/mask-pass";
 
 type Display = Container;
 
@@ -38,6 +40,10 @@ interface LevelState {
   groups: Map<string, LevelState>;
   /** Per-id "transitionGroup" state — see TransitionGroupState's doc. Threaded through the recursion exactly like `groups`, for the identical id-scoping reason (LevelState's own doc). */
   transitionGroups: Map<string, TransitionGroupState>;
+  /** Offscreen RenderTextures for matte sources, keyed by "${effectGroupId}:${srcNodeId}". Created lazily when a matte pass resolves; destroyed when the effectGroup is torn down. */
+  matteTextures?: Map<string, RenderTexture>;
+  /** Offscreen Canvas2D elements for mask rasterisation, keyed by effectGroup node id. Reused across frames for efficiency. */
+  maskCanvases?: Map<string, HTMLCanvasElement>;
 }
 
 /** An effectGroup's own nested reconciliation state — structurally identical to a LevelState (a group IS a level), kept as a named alias for readability at call sites that specifically mean "one group's state." */
@@ -178,13 +184,16 @@ export class SceneGraphAdapter {
   private destroyDisplay(id: string, display: Display, level: LevelState): void {
     const group = level.groups.get(id);
     if (group) {
-      // Recursively tear down the nested level FIRST — its own children's
-      // displays are children of `display` (this group's Container) and
-      // would otherwise be destroyed redundantly/in an undefined order by
-      // the outer `display.destroy({children:true})` below.
       for (const [childId, childDisplay] of [...group.displays]) {
         this.destroyDisplay(childId, childDisplay, group);
       }
+      // Destroy any matte textures this effectGroup owned
+      if (group.matteTextures) {
+        for (const tex of group.matteTextures.values()) tex.destroy(true);
+        group.matteTextures.clear();
+      }
+      // Release any mask rasterisation canvases
+      if (group.maskCanvases) group.maskCanvases.clear();
       level.groups.delete(id);
     }
     const transitionGroup = level.transitionGroups.get(id);
@@ -310,8 +319,81 @@ export class SceneGraphAdapter {
 
     this.reconcileChildren(container, node.children, group);
 
-    const filters = node.passes.flatMap((pass) => resolvePass(pass));
-    container.filters = filters;
+    // For matte passes: render the source node's display into an offscreen
+    // RenderTexture so the matte shader can sample it. The source display
+    // lives in the PARENT level (a sibling, per blueprint §4.2 "sibling's
+    // alpha/luma stencils this node"). Degrades gracefully if the renderer
+    // isn't ready yet or the source id is unknown — same "next frame picks
+    // it up" tolerance as transitionGroup.
+    const mattePasses = node.passes.filter((p) => p.kind === "matte" && p.srcNodeId);
+    if (mattePasses.length > 0) {
+      if (!parentLevel.matteTextures) parentLevel.matteTextures = new Map();
+    }
+
+    const getMatteTexture = (srcNodeId: string): import("pixi.js").Texture | undefined => {
+      const renderer = this.getRenderer();
+      if (!renderer) return undefined;
+      const srcDisplay = parentLevel.displays.get(srcNodeId);
+      if (!srcDisplay) return undefined;
+
+      const key = `${node.id}:${srcNodeId}`;
+      if (!parentLevel.matteTextures) parentLevel.matteTextures = new Map();
+      let tex = parentLevel.matteTextures.get(key);
+      if (!tex) {
+        tex = RenderTexture.create({ width: this.compSize.width, height: this.compSize.height });
+        parentLevel.matteTextures.set(key, tex);
+      }
+      if (tex.width !== this.compSize.width || tex.height !== this.compSize.height) {
+        tex.resize(this.compSize.width, this.compSize.height);
+      }
+      renderer.render({ container: srcDisplay as Container, target: tex });
+      return tex;
+    };
+
+    const filters = node.passes.flatMap((pass) => resolvePass(pass, getMatteTexture));
+
+    // MASK passes: rasterise all mask specs together onto a single Canvas2D
+    // stencil (multiple masks composite on the same canvas via
+    // globalCompositeOperation — see mask-pass.ts). The resulting Filter
+    // is prepended before any matte/effect filters since masks clip the
+    // node's own content FIRST.
+    const maskPasses = node.passes.filter((p) => p.kind === "mask");
+    let allFilters = filters;
+    if (maskPasses.length > 0) {
+      const maskSpecs: MaskSpec[] = maskPasses.map((p) => {
+        const u = p.uniforms as { path: unknown; feather: number; mode: string; opacity: number; inverted: boolean };
+        return {
+          path: u.path as import("contract").MaskPath,
+          mode: (u.mode ?? "add") as MaskSpec["mode"],
+          feather: u.feather ?? 0,
+          opacity: u.opacity ?? 1,
+          inverted: Boolean(u.inverted),
+          // node.matrix is the world matrix from the evaluator — same matrix
+          // the Pixi Container's transform is set to. Mask paths are in node
+          // local space, so the rasteriser applies this to convert them to
+          // comp space on the stencil canvas.
+          nodeMatrix: node.matrix,
+        };
+      });
+      if (!parentLevel.maskCanvases) parentLevel.maskCanvases = new Map();
+      const maskResult = buildMaskFilter(
+        maskSpecs,
+        this.compSize.width,
+        this.compSize.height,
+        parentLevel.maskCanvases.get(node.id)
+      );
+      if (maskResult) {
+        parentLevel.maskCanvases.set(node.id, maskResult.canvas);
+        allFilters = [maskResult.filter, ...filters];
+      }
+    }
+
+    container.filters = allFilters;
+    // Force filter area to full comp size for matte and mask passes — the
+    // stencil textures are comp-sized, so vTextureCoord must be in comp space.
+    if (mattePasses.length > 0 || maskPasses.length > 0) {
+      container.filterArea = new Rectangle(0, 0, this.compSize.width, this.compSize.height);
+    }
   }
 
   /**

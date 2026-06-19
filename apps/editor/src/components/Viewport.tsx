@@ -16,6 +16,7 @@ import { clientToLocal, computeFitTransform, type FitTransform, hitTestTree, inv
 import { TransformGizmo } from "./TransformGizmo";
 import type { DragPreview } from "./TransformGizmo";
 import { ViewportFrame } from "./ViewportFrame";
+import { MaskPenOverlay } from "./MaskPenOverlay";
 
 /**
  * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
@@ -233,7 +234,7 @@ export function Viewport() {
           }
 
           treeRef.current = tree;
-          renderer.render(tree);
+          renderer.render(tree, state.playing);
         } catch (err) {
           // A single bad frame (e.g. a transiently-invalid composition
           // mid-edit) must not silently kill this RAF loop — without this,
@@ -269,7 +270,7 @@ export function Viewport() {
           cursor: tool === "select" ? "default" : "crosshair",
         }}
       />
-      {selectedNode && !selectedNode.locked && (
+      {selectedNode && !selectedNode.locked && tool !== "mask" && (
         <TransformGizmo
           nodeId={selectedNode.id}
           selectedNode={selectedNode}
@@ -279,6 +280,19 @@ export function Viewport() {
           onPreview={handlePreview}
         />
       )}
+      {tool === "mask" && selectedNode && (() => {
+        const tree = treeRef.current;
+        const renderNode = tree?.nodes.find((n) => n.id === selectedNode.id);
+        const nodeMatrix = renderNode?.matrix ?? [1,0,0,0,1,0,0,0,1] as import("contract").Mat3;
+        return (
+          <MaskPenOverlay
+            nodeId={selectedNode.id}
+            fit={fit}
+            canvasSize={canvasSize}
+            nodeMatrix={nodeMatrix}
+          />
+        );
+      })()}
     </>
   );
 }

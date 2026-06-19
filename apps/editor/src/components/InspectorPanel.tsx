@@ -26,6 +26,7 @@ import { getKindIcon } from "./kind-icons";
 import { EffectStackPanel } from "./EffectStackPanel";
 import { TransitionPanel } from "./TransitionPanel";
 import { ParentPicker } from "./ParentPicker";
+import { MattePicker } from "./MattePicker";
 import { FieldRow, Section } from "./inspector-fields";
 export { FieldControl, FieldRow } from "./inspector-fields";
 
@@ -132,6 +133,7 @@ export function InspectorPanel() {
         <EffectStackPanel node={node} />
         <TransitionPanel node={node} root={root} />
         <ParentPicker node={node} root={root} />
+        <MattePicker node={node} root={root} />
         <Section title="Layer">
           <label className="inspector-checkbox-row">
             <input
