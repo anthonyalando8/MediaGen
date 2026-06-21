@@ -8,13 +8,17 @@ import { fileToAssetRef } from "../persistence/asset-upload";
 import type { UploadProgress } from "../persistence/asset-upload";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
-import { getKindIcon } from "./kind-icons";
+import { getKindColor, getKindIcon } from "./kind-icons";
 
 /**
  * The "add-media palette" (Deliverable 11 Week 7): an upload button (exit
  * criterion 02 — "User adds an image from upload; it appears in canvas +
  * layer tree") plus a list of `project.assets` (image/video) with a button
  * to (re-)add each as a node.
+ *
+ * UI/UX redesign: each asset now reads as a media card with a kind-colored
+ * thumbnail tile, larger hit targets, and an explicit add/remove pair on the
+ * right. All upload/add/remove logic below is unchanged.
  */
 export function MediaPalette() {
   const store = useEditorStoreApi();
@@ -22,10 +26,6 @@ export function MediaPalette() {
   const assets = useEditorStore((s) => s.document.project.assets);
   const media = assets.filter((a) => a.kind === "image" || a.kind === "video");
 
-  // Surfaces fileToAssetRef's progress (asset-upload.ts) as a visible bar —
-  // previously a large video's read+decode could take several seconds with
-  // ZERO visual feedback: the button just sat there, then the layer
-  // suddenly appeared. `null` = no upload in flight.
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
 
   function handleAdd(assetIndex: number): void {
@@ -42,13 +42,6 @@ export function MediaPalette() {
     try {
       const asset = await fileToAssetRef(file, setUploadProgress);
 
-      // `addAsset`/`apply` below are synchronous, but main.tsx's Tier1
-      // subscription does a synchronous `JSON.stringify` +
-      // `localStorage.setItem` of the WHOLE project on this same tick
-      // (persistence/local-storage.ts) — for a project holding a large
-      // base64 `data:` URL, that alone can take a perceptible moment.
-      // "saving" keeps the progress UI honest through that, rather than
-      // it looking finished right before a final stutter.
       setUploadProgress({ stage: "saving" });
       const state = store.getState();
       state.addAsset(asset);
@@ -68,19 +61,20 @@ export function MediaPalette() {
 
   return (
     <div className="media-section">
-      <div className="panel__header">Media</div>
-
-      <label className={`btn${uploadProgress ? " btn--disabled" : ""}`} title="Upload an image or video">
-        <Upload size={14} />
-        {uploadProgress ? "Uploading…" : "Upload"}
-        <input
-          type="file"
-          accept="image/*,video/*"
-          onChange={handleUpload}
-          disabled={uploadProgress !== null}
-          style={{ display: "none" }}
-        />
-      </label>
+      <div className="panel__header">
+        Media
+        <label className={`media-upload${uploadProgress ? " btn--disabled" : ""}`} title="Upload an image or video">
+          <Upload size={14} />
+          {uploadProgress ? "Uploading…" : "Upload"}
+          <input
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleUpload}
+            disabled={uploadProgress !== null}
+            style={{ display: "none" }}
+          />
+        </label>
+      </div>
 
       {uploadProgress && (
         <div
@@ -110,19 +104,27 @@ export function MediaPalette() {
         <ul className="media-list">
           {media.map((asset, i) => {
             const Icon = getKindIcon(asset.kind);
+            const color = getKindColor(asset.kind);
             return (
               <li key={asset.id} className="media-item">
-                <span className="media-item__kind">
-                  <Icon size={14} />
-                  {asset.kind}
-                  <span className="media-item__id">{asset.id.slice(0, 6)}</span>
+                <span
+                  className="media-item__thumb"
+                  style={{ background: `linear-gradient(135deg, ${color}, ${color}99)` }}
+                >
+                  <Icon size={16} />
                 </span>
-                <button className="btn btn-icon" title="Add to composition" onClick={() => handleAdd(i)}>
-                  <Plus size={14} />
-                </button>
-                <button className="btn btn-icon" title="Remove from project" onClick={() => handleRemove(asset.id)}>
-                  <Trash2 size={14} />
-                </button>
+                <span className="media-item__info">
+                  <span className="media-item__name">{asset.kind}</span>
+                  <span className="media-item__id">{asset.id.slice(0, 8)}</span>
+                </span>
+                <span className="media-item__actions">
+                  <button className="media-add" title="Add to composition" onClick={() => handleAdd(i)}>
+                    <Plus size={14} />
+                  </button>
+                  <button className="media-remove" title="Remove from project" onClick={() => handleRemove(asset.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </span>
               </li>
             );
           })}

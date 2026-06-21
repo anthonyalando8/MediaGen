@@ -3,6 +3,8 @@
 // Phase 2 §4.2 — track matte picker. A sibling node's alpha or luma channel
 // stencils this node. Shows a source-node dropdown + mode selector when a
 // matte is active, or just a "Set matte source…" dropdown when none.
+//
+// UI/UX redesign: collapsed by default. Logic unchanged.
 
 import type { Node } from "core";
 import { clearMatteOp, setMatteOp } from "../commands/set-matte";
@@ -49,7 +51,7 @@ export function MattePicker({ node, root }: { node: Node; root: Node[] }) {
   }
 
   return (
-    <Section title="Track Matte">
+    <Section title="Track Matte" defaultOpen={false}>
       <div className="matte-picker__row">
         <span className="field-row__label">Source</span>
         <select value={matte?.sourceNodeId ?? ""} onChange={handleSource}>

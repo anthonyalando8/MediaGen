@@ -1,12 +1,14 @@
 // apps/editor/src/components/EffectStackPanel.tsx
 //
-// Phase 2 §6's "the inspector is free" — renders one Section per
-// `node.effects[]` entry, each entry's controls auto-generated from its
+// Phase 2 §6's "the inspector is free" — renders one entry per
+// `node.effects[]`, each entry's controls auto-generated from its
 // EffectDef.schema.inspector (getEffectStackEntries, effect-fields.ts),
-// reusing InspectorPanel's own FieldRow/FieldControl so a new effect's
-// inspector fields render here with zero new UI code, exactly like a new
-// NodeKind's fields render in InspectorPanel itself. Mounted inside
-// InspectorPanel below the kind-specific section.
+// reusing InspectorPanel's own FieldRow so a new effect's inspector fields
+// render here with zero new UI code. Mounted inside InspectorPanel below
+// the kind-specific section.
+//
+// UI/UX redesign: wrapped in the shared collapsible Section with a live
+// count badge. All add/remove/toggle/field logic below is unchanged.
 
 import type { Json, Node } from "core";
 import { useEffectRegistry } from "../bootstrap/effect-registry-context";
@@ -15,7 +17,7 @@ import { setNodeProp } from "../commands/set-node-prop";
 import { getEffectStackEntries } from "../inspector/effect-fields";
 import { useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
-import { FieldRow } from "./inspector-fields";
+import { FieldRow, Section } from "./inspector-fields";
 
 export function EffectStackPanel({ node }: { node: Node }) {
   const store = useEditorStoreApi();
@@ -47,8 +49,7 @@ export function EffectStackPanel({ node }: { node: Node }) {
   }
 
   return (
-    <div className="inspector-section effect-stack">
-      <h4 className="inspector-section__title">Effects</h4>
+    <Section title="Effects" meta={entries.length}>
       {entries.length === 0 && <p className="panel__empty effect-stack__empty">No effects applied.</p>}
       {entries.map((entry) => (
         <div key={entry.refId} className="effect-stack__entry">
@@ -79,6 +80,6 @@ export function EffectStackPanel({ node }: { node: Node }) {
           ))}
         </select>
       </label>
-    </div>
+    </Section>
   );
 }

@@ -7,13 +7,16 @@
 // for FIELD DEFINITIONS: a new NodeKind's `schema.inspector` entries render
 // here for free (gate 12.1's "6th NodeKind" property).
 //
-// `partitionFields` below groups the flat field list into "Appearance" /
-// "Transform" / kind-specific sections purely by PATH PATTERN (not
-// `node.kind`) — a UI-only grouping that any future kind's fields fall into
-// automatically via the catch-all "Properties"-style section.
+// `partitionFields` groups the flat field list into "Appearance" /
+// "Transform" / kind-specific sections purely by PATH PATTERN — a UI-only
+// grouping that any future kind's fields fall into automatically.
 //
 // Every control's onChange is `setNodeProp(comp, node.id, field.path,
 // value)` -> `apply()` — one generic command for the whole panel.
+//
+// UI/UX redesign: the header leads with a kind-colored chip; sections are
+// collapsible (see inspector-fields' Section), with high-traffic groups open
+// and Transitions/Parent/Matte/Layer collapsed by default. No logic changed.
 
 import type { Json } from "core";
 import { useRegistry } from "../bootstrap/registry-context";
@@ -22,7 +25,7 @@ import { getInspectorFields } from "../inspector/fields";
 import type { InspectorFieldValue } from "../inspector/fields";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
-import { getKindIcon } from "./kind-icons";
+import { ADJUSTMENT_COLOR, getKindColor, getKindIcon } from "./kind-icons";
 import { EffectStackPanel } from "./EffectStackPanel";
 import { TransitionPanel } from "./TransitionPanel";
 import { ParentPicker } from "./ParentPicker";
@@ -86,13 +89,15 @@ export function InspectorPanel() {
 
   const { name, general, transform, rest } = partitionFields(getInspectorFields(node, registry));
   const Icon = getKindIcon(node.kind);
+  const adjustment = Boolean(node.isAdjustment);
+  const color = adjustment ? ADJUSTMENT_COLOR : getKindColor(node.kind);
   const kindTitle = node.kind.charAt(0).toUpperCase() + node.kind.slice(1);
 
   return (
     <div className="panel panel--right">
       <div className="inspector__header">
-        <span className="inspector__icon">
-          <Icon size={16} />
+        <span className="kind-chip kind-chip--lg" style={{ background: `${color}22`, border: `1px solid ${color}` }}>
+          <Icon size={16} style={{ color }} />
         </span>
         <div className="inspector__heading">
           {name ? (
@@ -105,7 +110,7 @@ export function InspectorPanel() {
           ) : (
             <div className="inspector__name-input">{node.name}</div>
           )}
-          <div className="inspector__kind">{node.kind}</div>
+          <div className="inspector__kind">{adjustment ? "Adjustment layer" : node.kind}</div>
         </div>
       </div>
       <div className="panel__body">
@@ -134,14 +139,19 @@ export function InspectorPanel() {
         <TransitionPanel node={node} root={root} />
         <ParentPicker node={node} root={root} />
         <MattePicker node={node} root={root} />
-        <Section title="Layer">
+        <Section title="Layer" defaultOpen={false}>
           <label className="inspector-checkbox-row">
             <input
               type="checkbox"
               checked={Boolean(node.isAdjustment)}
               onChange={(e) => handleChange("isAdjustment", e.target.checked)}
             />
-            Adjustment layer (effects apply to layers below)
+            <span>
+              Adjustment layer
+              <span style={{ display: "block", color: "var(--text-2)", fontSize: "11px", marginTop: "1px" }}>
+                Effects apply to layers below
+              </span>
+            </span>
           </label>
         </Section>
       </div>

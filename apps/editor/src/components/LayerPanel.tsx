@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import type { Id } from "core";
 import { MediaPalette } from "./MediaPalette";
-import { getKindIcon } from "./kind-icons";
+import { ADJUSTMENT_COLOR, getKindColor, getKindIcon } from "./kind-icons";
 import { reorderNode } from "../commands/reorder";
 import { setNodeHidden, setNodeLocked } from "../commands/toggle-node-flag";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -12,11 +12,14 @@ import { activeComp } from "../store/selectors";
 
 /**
  * Layer tree — reorder, select, hide/lock (Deliverable 09 §9.1, Week 7).
- * Phase 1: a flat list of the active composition's top-level layers
- * (nested group children aren't author-able yet — see
- * commands/find-node-index.ts). Click selects; shift/ctrl+click toggles
- * multi-select; native HTML5 drag-and-drop reorders (z-order = array
- * order, Deliverable 07).
+ * Phase 1: a flat list of the active composition's top-level layers. Click
+ * selects; shift/ctrl+click toggles multi-select; native HTML5
+ * drag-and-drop reorders (z-order = array order, Deliverable 07).
+ *
+ * UI/UX redesign: each row leads with a kind-colored chip + icon, shows the
+ * kind as a subtitle, flags adjustment layers with a badge, and reveals
+ * hide/lock controls on hover/selection. All selection/drag/toggle logic
+ * below is unchanged.
  */
 export function LayerPanel() {
   const store = useEditorStoreApi();
@@ -66,7 +69,10 @@ export function LayerPanel() {
   return (
     <div className="panel panel--left">
       <MediaPalette />
-      <div className="panel__header">Layers</div>
+      <div className="panel__header">
+        Layers
+        <span className="panel__count">{root.length}</span>
+      </div>
       <div className="panel__body">
         {root.length === 0 ? (
           <p className="panel__empty">No layers yet — add one from the toolbar.</p>
@@ -75,8 +81,10 @@ export function LayerPanel() {
             {root.map((node, index) => {
               const hidden = Boolean(node.hidden);
               const locked = Boolean(node.locked);
+              const adjustment = Boolean(node.isAdjustment);
               const selected = selection.includes(node.id);
               const Icon = getKindIcon(node.kind);
+              const color = adjustment ? ADJUSTMENT_COLOR : getKindColor(node.kind);
               const classes = ["layer-row", selected && "selected", hidden && "hidden-layer", dragOverId === node.id && "dragover"]
                 .filter(Boolean)
                 .join(" ");
@@ -92,16 +100,17 @@ export function LayerPanel() {
                   onClick={(e) => handleSelect(e, node.id)}
                   style={{ cursor: locked ? "default" : "grab" }}
                 >
-                  <span className="layer-row__icon">
-                    <Icon size={14} />
+                  <span className="kind-chip" style={{ background: `${color}22`, border: `1px solid ${color}` }}>
+                    <Icon size={13} style={{ color }} />
                   </span>
-                  <span className="layer-row__name">
-                    {node.name}
-                    <span className="layer-row__kind">{node.kind}</span>
+                  <span className="layer-row__info">
+                    <span className="layer-row__name">{node.name}</span>
+                    <span className="layer-row__kind">{adjustment ? "adjustment" : node.kind}</span>
                   </span>
+                  {adjustment && <span className="layer-row__badge">ADJ</span>}
                   <span className="layer-row__actions">
                     <button
-                      className="btn btn-icon"
+                      className="layer-action"
                       aria-pressed={hidden}
                       title={hidden ? "Show layer" : "Hide layer"}
                       onClick={(e) => {
@@ -112,7 +121,7 @@ export function LayerPanel() {
                       {hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                     <button
-                      className="btn btn-icon"
+                      className="layer-action"
                       aria-pressed={locked}
                       title={locked ? "Unlock layer" : "Lock layer"}
                       onClick={(e) => {

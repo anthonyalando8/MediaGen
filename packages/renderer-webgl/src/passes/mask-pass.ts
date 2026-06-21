@@ -49,10 +49,11 @@ function getMaskProgram(): GlProgram | undefined {
 // ── Matrix ────────────────────────────────────────────────────────────────
 
 /** Apply a row-major Mat3 [a,b,0, c,d,0, tx,ty,1] to a 2D point. */
+/** Apply row-major Mat3 [a,b,tx, c,d,ty, 0,0,1] to a 2D point: x=a*px+b*py+tx, y=c*px+d*py+ty. */
 function applyMat3(m: readonly number[], p: { x: number; y: number }): { x: number; y: number } {
   return {
-    x: m[0] * p.x + m[3] * p.y + m[6],
-    y: m[1] * p.x + m[4] * p.y + m[7],
+    x: m[0] * p.x + m[1] * p.y + m[2],
+    y: m[3] * p.x + m[4] * p.y + m[5],
   };
 }
 

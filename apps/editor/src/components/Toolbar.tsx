@@ -1,8 +1,7 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, MousePointer2, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup, Waves } from "lucide-react";
+import { Group, MousePointer2, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
 import type { Id, NodeKindId } from "core";
 import { addNode, appendNodeOp } from "../commands/add-node";
-import { setNodeProp } from "../commands/set-node-prop";
 import { groupNodes } from "../commands/group-nodes";
 import { ungroupNode } from "../commands/ungroup-node";
 import { useRegistry } from "../bootstrap/registry-context";
@@ -19,14 +18,20 @@ const ADDABLE_KINDS: { kind: NodeKindId; label: string; icon: typeof Square }[] 
 ];
 
 const TOOLS: { tool: Tool; label: string; icon: typeof Square }[] = [
-  { tool: "select", label: "Select", icon: MousePointer2 },
-  { tool: "text", label: "Text", icon: Type },
-  { tool: "shape", label: "Shape", icon: Square },
+  { tool: "select", label: "Select (V)", icon: MousePointer2 },
+  { tool: "text", label: "Text (T)", icon: Type },
+  { tool: "shape", label: "Shape (R)", icon: Square },
 ];
 
 const ICON_SIZE = 15;
 
-/** Add node · group selection · undo/redo · tool select (Deliverable 09 §9.1). */
+/**
+ * Add node · group selection · undo/redo · tool select (Deliverable 09 §9.1).
+ *
+ * UI/UX redesign: the same actions, reorganized into labeled clusters
+ * (Insert · Arrange · Tools · History) for discoverability. The brand mark
+ * moved to <Header>. Every handler below is unchanged from the original.
+ */
 export function Toolbar() {
   const store = useEditorStoreApi();
   const registry = useRegistry();
@@ -53,8 +58,6 @@ export function Toolbar() {
     const state = store.getState();
     const op = groupNodes(activeComp(state), registry, selection);
     state.apply(op);
-    // The group lands at `after.group`'s id, inserted at `after.at` — select it
-    // so the InspectorPanel/gizmo immediately reflect the new group node.
     const after = op.after as unknown as { group: { id: Id }; at: number };
     state.select([after.group.id]);
   }
@@ -63,7 +66,6 @@ export function Toolbar() {
     const state = store.getState();
     const op = ungroupNode(activeComp(state), selection[0]);
     state.apply(op);
-    // `op.before.group.children` are the now-restored top-level nodes, in order.
     const before = op.before as unknown as { group: { children: { id: Id }[] }; at: number };
     state.select(before.group.children.map((c) => c.id));
   }
@@ -74,11 +76,7 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      <div className="toolbar__brand">
-        <Waves size={18} />
-        <span className="toolbar__brand-name">SeaBytes</span>
-      </div>
-
+      <span className="toolbar__label">Insert</span>
       <div className="btn-group">
         {ADDABLE_KINDS.map(({ kind, label, icon: Icon }) => (
           <button key={kind} className="btn" title={`Add ${label}`} onClick={() => handleAdd(kind)}>
@@ -88,26 +86,28 @@ export function Toolbar() {
         ))}
         <button className="btn" title="Add Adjustment Layer" onClick={handleAddAdjustment}>
           <Sliders size={ICON_SIZE} />
-          Adj
+          Adjust
         </button>
       </div>
 
-      <button className="btn" disabled={selection.length < 2} onClick={handleGroup} title="Group the selected layers">
-        <Group size={ICON_SIZE} />
-        Group
-      </button>
+      <div className="toolbar__divider" />
 
-      <button className="btn" disabled={selectedKind !== "group"} onClick={handleUngroup} title="Ungroup the selected group">
-        <Ungroup size={ICON_SIZE} />
-        Ungroup
-      </button>
-
-      <button className="btn btn-icon" disabled={selection.length === 0} onClick={handleDelete} title="Delete the selected layer(s)">
-        <Trash2 size={ICON_SIZE} />
-      </button>
+      <div className="toolbar__cluster">
+        <button className="btn btn-outline" disabled={selection.length < 2} onClick={handleGroup} title="Group the selected layers">
+          <Group size={ICON_SIZE} />
+          Group
+        </button>
+        <button className="btn btn-outline" disabled={selectedKind !== "group"} onClick={handleUngroup} title="Ungroup the selected group">
+          <Ungroup size={ICON_SIZE} />
+          Ungroup
+        </button>
+        <button className="btn btn-icon btn-outline btn-danger" disabled={selection.length === 0} onClick={handleDelete} title="Delete the selected layer(s)">
+          <Trash2 size={ICON_SIZE} />
+        </button>
+      </div>
 
       <span className="toolbar__spacer" />
-
+      <span className="toolbar__label">Tools</span>
       <div className="btn-group">
         {TOOLS.map(({ tool: t, label, icon: Icon }) => (
           <button key={t} className="btn btn-icon" aria-pressed={tool === t} title={label} onClick={() => store.getState().setTool(t)}>
@@ -128,10 +128,10 @@ export function Toolbar() {
       <span className="toolbar__spacer" />
 
       <div className="btn-group">
-        <button className="btn btn-icon" disabled={!canUndo} onClick={() => store.getState().undo()} title="Undo">
+        <button className="btn btn-icon" disabled={!canUndo} onClick={() => store.getState().undo()} title="Undo (⌘Z)">
           <Undo2 size={ICON_SIZE} />
         </button>
-        <button className="btn btn-icon" disabled={!canRedo} onClick={() => store.getState().redo()} title="Redo">
+        <button className="btn btn-icon" disabled={!canRedo} onClick={() => store.getState().redo()} title="Redo (⌘⇧Z)">
           <Redo2 size={ICON_SIZE} />
         </button>
       </div>

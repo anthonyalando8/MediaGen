@@ -2,23 +2,15 @@
 //
 // Applies/removes a transition spanning the boundary with the PREVIOUS
 // sibling (`node.transitionIn`) or the NEXT sibling (`node.transitionOut`)
-// — Phase 2 §4.4/§5, blueprint §13 acceptance test 08 ("A transition
-// between two clips renders via shader"). Mounted in InspectorPanel
-// alongside EffectStackPanel — a transition is a per-node field exactly
-// like `effects[]`, just one that needs to know about an adjacent
-// sibling rather than only the node itself, which is why this takes
-// `root`/`node` (not just `node`) — to look up and display the
-// neighbor's name and to know whether a side even HAS a sibling to
-// transition with (the first node in z-order has no "previous";
-// the last has no "next").
+// — Phase 2 §4.4/§5, blueprint §13 acceptance test 08. Mounted in
+// InspectorPanel alongside EffectStackPanel — a transition is a per-node
+// field exactly like `effects[]`, just one that needs to know about an
+// adjacent sibling, which is why this takes `root`/`node`.
 //
-// Per find-node-index.ts's documented Phase 1 scope ("only the flat root
-// array... dragging into/out of a group's children is Week 8+"), this
-// panel is the SAME top-level-only scope — applying a transition between
-// two children of a nested group isn't exposed here yet, even though
-// core/evaluator/transitions.ts's `applyTransitions` already resolves it
-// correctly at any nesting level once authored (e.g. via a future scene
-// importer or a Week 8+ nested-selection UI).
+// Per find-node-index.ts's documented Phase 1 scope, this panel is
+// top-level-only.
+//
+// UI/UX redesign: collapsed by default (low-traffic). Logic unchanged.
 
 import type { Node } from "core";
 import { useTransitionRegistry } from "../bootstrap/transition-registry-context";
@@ -56,7 +48,6 @@ function TransitionSideRow({ node, side, neighbor }: { node: Node; side: Transit
   }
 
   if (!neighbor) {
-    // First node has no previous sibling; last node has no next — nothing to transition with.
     return (
       <div className="transition-panel__row transition-panel__row--disabled">
         <span className="field-row__label">{label}</span>
@@ -81,7 +72,7 @@ function TransitionSideRow({ node, side, neighbor }: { node: Node; side: Transit
             ))}
           </select>
           <label className="transition-panel__duration">
-            <span>Duration (frames)</span>
+            <span>Frames</span>
             <input type="number" min={1} value={ref.durationF} onChange={(e) => handleDuration(Number(e.target.value))} />
           </label>
           <button type="button" className="transition-panel__remove" aria-label={`Remove ${label} transition`} onClick={handleRemove}>
@@ -110,7 +101,7 @@ export function TransitionPanel({ node, root }: { node: Node; root: Node[] }) {
   const next = index >= 0 && index < root.length - 1 ? root[index + 1] : undefined;
 
   return (
-    <Section title="Transitions">
+    <Section title="Transitions" defaultOpen={false}>
       <TransitionSideRow node={node} side="transitionIn" neighbor={previous} />
       <TransitionSideRow node={node} side="transitionOut" neighbor={next} />
     </Section>

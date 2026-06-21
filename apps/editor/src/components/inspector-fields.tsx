@@ -1,16 +1,21 @@
 // apps/editor/src/components/inspector-fields.tsx
 //
 // Schema-driven field rendering shared by InspectorPanel (a Node's own
-// fields) and EffectStackPanel (an EffectRef's fields) — extracted out of
-// InspectorPanel.tsx so the latter can import these without a circular
-// dependency (EffectStackPanel is mounted BY InspectorPanel). Per Phase 2
-// §6 ("the inspector is free"): both consumers resolve a flat
-// `InspectorFieldValue[]` from a different schema source, then render it
-// through this exact same generic switch-on-`field.control` — neither
-// ever branches on `node.kind` or `EffectDef.effect` for field
-// definitions (gate 12.1's "6th NodeKind"/new-effect property).
+// fields) and EffectStackPanel (an EffectRef's fields). Per Phase 2 §6 ("the
+// inspector is free"): both consumers resolve a flat `InspectorFieldValue[]`
+// from a different schema source, then render it through this exact same
+// generic switch-on-`field.control` — neither ever branches on `node.kind`
+// or `EffectDef.effect` for field definitions (gate 12.1's "6th NodeKind").
+//
+// UI/UX redesign: `Section` is now a collapsible disclosure (chevron + click
+// to toggle), with an optional `meta` slot for a right-aligned count badge
+// and a `defaultOpen` flag so low-traffic sections (Transitions / Parent /
+// Matte) can start collapsed. The open/closed flag is local UI state only —
+// the field controls and their onChange→setNodeProp wiring are unchanged.
 
 import type { ChangeEvent, ReactNode } from "react";
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { oklchToHex } from "renderer-webgl";
 import type { ColorOKLCH, Json } from "core";
 import type { InspectorFieldValue } from "../inspector/fields";
@@ -62,9 +67,6 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
       return <ColorControl value={field.value} onChange={onChange} />;
 
     case "asset":
-      // P1: assets are attached at node-creation time via the add-media
-      // palette (MediaPalette.tsx, Week 7) — no asset browser yet to
-      // re-target an existing node, so this is read-only.
       return <span style={{ color: "var(--text-2)", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{typeof field.value === "string" ? field.value.slice(0, 8) : "none"}</span>;
 
     default:
@@ -81,11 +83,26 @@ export function FieldRow({ field, onChange }: { field: InspectorFieldValue; onCh
   );
 }
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+export function Section({
+  title,
+  children,
+  defaultOpen = true,
+  meta,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  meta?: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="inspector-section">
-      <h4 className="inspector-section__title">{title}</h4>
-      {children}
+    <div className="insp-section">
+      <button type="button" className="insp-section__head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <ChevronRight className="insp-section__chev" data-open={open} size={13} />
+        <span className="insp-section__title">{title}</span>
+        {meta != null && <span className="insp-section__meta">{meta}</span>}
+      </button>
+      {open && <div className="insp-section__body">{children}</div>}
     </div>
   );
 }

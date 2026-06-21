@@ -1,11 +1,15 @@
 // apps/editor/src/components/TimelineRuler.tsx
 //
-// Frame ruler + playhead for TimelineTrack's clip-arrangement timeline
-// (new scope — see TimelineTrack.tsx's module doc). Replaces the old
-// single global `<input type="range">` scrub slider (TimelinePlaceholder)
-// with click/drag-anywhere-to-scrub directly on a real frame scale,
-// shared 1:1 with each track row's `pixelsPerFrame` so a clip's visual
-// position always lines up with the time it actually represents.
+// Frame ruler + playhead for TimelineTrack's clip-arrangement timeline.
+// Click/drag-anywhere-to-scrub directly on a real frame scale, shared 1:1
+// with each track row's `pixelsPerFrame` so a clip's visual position always
+// lines up with the time it actually represents.
+//
+// UI/UX redesign: the ruler is sticky to the top of the scroll area and the
+// playhead reads as a small triangle "head" (the full-height line is drawn
+// across the lanes by TimelineTrack). All scrub/tick logic is unchanged;
+// labels stay frame-numbered (the ruler is intentionally not fps-aware —
+// Phase 1 doesn't expose mixed frame rates per comp).
 
 import { useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -13,7 +17,7 @@ import { toFrame } from "core";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
-/** Frames between each tick mark — every 30 frames (1s at the common 30fps default) keeps the ruler legible without crowding at the default pixelsPerFrame scale. Not fps-aware on purpose (Phase 1 doesn't expose mixed frame rates per comp yet); revisit if/when that's ever true. */
+/** Frames between each tick mark — every 30 frames (1s at the common 30fps default) keeps the ruler legible without crowding at the default pixelsPerFrame scale. */
 const TICK_INTERVAL_FRAMES = 30;
 
 export function TimelineRuler({ pixelsPerFrame }: { pixelsPerFrame: number }) {
@@ -65,7 +69,7 @@ export function TimelineRuler({ pixelsPerFrame }: { pixelsPerFrame: number }) {
       ))}
       {/* comp.duration end marker — shows the playback loop boundary, which may be shorter than the visible ruler when clips extend past it before auto-extending on pointer-up */}
       <div className="timeline-ruler__end-marker" style={{ left: (duration as number) * pixelsPerFrame }} />
-      <div className="timeline-ruler__playhead" style={{ left: (playhead as number) * pixelsPerFrame }} />
+      <div className="timeline-ruler__playhead-head" style={{ left: (playhead as number) * pixelsPerFrame }} />
     </div>
   );
 }
