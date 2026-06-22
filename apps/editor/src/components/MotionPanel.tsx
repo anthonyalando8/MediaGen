@@ -9,9 +9,8 @@
 
 import { useState } from "react";
 import { kenBurnsPreset, parallaxPreset, popPreset, slamPunchPreset } from "motion";
-import type { MotionControl, MotionPreset } from "motion";
-import type { MotionCtx } from "motion";
-import { addChannelOp } from "../commands/channel-ops";
+import type { MotionControl, MotionPreset, MotionCtx } from "motion";
+import { createId, createOp } from "core";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { Section } from "./inspector-fields";
@@ -89,26 +88,40 @@ export function MotionPanel({ node }: { node: Node }) {
       size: comp.size,
       transform: node.transform,
     };
-    const motion = activePreset.build(options);
+
+    // Build with current options — ensure all defaults are present
+    const effectiveOptions = { ...defaultValues(activePreset.controls), ...options };
+    const motion = activePreset.build(effectiveOptions);
     const channels = motion(ctx);
+    if (channels.length === 0) return;
+
     const state = store.getState();
     const activeCompNow = activeComp(state);
+    const nodeIndex = activeCompNow.root.findIndex((n) => n.id === node.id);
+    if (nodeIndex === -1) return;
 
-    // Replace channels on the same paths, keep others
-    const existingPaths = new Set(channels.map((c) => c.path));
-    const kept = node.channels.filter((c) => !existingPaths.has(c.path));
+    // Replace channels on the same paths, keep unrelated ones
+    const newPaths = new Set(channels.map((c) => c.path));
+    const kept = activeCompNow.root[nodeIndex].channels.filter((c) => !newPaths.has(c.path));
     const merged = [...kept, ...channels];
 
-    state.apply({
-      ...addChannelOp(activeCompNow, node.id, channels[0]),
-      path: `/root/${activeCompNow.root.findIndex((n) => n.id === node.id)}/channels`,
-      before: node.channels as never,
+    state.apply(createOp({
+      type: "set",
+      compId: activeCompNow.id,
+      path: `/root/${nodeIndex}/channels`,
+      before: activeCompNow.root[nodeIndex].channels as never,
       after: merged as never,
-    });
+      txn: createId(),
+    }));
+
+    // Scrub to the clip's start frame and begin playing so the user
+    // sees the animation immediately without having to manually press Play.
+    store.getState().setPlayhead(node.time.start);
+    store.getState().play();
   }
 
   return (
-    <Section title="Motion" defaultOpen={false}>
+    <Section title="Motion" defaultOpen={true}>
       {/* Preset buttons */}
       <div className="motion-panel__presets">
         {PRESETS.map((preset) => (
@@ -139,7 +152,7 @@ export function MotionPanel({ node }: { node: Node }) {
               Reset
             </button>
             <button className="btn btn-sm btn-accent" onClick={handleApply}>
-              Apply
+              Apply &amp; Play
             </button>
           </div>
         </div>
