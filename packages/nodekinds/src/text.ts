@@ -29,7 +29,7 @@ export const textKind: NodeKind = {
       { path: "props.fill", type: "color", label: "Color", default: WHITE },
     ],
     inspector: [
-      { path: "props.text", label: "Text", control: "text" },
+      { path: "props.text", label: "Text", control: "textarea" },
       { path: "props.fontFamily", label: "Font", control: "select" },
       { path: "props.fontSize", label: "Size", control: "number" },
       { path: "props.weight", label: "Weight", control: "number" },

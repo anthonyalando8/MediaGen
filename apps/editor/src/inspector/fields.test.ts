@@ -50,7 +50,7 @@ describe("getInspectorFields", () => {
     const fields = getInspectorFields(node, registry);
 
     const text = fields.find((f) => f.path === "props.text")!;
-    expect(text.control).toBe("text");
+    expect(text.control).toBe("textarea");
     expect(text.value).toBe(node.props.text);
 
     const align = fields.find((f) => f.path === "props.align")!;

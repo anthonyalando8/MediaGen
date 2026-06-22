@@ -43,6 +43,16 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
     case "text":
       return <input type="text" value={typeof field.value === "string" ? field.value : ""} onChange={(e) => onChange(e.target.value)} />;
 
+    case "textarea":
+      return (
+        <textarea
+          className="field-textarea"
+          value={typeof field.value === "string" ? field.value : ""}
+          rows={4}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+
     case "number":
       return <input type="number" value={typeof field.value === "number" ? field.value : 0} onChange={(e) => onChange(Number(e.target.value))} />;
 

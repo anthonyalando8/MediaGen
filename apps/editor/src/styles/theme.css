@@ -1683,3 +1683,26 @@ input[type="range"]::-moz-range-track {
   border-color: var(--accent);
   color: var(--accent-strong);
 }
+
+/* ── Text field textarea ─────────────────────────────────────────────── */
+
+.field-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--text-0);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  line-height: 1.5;
+  box-sizing: border-box;
+  transition: border-color var(--transition);
+}
+
+.field-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}

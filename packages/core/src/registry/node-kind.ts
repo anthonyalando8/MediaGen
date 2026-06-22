@@ -28,7 +28,7 @@ export interface ChannelSpec {
 export interface InspectorField {
   path: string;
   label: string;
-  control: "text" | "number" | "color" | "select" | "toggle" | "asset";
+  control: "text" | "textarea" | "number" | "color" | "select" | "toggle" | "asset";
   options?: string[];
 }
 

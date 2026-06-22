@@ -17,6 +17,7 @@ import { TransformGizmo } from "./TransformGizmo";
 import type { DragPreview } from "./TransformGizmo";
 import { ViewportFrame } from "./ViewportFrame";
 import { MaskPenOverlay } from "./MaskPenOverlay";
+import { TextEditOverlay } from "./TextEditOverlay";
 
 /**
  * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
@@ -256,6 +257,34 @@ export function Viewport() {
   }, [store, registry, canvasSize]);
 
   const tool = useEditorStore((s) => s.tool);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+
+  // Dismiss the text editor if selection moves away from the editing node
+  const selectionHasEditingNode = useEditorStore((s) =>
+    editingNodeId ? s.selection.includes(editingNodeId as never) : false
+  );
+  useEffect(() => {
+    if (!selectionHasEditingNode) setEditingNodeId(null);
+  }, [selectionHasEditingNode]);
+
+  // Double-click a selected text node to enter inline editing mode
+  const handleCanvasDblClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (tool !== "select") return;
+      const rect = clickLayerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const point = screenToComp(clientToLocal(rect, e.clientX, e.clientY), fit);
+      const hit = treeRef.current ? hitTestTree(point, treeRef.current.nodes) : undefined;
+      if (!hit) return;
+      const state = store.getState();
+      const node = activeComp(state).root.find((n) => n.id === hit.id);
+      if (node?.kind === "text") {
+        state.select([node.id]);
+        setEditingNodeId(node.id);
+      }
+    },
+    [store, fit, tool]
+  );
 
   return (
     <>
@@ -264,12 +293,24 @@ export function Viewport() {
       <div
         ref={clickLayerRef}
         onPointerDown={handleCanvasClick}
+        onDoubleClick={handleCanvasDblClick}
         style={{
           position: "absolute",
           inset: 0,
           cursor: tool === "select" ? "default" : "crosshair",
         }}
       />
+      {editingNodeId && (() => {
+        const node = activeComp(store.getState()).root.find((n) => n.id === editingNodeId);
+        if (!node || node.kind !== "text") return null;
+        return (
+          <TextEditOverlay
+            node={node}
+            fit={fit}
+            onDismiss={() => setEditingNodeId(null)}
+          />
+        );
+      })()}
       {selectedNode && !selectedNode.locked && tool !== "mask" && (
         <TransformGizmo
           nodeId={selectedNode.id}
