@@ -1,0 +1,124 @@
+/* apps/editor/src/styles/workspace.css
+ *
+ * Workspace ergonomics layer (resizable / collapsible panels + relocated
+ * viewport zoom). Imported AFTER theme.css so these rules win where they
+ * overlap. App.tsx drives the actual grid-template sizes via an inline style;
+ * this file only supplies the static structure (flex viewport column, resize
+ * handles, status bar).
+ *
+ * Nothing here changes application behavior — pure chrome.
+ */
+
+/* The viewport grid cell is now a column: canvas stage on top, status bar
+   below. The stage keeps the position:relative/overflow:hidden the canvas
+   overlays (gizmo, frame, click layer) rely on. */
+.app-shell__viewport {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.viewport-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-0);
+}
+
+/* Timeline now fills its (dynamic) grid row rather than a fixed 288px. */
+.timeline-panel {
+  height: 100%;
+}
+
+/* ── Resize dividers (grid items sitting between panels) ──────────────── */
+.shell-divider {
+  position: relative;
+  z-index: 6;
+  background: transparent;
+  transition: background var(--transition);
+}
+
+.shell-divider--v {
+  cursor: col-resize;
+}
+
+.shell-divider--h {
+  cursor: row-resize;
+}
+
+.shell-divider:hover {
+  background: var(--accent);
+}
+
+/* Collapsed-side handle is a zero-size grid track; make sure it's inert. */
+.shell-divider--hidden {
+  pointer-events: none;
+}
+
+.shell-divider--hidden:hover {
+  background: transparent;
+}
+
+/* ── Viewport status bar (relocated zoom controls — feedback Option A) ── */
+.viewport-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 34px;
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-1);
+}
+
+.viewport-statusbar__meta {
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+
+.viewport-statusbar__sep {
+  width: 1px;
+  height: 15px;
+  background: var(--border);
+}
+
+.viewport-statusbar__spacer {
+  flex: 1;
+}
+
+.viewport-statusbar__pct {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-0);
+  min-width: 46px;
+  text-align: center;
+}
+
+.viewport-statusbar__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 26px;
+  min-width: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.viewport-statusbar__btn--text {
+  padding: 0 10px;
+  font-weight: 500;
+}
+
+.viewport-statusbar__btn:hover {
+  background: var(--surface-3);
+  color: var(--text-0);
+}

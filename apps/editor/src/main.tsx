@@ -4,6 +4,8 @@ import { createRoot } from "react-dom/client";
 // @ts-ignore CSS side-effect import type declarations are handled by the bundler.
 
 import "./styles/theme.css";
+// @ts-ignore
+import "./styles/workspace.css"; // workspace ergonomics layer (must load after theme.css)
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

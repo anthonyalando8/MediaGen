@@ -1,9 +1,10 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, MousePointer2, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
+import { Group, Layers, MousePointer2, PanelBottom, PanelLeft, PanelRight, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
 import type { Id, NodeKindId } from "core";
 import { addNode, appendNodeOp } from "../commands/add-node";
 import { groupNodes } from "../commands/group-nodes";
 import { ungroupNode } from "../commands/ungroup-node";
+import { precompose } from "../commands/precompose";
 import { useRegistry } from "../bootstrap/registry-context";
 import { deleteSelection } from "../store/delete-selection";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -29,8 +30,9 @@ const ICON_SIZE = 15;
  * Add node · group selection · undo/redo · tool select (Deliverable 09 §9.1).
  *
  * UI/UX redesign: the same actions, reorganized into labeled clusters
- * (Insert · Arrange · Tools · History) for discoverability. The brand mark
- * moved to <Header>. Every handler below is unchanged from the original.
+ * (Insert · Arrange · Tools · View · History) for discoverability. The brand
+ * mark moved to <Header>. Every document handler below is unchanged; the new
+ * View cluster only drives Tier-3 UI workspace state (store/ui.ts).
  */
 export function Toolbar() {
   const store = useEditorStoreApi();
@@ -39,6 +41,9 @@ export function Toolbar() {
   const canRedo = useEditorStore((s) => s.canRedo());
   const tool = useEditorStore((s) => s.tool);
   const selection = useEditorStore((s) => s.selection);
+  const leftCollapsed = useEditorStore((s) => s.leftCollapsed);
+  const rightCollapsed = useEditorStore((s) => s.rightCollapsed);
+  const timelineCollapsed = useEditorStore((s) => s.timelineCollapsed);
   const selectedKind = useEditorStore((s) => {
     if (s.selection.length !== 1) return undefined;
     return activeComp(s).root.find((n) => n.id === s.selection[0])?.kind;
@@ -68,6 +73,14 @@ export function Toolbar() {
     state.apply(op);
     const before = op.before as unknown as { group: { children: { id: Id }[] }; at: number };
     state.select(before.group.children.map((c) => c.id));
+  }
+
+  function handlePrecompose(): void {
+    const state = store.getState();
+    const result = precompose(activeComp(state), registry, selection);
+    state.addComp(result.newComp);
+    state.apply(result.op);
+    state.select([result.compNodeId]);
   }
 
   function handleDelete(): void {
@@ -101,6 +114,10 @@ export function Toolbar() {
           <Ungroup size={ICON_SIZE} />
           Ungroup
         </button>
+        <button className="btn btn-outline" disabled={selection.length === 0} onClick={handlePrecompose} title="Precompose selected layers into a reusable composition">
+          <Layers size={ICON_SIZE} />
+          Precomp
+        </button>
         <button className="btn btn-icon btn-outline btn-danger" disabled={selection.length === 0} onClick={handleDelete} title="Delete the selected layer(s)">
           <Trash2 size={ICON_SIZE} />
         </button>
@@ -126,6 +143,33 @@ export function Toolbar() {
       </div>
 
       <span className="toolbar__spacer" />
+
+      <div className="toolbar__divider" />
+      <span className="toolbar__label">View</span>
+      <div className="btn-group">
+        <button className="btn" title="Editing layout — all panels visible" onClick={() => store.getState().setWorkspaceMode("edit")}>
+          Edit
+        </button>
+        <button className="btn" title="Preview layout — maximum viewport" onClick={() => store.getState().setWorkspaceMode("preview")}>
+          Preview
+        </button>
+        <button className="btn" title="Focus layout — canvas and timeline only" onClick={() => store.getState().setWorkspaceMode("focus")}>
+          Focus
+        </button>
+      </div>
+      <div className="btn-group">
+        <button className="btn btn-icon" aria-pressed={!leftCollapsed} title="Toggle left panel" onClick={() => store.getState().togglePanel("left")}>
+          <PanelLeft size={ICON_SIZE} />
+        </button>
+        <button className="btn btn-icon" aria-pressed={!timelineCollapsed} title="Toggle timeline" onClick={() => store.getState().togglePanel("timeline")}>
+          <PanelBottom size={ICON_SIZE} />
+        </button>
+        <button className="btn btn-icon" aria-pressed={!rightCollapsed} title="Toggle inspector" onClick={() => store.getState().togglePanel("right")}>
+          <PanelRight size={ICON_SIZE} />
+        </button>
+      </div>
+
+      <div className="toolbar__divider" />
 
       <div className="btn-group">
         <button className="btn btn-icon" disabled={!canUndo} onClick={() => store.getState().undo()} title="Undo (⌘Z)">

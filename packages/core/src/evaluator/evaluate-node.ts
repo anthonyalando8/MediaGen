@@ -57,6 +57,7 @@ import { sampleEffectProps } from "./sample-effects";
 import { composeTransform, IDENTITY, mul } from "./compose-transform";
 import { applyTransitions } from "./transitions";
 import { applyAdjustments } from "./adjustments";
+import { evalCompNode } from "./precomp";
 
 export function evaluateNode(
   node: Node,
@@ -81,6 +82,14 @@ export function evaluateNode(
 
   const world = mul(effectiveParentMat, localMat);
   const opacity = parentOpacity * sampled.opacity;
+
+  // Phase 2 §8 — comp nodes are intercepted here rather than going through
+  // NodeKind.render(), because evalCompNode needs `reg`, `world`, `frame`,
+  // and the full EvalCtx — none of which NodeKind.render() receives.
+  if (node.kind === "comp") {
+    return evalCompNode(node, world, opacity, ctx.fps, frame, reg, ctx);
+  }
+
   const out = reg.get(node.kind).render({ ...node, ...sampled }, frame, ctx);
   applyWorld(out, world, opacity, node.blend); // stamp matrix/opacity/blend
 

@@ -18,14 +18,15 @@ export function evaluateComposition(
   comp: Composition,
   frame: Frame,
   reg: NodeKindRegistry,
-  resolveAsset?: EvalCtx["resolveAsset"]
+  resolveAsset?: EvalCtx["resolveAsset"],
+  resolveComp?: EvalCtx["resolveComp"]
 ): RenderTree {
   const ctx: EvalCtx = {
     fps: comp.fps,
     size: comp.size,
-    resolveComp: (id) => {
-      throw new Error(`resolveComp("${id}"): precomp resolution is not implemented in Phase 1`);
-    },
+    resolveComp: resolveComp ?? ((id) => {
+      throw new Error(`resolveComp("${id}"): no resolveComp supplied — pass one via evaluateComposition's 5th argument`);
+    }),
     resolveAsset,
   };
 

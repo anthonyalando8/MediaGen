@@ -3,7 +3,7 @@
 // Tier 1 · DOCUMENT (persisted, undoable) — Deliverable 09 §9.2.
 
 import { applyOp, invertOp } from "core";
-import type { AssetRef, Id, Op, Project } from "core";
+import type { AssetRef, Composition, Id, Op, Project } from "core";
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
 
@@ -46,6 +46,8 @@ export interface DocumentSlice {
    * (store/delete-selection.ts) themselves.
    */
   removeAsset(assetId: Id): void;
+  /** Registers a new Composition in the project library — used by precomposeOp. Same non-op-log rationale as addAsset: this is a library addition, not a composition edit. */
+  addComp(comp: Composition): void;
 }
 
 /**
@@ -138,6 +140,16 @@ export function createDocumentSlice(initialProject: Project): StateCreator<Edito
         document: {
           ...get().document,
           project: { ...project, assets: project.assets.filter((a) => a.id !== assetId) },
+        },
+      });
+    },
+
+    addComp(comp) {
+      const { project } = get().document;
+      set({
+        document: {
+          ...get().document,
+          project: { ...project, comps: { ...project.comps, [comp.id]: comp } },
         },
       });
     },

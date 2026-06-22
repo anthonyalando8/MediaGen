@@ -60,6 +60,9 @@ importers:
       media:
         specifier: workspace:*
         version: link:../../packages/media
+      motion:
+        specifier: workspace:*
+        version: link:../../packages/motion
       nodekinds:
         specifier: workspace:*
         version: link:../../packages/nodekinds

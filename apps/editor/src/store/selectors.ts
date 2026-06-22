@@ -22,11 +22,19 @@ export function activeComp(state: Pick<EditorState, "document">): Composition {
 
 /** Evaluates the active composition at `frame` into a RenderTree (Deliverable 07). */
 export function renderTreeAt(state: Pick<EditorState, "document">, frame: Frame, registry: NodeKindRegistry): RenderTree {
-  const { assets } = state.document.project;
+  const { assets, comps } = state.document.project;
   const resolveAsset = (assetId: string): { width: number; height: number } | undefined => {
     const asset = assets.find((a) => a.id === assetId);
     if (!asset || asset.width === undefined || asset.height === undefined) return undefined;
     return { width: asset.width, height: asset.height };
   };
-  return evaluateComposition(activeComp(state), frame, registry, resolveAsset);
+  // Phase 2 §8 — supply a real resolveComp that looks up the project's
+  // composition library. Phase 1's stub (throws unconditionally) is no
+  // longer appropriate now that comp NodeKinds can appear in the tree.
+  const resolveComp = (id: string): Composition => {
+    const comp = (comps as Record<string, Composition>)[id];
+    if (!comp) throw new Error(`resolveComp: composition "${id}" not found in project`);
+    return comp;
+  };
+  return evaluateComposition(activeComp(state), frame, registry, resolveAsset, resolveComp);
 }

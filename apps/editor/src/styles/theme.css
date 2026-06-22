@@ -1497,3 +1497,192 @@ input[type="range"]::-moz-range-track {
   z-index: 3;
   box-shadow: 0 0 6px var(--accent-soft);
 }
+
+/* ── Curve editor (Phase 2 §9.2) ─────────────────────────────────────── */
+
+.curve-editor {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-1);
+}
+
+.curve-editor__empty {
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+
+.curve-editor__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 4px var(--space-3);
+  border-bottom: 1px solid var(--border);
+  height: 32px;
+}
+
+.curve-editor__title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-1);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.curve-editor__easing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-1);
+  margin-left: auto;
+}
+
+.curve-editor__body {
+  display: flex;
+  overflow-x: auto;
+}
+
+.curve-editor__labels {
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+}
+
+.curve-editor__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+
+.curve-editor__label--active {
+  color: var(--text-0);
+}
+
+.curve-editor__label-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.curve-editor__label-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.curve-editor__label-keys {
+  color: var(--text-2);
+  font-size: 10px;
+}
+
+.curve-editor__graphs {
+  flex: 1;
+  overflow-x: auto;
+}
+
+.curve-editor__channel {
+  border-bottom: 1px solid var(--border);
+}
+
+.curve-editor__graph {
+  display: block;
+  background: var(--surface-0);
+  cursor: crosshair;
+}
+
+
+
+
+/* ── Motion panel controls ───────────────────────────────────────────── */
+
+.motion-panel__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+}
+
+.motion-panel__hint {
+  font-size: 10px;
+  color: var(--text-2);
+  padding: var(--space-1) 0 var(--space-2);
+}
+
+.motion-panel__controls {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.motion-panel__controls-header {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-1);
+}
+
+.motion-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.motion-panel__label {
+  font-size: 11px;
+  color: var(--text-1);
+}
+
+.motion-panel__number-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.motion-panel__number-row input[type="range"] {
+  flex: 1;
+}
+
+.motion-panel__number-val {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-0);
+  min-width: 36px;
+  text-align: right;
+}
+
+.motion-panel__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  justify-content: flex-end;
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+.btn-accent:hover {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.btn-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}

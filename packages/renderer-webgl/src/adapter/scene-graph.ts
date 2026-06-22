@@ -4,11 +4,11 @@
 // (keyed diff)" (Deliverable 08). NO domain types cross this boundary —
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
-import { Container, Graphics, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
+import { Container, Graphics, Matrix, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
 import type { Renderer } from "pixi.js";
 import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
-import { toPixiMatrix } from "../matrix";
+import { toPixiMatrix, inverseTransformRect } from "../matrix";
 import type { TextureManager } from "../textures/manager";
 import { resolvePass } from "../passes/pass-resolver";
 import { resolveTransitionFilter } from "../passes/transition-resolver";
@@ -326,27 +326,44 @@ export class SceneGraphAdapter {
     // isn't ready yet or the source id is unknown — same "next frame picks
     // it up" tolerance as transitionGroup.
     const mattePasses = node.passes.filter((p) => p.kind === "matte" && p.srcNodeId);
-    if (mattePasses.length > 0) {
-      if (!parentLevel.matteTextures) parentLevel.matteTextures = new Map();
-    }
+    const maskPasses = node.passes.filter((p) => p.kind === "mask");
+
+    // LOCAL-space rect covering the whole comp, in THIS container's own
+    // local coordinate space — see matrix.ts's inverseTransformRect doc.
+    // Computed once, used as the coordinate space for BOTH the mask
+    // rasterisation canvas AND the matte source render target, matching
+    // the Filter's filterArea (set below) so vTextureCoord lines up
+    // between uTexture and uMask/uMatte.
+    const needsLocalRect = mattePasses.length > 0 || maskPasses.length > 0;
+    const localRect = needsLocalRect
+      ? inverseTransformRect(node.matrix, { x: 0, y: 0, width: this.compSize.width, height: this.compSize.height })
+      : null;
 
     const getMatteTexture = (srcNodeId: string): import("pixi.js").Texture | undefined => {
       const renderer = this.getRenderer();
-      if (!renderer) return undefined;
+      if (!renderer || !localRect) return undefined;
       const srcDisplay = parentLevel.displays.get(srcNodeId);
       if (!srcDisplay) return undefined;
 
       const key = `${node.id}:${srcNodeId}`;
       if (!parentLevel.matteTextures) parentLevel.matteTextures = new Map();
+      const texWidth = Math.max(1, Math.ceil(localRect.width));
+      const texHeight = Math.max(1, Math.ceil(localRect.height));
       let tex = parentLevel.matteTextures.get(key);
       if (!tex) {
-        tex = RenderTexture.create({ width: this.compSize.width, height: this.compSize.height });
+        tex = RenderTexture.create({ width: texWidth, height: texHeight });
         parentLevel.matteTextures.set(key, tex);
       }
-      if (tex.width !== this.compSize.width || tex.height !== this.compSize.height) {
-        tex.resize(this.compSize.width, this.compSize.height);
+      if (tex.width !== texWidth || tex.height !== texHeight) {
+        tex.resize(texWidth, texHeight);
       }
-      renderer.render({ container: srcDisplay as Container, target: tex });
+      // Offset the render by -localRect.x/y so the texture's pixel grid
+      // origin (0,0) aligns with filterArea's origin — srcDisplay's own
+      // worldTransform already positions it in comp space; this additional
+      // translation re-roots that into the SAME local space the masked/
+      // matted node's filterArea uses.
+      const offsetTransform = new Matrix(1, 0, 0, 1, -localRect.x, -localRect.y);
+      renderer.render({ container: srcDisplay as Container, target: tex, transform: offsetTransform });
       return tex;
     };
 
@@ -357,9 +374,8 @@ export class SceneGraphAdapter {
     // globalCompositeOperation — see mask-pass.ts). The resulting Filter
     // is prepended before any matte/effect filters since masks clip the
     // node's own content FIRST.
-    const maskPasses = node.passes.filter((p) => p.kind === "mask");
     let allFilters = filters;
-    if (maskPasses.length > 0) {
+    if (maskPasses.length > 0 && localRect) {
       const maskSpecs: MaskSpec[] = maskPasses.map((p) => {
         const u = p.uniforms as { path: unknown; feather: number; mode: string; opacity: number; inverted: boolean };
         return {
@@ -368,20 +384,10 @@ export class SceneGraphAdapter {
           feather: u.feather ?? 0,
           opacity: u.opacity ?? 1,
           inverted: Boolean(u.inverted),
-          // node.matrix is the world matrix from the evaluator — same matrix
-          // the Pixi Container's transform is set to. Mask paths are in node
-          // local space, so the rasteriser applies this to convert them to
-          // comp space on the stencil canvas.
-          nodeMatrix: node.matrix,
         };
       });
       if (!parentLevel.maskCanvases) parentLevel.maskCanvases = new Map();
-      const maskResult = buildMaskFilter(
-        maskSpecs,
-        this.compSize.width,
-        this.compSize.height,
-        parentLevel.maskCanvases.get(node.id)
-      );
+      const maskResult = buildMaskFilter(maskSpecs, localRect, parentLevel.maskCanvases.get(node.id));
       if (maskResult) {
         parentLevel.maskCanvases.set(node.id, maskResult.canvas);
         allFilters = [maskResult.filter, ...filters];
@@ -389,10 +395,8 @@ export class SceneGraphAdapter {
     }
 
     container.filters = allFilters;
-    // Force filter area to full comp size for matte and mask passes — the
-    // stencil textures are comp-sized, so vTextureCoord must be in comp space.
-    if (mattePasses.length > 0 || maskPasses.length > 0) {
-      container.filterArea = new Rectangle(0, 0, this.compSize.width, this.compSize.height);
+    if (localRect) {
+      container.filterArea = new Rectangle(localRect.x, localRect.y, localRect.width, localRect.height);
     }
   }
 
