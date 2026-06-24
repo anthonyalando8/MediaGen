@@ -18,6 +18,8 @@ import type { DragPreview } from "./TransformGizmo";
 import { ViewportFrame } from "./ViewportFrame";
 import { MaskPenOverlay } from "./MaskPenOverlay";
 import { RichTextEditor } from "./RichTextEditor";
+import type { RichTextEditorHandle } from "./RichTextEditor";
+import { setActiveEditor } from "../store/editor-handle";
 
 /**
  * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
@@ -240,6 +242,18 @@ export function Viewport() {
             tree = { ...tree, nodes: applyDragPreview(tree.nodes, preview) };
           }
 
+          // Hide the node being edited — the RichTextEditor overlay replaces
+          // it visually, so the underlying Pixi text must not also render.
+          const editingId = editingNodeIdRef.current;
+          if (editingId) {
+            tree = {
+              ...tree,
+              nodes: tree.nodes.map((n) =>
+                n.id === editingId ? { ...n, opacity: 0 } : n
+              ),
+            };
+          }
+
           treeRef.current = tree;
           renderer.render(tree, state.playing);
         } catch (err) {
@@ -265,6 +279,15 @@ export function Viewport() {
   const tool = useEditorStore((s) => s.tool);
   const editingNodeIdRef = useRef<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const editorHandleRef = useRef<RichTextEditorHandle | null>(null);
+
+  // Notify the module singleton after the RichTextEditor has mounted and
+  // populated editorHandleRef — the ref is set synchronously during render
+  // of RichTextEditor, so by the time this effect fires it's populated.
+  useEffect(() => {
+    if (editingNodeId) setActiveEditor(editingNodeId, editorHandleRef.current);
+    else setActiveEditor(null, null);
+  }, [editingNodeId]);
 
   function setEditing(id: string | null) {
     editingNodeIdRef.current = id;
@@ -296,6 +319,7 @@ export function Viewport() {
             node={node}
             fit={fit}
             onDismiss={() => setEditing(null)}
+            editorHandle={editorHandleRef}
           />
         );
       })()}

@@ -32,6 +32,7 @@ import { ParentPicker } from "./ParentPicker";
 import { MattePicker } from "./MattePicker";
 import { CompNodeSection } from "./CompNodeSection";
 import { MotionPanel } from "./MotionPanel";
+import { RichTextFormatBar } from "./RichTextFormatBar";
 import { FieldRow, Section } from "./inspector-fields";
 export { FieldControl, FieldRow } from "./inspector-fields";
 
@@ -139,6 +140,7 @@ export function InspectorPanel() {
         )}
         <EffectStackPanel node={node} />
         <MotionPanel node={node} />
+        {node.kind === "text" && <RichTextFormatBar />}
         <TransitionPanel node={node} root={root} />
         <ParentPicker node={node} root={root} />
         <MattePicker node={node} root={root} />
