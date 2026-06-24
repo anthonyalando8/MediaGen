@@ -17,6 +17,10 @@ export interface GlyphRun {
   fontSize: number;
   weight: number;
   color: ColorOKLCH;
+  /** Italic style — maps to Pixi Text fontStyle. */
+  italic?: boolean;
+  /** Underline decoration. */
+  underline?: boolean;
 }
 
 export interface Stroke {

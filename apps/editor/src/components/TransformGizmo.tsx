@@ -91,15 +91,16 @@ const HANDLE_CURSORS = ["nwse-resize", "nesw-resize", "nwse-resize", "nesw-resiz
 
 interface TransformGizmoProps {
   nodeId: Id;
-  /** The selected node's Tier1 record — used only to derive `descendantIds` for "group" nodes (collectDescendantIds, store/node-tree.ts). */
   selectedNode: Node;
   fit: FitTransform;
   canvasSize: Size;
   treeRef: React.RefObject<RenderTree | null>;
   onPreview: (preview: DragPreview | null) => void;
+  /** Called when the user double-clicks the node body — used to enter text edit mode. */
+  onDoubleClick?: () => void;
 }
 
-export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef, onPreview }: TransformGizmoProps) {
+export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef, onPreview, onDoubleClick }: TransformGizmoProps) {
   const store = useEditorStoreApi();
   const svgRef = useRef<SVGSVGElement>(null);
   const polygonRef = useRef<SVGPolygonElement>(null);
@@ -170,9 +171,22 @@ export function TransformGizmo({ nodeId, selectedNode, fit, canvasSize, treeRef,
     return () => cancelAnimationFrame(raf);
   }, [nodeId, fit, treeRef, descendantIds]);
 
+  const lastPointerDownRef = useRef<number>(0);
+
   function handleMovePointerDown(e: React.PointerEvent): void {
     e.preventDefault();
     e.stopPropagation();
+
+    // Double-click detection: two pointer-downs within 400ms = double-click.
+    // Must check BEFORE setPointerCapture since capture prevents dblclick synthesis.
+    const now = Date.now();
+    if (now - lastPointerDownRef.current < 400) {
+      lastPointerDownRef.current = 0;
+      onDoubleClick?.();
+      return;
+    }
+    lastPointerDownRef.current = now;
+
     (e.target as Element).setPointerCapture(e.pointerId);
     const startMatrix = matrixRef.current;
     if (!startMatrix) return;

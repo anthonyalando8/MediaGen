@@ -21,21 +21,55 @@ export const WHITE: ColorOKLCH = { l: 1, c: 0, h: 0 };
 export const BLACK: ColorOKLCH = { l: 0, c: 0, h: 0 };
 
 /**
- * Lays out `props.text` into one GlyphRun per line, stacked by
- * `fontSize * lineHeight`. This is intentionally minimal for Phase 1: real
- * shaping/measurement (for `align`, `tracking`, and wrapping) needs font
- * metrics that only the renderer has (Pixi's TextMetrics, Week 5) — the
- * renderer-webgl scene-graph adapter is expected to re-flow these runs using
- * `align`/`tracking` from `props` once it owns a loaded font.
+/**
+ * Lays out `props.spans` (rich text) or `props.text` (plain text fallback)
+ * into a flat array of `GlyphRun`s — one per span segment per line.
+ *
+ * Line breaks within a span's text produce new GlyphRuns on successive y
+ * positions. Each span's style overrides the node-level defaults for just
+ * that run, enabling per-word bold/italic/color/size without changing the
+ * rest of the paragraph.
+ *
+ * Backwards-compatible: if `props.spans` is absent, falls back to splitting
+ * `props.text` by "\n" exactly as before.
  */
 export function layout(props: Record<string, Scalar>): GlyphRun[] {
-  const text = String(props.text ?? "");
   const fontFamily = String(props.fontFamily ?? "Inter");
   const fontSize = Number(props.fontSize ?? 64);
   const weight = Number(props.weight ?? 400);
   const lineHeight = Number(props.lineHeight ?? 1.2);
   const color = (props.fill as ColorOKLCH | undefined) ?? WHITE;
 
+  // --- Rich text path ---
+  const spans = props.spans as unknown as import("core").TextSpan[] | undefined;
+  if (spans && Array.isArray(spans) && spans.length > 0) {
+    const runs: GlyphRun[] = [];
+    let lineIndex = 0;
+
+    for (const span of spans) {
+      const lines = span.text.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) lineIndex++; // each \n advances to the next line
+        const lineText = lines[i];
+        if (lineText === "") continue; // skip empty segments (pure line breaks)
+        runs.push({
+          text: lineText,
+          x: 0,
+          y: lineIndex * fontSize * lineHeight,
+          fontFamily: span.fontFamily ?? fontFamily,
+          fontSize: span.fontSize ?? fontSize,
+          weight: span.weight ?? weight,
+          color: span.color ?? color,
+          italic: span.italic,
+          underline: span.underline,
+        });
+      }
+    }
+    return runs;
+  }
+
+  // --- Plain text fallback ---
+  const text = String(props.text ?? "");
   return text.split("\n").map((line, i) => ({
     text: line,
     x: 0,

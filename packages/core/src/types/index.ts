@@ -12,3 +12,4 @@ export * from "./exposed";
 export * from "./node";
 export * from "./composition";
 export * from "./project";
+export * from "./text-span"

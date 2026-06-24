@@ -5,10 +5,16 @@ import { ColorOKLCHSchema, WHITE, layout } from "./common";
 
 export const AlignSchema = z.enum(["left", "center", "right"]);
 
-/**
- * Text kind. `props.fontSize` and `props.fill` are animatable (Deliverable
- * 10). `render()` emits one RenderNode of SDF glyph runs via `layout()`.
- */
+const TextSpanSchema = z.object({
+  text: z.string(),
+  weight: z.number().optional(),
+  italic: z.boolean().optional(),
+  color: ColorOKLCHSchema.optional(),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  underline: z.boolean().optional(),
+});
+
 export const textKind: NodeKind = {
   kind: "text",
   displayName: "Text",
@@ -16,6 +22,7 @@ export const textKind: NodeKind = {
   schema: {
     props: z.object({
       text: z.string(),
+      spans: z.array(TextSpanSchema).optional(),
       fontFamily: z.string(),
       fontSize: z.number(),
       weight: z.number(),
@@ -55,9 +62,9 @@ export const textKind: NodeKind = {
   render: (node) => [
     {
       id: node.id,
-      matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], // placeholder — applyWorld overwrites
-      opacity: 1, // placeholder — applyWorld overwrites
-      blend: "normal", // placeholder — applyWorld overwrites
+      matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
+      opacity: 1,
+      blend: "normal",
       t: "text",
       runs: layout(node.props),
     },

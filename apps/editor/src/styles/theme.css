@@ -1706,3 +1706,87 @@ input[type="range"]::-moz-range-track {
   outline: none;
   border-color: var(--accent);
 }
+
+/* ── Rich text editor & format toolbar ──────────────────────────────── */
+
+.rich-text-editor:empty::before {
+  content: "Type here…";
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.rich-text-editor div {
+  min-height: 1em;
+}
+
+.rich-text-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  pointer-events: all;
+}
+
+.rtt-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.rtt-btn:hover {
+  background: var(--surface-2);
+  color: var(--text-0);
+}
+
+.rtt-btn--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rtt-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.rtt-color {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.rtt-color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.rtt-color-swatch {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  margin: 5px;
+  pointer-events: none;
+}
