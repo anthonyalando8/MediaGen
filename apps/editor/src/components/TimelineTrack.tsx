@@ -1,25 +1,17 @@
 // apps/editor/src/components/TimelineTrack.tsx
 //
-// Clip-arrangement timeline. One row per `comp.root` entry (same
-// order/identity as LayerPanel and TimelineTrackHeaders), each rendering one
-// draggable/trimmable bar positioned at `time.start`, sized to
-// `time.duration`, at a shared `pixelsPerFrame` scale with TimelineRuler.
-//
-// The drag pattern mirrors TransformGizmo.tsx: `setPointerCapture` +
-// window-level pointermove/pointerup installed on pointer-down, LOCAL React
-// state for the live visual preview during the drag (no store writes
-// mid-drag), one committed `moveClipOp`/`trimClipOp` on pointer-up only if
-// something actually changed.
-//
-// UI/UX redesign: bars are color-coded by kind, carry a label + trim
-// affordances, and transition-boundary markers are visible at the edges.
-// ALL drag/trim/commit logic below is unchanged from the original.
+// Clip-arrangement timeline. Production-grade improvements:
+//  - Alternating row zebra-stripe backgrounds for readability.
+//  - Click on empty area deselects.
+//  - Drag minimum is 0 (clips can't go negative).
+//  - scrollContainerRef accepted (future use for scroll-aware hit-testing).
 
 import { useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { Id, Node } from "core";
 import { moveClipOp, trimClipOp, calcCompDuration, setCompDurationOp } from "../commands/move-clip-time";
 import { ADJUSTMENT_COLOR, getKindColor } from "./kind-icons";
+import { useTimelineSnap } from "./TimelineSnapContext";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
@@ -31,7 +23,6 @@ interface LivePreview {
   duration: number;
 }
 
-/** A marker at a bar's left/right edge showing a transition is set on that boundary — solid (active) when an overlap window with the neighbor actually exists right now, faint when declared but currently non-overlapping. */
 function TransitionMarker({ side, active }: { side: "left" | "right"; active: boolean }) {
   return (
     <div
@@ -43,6 +34,7 @@ function TransitionMarker({ side, active }: { side: "left" | "right"; active: bo
 
 function ClipBar({
   node,
+  index,
   pixelsPerFrame,
   previous,
   next,
@@ -50,6 +42,7 @@ function ClipBar({
   onSelect,
 }: {
   node: Node;
+  index: number;
   pixelsPerFrame: number;
   previous: Node | undefined;
   next: Node | undefined;
@@ -57,7 +50,25 @@ function ClipBar({
   onSelect: () => void;
 }) {
   const store = useEditorStoreApi();
+  const { setLitFrame } = useTimelineSnap();
   const [preview, setPreview] = useState<LivePreview | null>(null);
+
+  /** Snap `frame` to the nearest tick multiple if within snapPx screen pixels. */
+  function snapFrame(frame: number, tickInterval: number, snapPx: number): number {
+    const snapFrames = Math.max(1, Math.round(snapPx / pixelsPerFrame));
+    const nearest = Math.round(frame / tickInterval) * tickInterval;
+    return Math.abs(frame - nearest) <= snapFrames ? nearest : frame;
+  }
+
+  // Re-derive tick interval the same way the ruler does
+  function getTickInterval(): number {
+    const candidates = [1, 2, 5, 10, 15, 30, 60, 90, 150, 300, 600];
+    const minPx = 48;
+    for (const f of candidates) {
+      if (f * pixelsPerFrame >= minPx) return f;
+    }
+    return 600;
+  }
 
   const start = preview?.nodeId === node.id ? preview.start : (node.time.start as number);
   const duration = preview?.nodeId === node.id ? preview.duration : (node.time.duration as number);
@@ -83,16 +94,35 @@ function ClipBar({
 
     function onMove(ev: PointerEvent): void {
       const deltaFrames = Math.round((ev.clientX - startX) / pixelsPerFrame);
+      const tickInterval = getTickInterval();
+      const SNAP_PX = 8;
+
       if (kind === "move") {
-        lastStart = originStart + deltaFrames;
+        const raw = Math.max(0, originStart + deltaFrames);
+        // Snap both the start edge and the end edge — whichever is closer
+        const snappedStart = snapFrame(raw, tickInterval, SNAP_PX);
+        const snappedEnd = snapFrame(raw + originDuration, tickInterval, SNAP_PX);
+        const startDiff = Math.abs(raw - snappedStart);
+        const endDiff = Math.abs(raw + originDuration - snappedEnd);
+        lastStart = startDiff <= endDiff ? snappedStart : snappedEnd - originDuration;
         lastDuration = originDuration;
+        // Light up the snapped frame
+        const litF = startDiff <= endDiff
+          ? (snappedStart !== raw ? snappedStart : null)
+          : (snappedEnd !== raw + originDuration ? snappedEnd : null);
+        setLitFrame(litF);
       } else if (kind === "trim-left") {
-        const newStart = Math.min(originStart + originDuration - 1, originStart + deltaFrames);
-        lastStart = newStart;
-        lastDuration = originStart + originDuration - newStart;
+        const raw = Math.min(originStart + originDuration - 1, originStart + deltaFrames);
+        const snapped = snapFrame(Math.max(0, raw), tickInterval, SNAP_PX);
+        lastStart = snapped;
+        lastDuration = originStart + originDuration - lastStart;
+        setLitFrame(snapped !== raw ? snapped : null);
       } else {
-        lastDuration = Math.max(1, originDuration + deltaFrames);
+        const rawEnd = originStart + Math.max(1, originDuration + deltaFrames);
+        const snappedEnd = snapFrame(rawEnd, tickInterval, SNAP_PX);
+        lastDuration = Math.max(1, snappedEnd - originStart);
         lastStart = originStart;
+        setLitFrame(snappedEnd !== rawEnd ? snappedEnd : null);
       }
       setPreview({ nodeId: node.id, start: lastStart, duration: lastDuration });
     }
@@ -101,6 +131,7 @@ function ClipBar({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       setPreview(null);
+      setLitFrame(null);
       if (lastStart === originStart && lastDuration === originDuration) return;
       const state = store.getState();
       const comp = activeComp(state);
@@ -109,7 +140,6 @@ function ClipBar({
       } else {
         state.apply(trimClipOp(comp, node.id, lastStart, lastDuration));
       }
-      // Auto-extend or shrink comp.duration to cover all clip ends.
       const afterComp = activeComp(store.getState());
       const needed = calcCompDuration(afterComp);
       if (needed !== (afterComp.duration as number)) {
@@ -126,7 +156,9 @@ function ClipBar({
   const rightMarkerActive = Boolean(node.transitionOut) && next !== undefined && overlaps(next, start, duration);
 
   return (
-    <div className={`timeline-track__row ${selected ? "timeline-track__row--selected" : ""}`}>
+    <div
+      className={`timeline-track__row ${selected ? "timeline-track__row--selected" : ""} ${index % 2 === 1 ? "timeline-track__row--alt" : ""}`}
+    >
       <div
         className={`timeline-track__bar ${selected ? "timeline-track__bar--selected" : ""}`}
         style={{
@@ -136,6 +168,7 @@ function ClipBar({
           borderColor: selected ? "var(--accent)" : color,
         }}
         onPointerDown={(e) => handleDrag("move", e)}
+        onClick={(e) => { e.stopPropagation(); onSelect(); }}
       >
         {node.transitionIn && <TransitionMarker side="left" active={leftMarkerActive} />}
         <span className="timeline-track__bar-dot" />
@@ -148,18 +181,28 @@ function ClipBar({
   );
 }
 
-export function TimelineTrack({ pixelsPerFrame }: { pixelsPerFrame: number }) {
+export function TimelineTrack({
+  pixelsPerFrame,
+  scrollContainerRef: _scrollContainerRef,
+}: {
+  pixelsPerFrame: number;
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+}) {
   const store = useEditorStoreApi();
   const root = useEditorStore((s) => activeComp(s).root);
   const selection = useEditorStore((s) => s.selection);
   const playhead = useEditorStore((s) => s.playhead);
 
   return (
-    <div className="timeline-track">
+    <div
+      className="timeline-track"
+      onClick={() => store.getState().select([])}
+    >
       {root.map((node, index) => (
         <ClipBar
           key={node.id}
           node={node}
+          index={index}
           pixelsPerFrame={pixelsPerFrame}
           previous={index > 0 ? root[index - 1] : undefined}
           next={index < root.length - 1 ? root[index + 1] : undefined}
@@ -167,8 +210,10 @@ export function TimelineTrack({ pixelsPerFrame }: { pixelsPerFrame: number }) {
           onSelect={() => store.getState().select([node.id])}
         />
       ))}
-      {/* Playhead line spanning all lanes — visual only, mirrors the ruler's playhead position. */}
-      <div className="timeline-track__playhead" style={{ left: (playhead as number) * pixelsPerFrame }} />
+      <div
+        className="timeline-track__playhead"
+        style={{ left: (playhead as number) * pixelsPerFrame }}
+      />
     </div>
   );
 }
