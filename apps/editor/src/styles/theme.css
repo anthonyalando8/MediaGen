@@ -2209,3 +2209,198 @@ input[type="range"]::-moz-range-track {
   min-width: 18px;
   text-align: center;
 }
+
+/* ── Timeline transition block ───────────────────────────────────────── */
+
+.timeline-transition-block {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  z-index: 6; /* above clip bars */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-width: 12px;
+  overflow: visible;
+  pointer-events: all;
+}
+
+.timeline-transition-block__chevron {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.timeline-transition-block--active .timeline-transition-block__chevron polygon {
+  fill: var(--accent);
+  opacity: 0.75;
+  stroke: var(--accent);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+  transition: opacity 0.12s;
+}
+
+.timeline-transition-block--inactive .timeline-transition-block__chevron polygon {
+  fill: rgba(255,255,255,0.12);
+  opacity: 0.6;
+  stroke: rgba(255,255,255,0.3);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4 3;
+}
+
+.timeline-transition-block:hover .timeline-transition-block__chevron polygon {
+  opacity: 1;
+  stroke-width: 2px;
+  stroke-dasharray: none;
+}
+
+.timeline-transition-block__label {
+  position: relative;
+  z-index: 1;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 8px);
+  pointer-events: none;
+  color: rgba(0,0,0,0.75);
+}
+
+.timeline-transition-block--inactive .timeline-transition-block__label {
+  color: var(--text-2);
+}
+
+/* ── Font selector ───────────────────────────────────────────────────── */
+
+.font-selector {
+  position: relative;
+  width: 100%;
+}
+
+.font-selector__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-0);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition);
+}
+
+.font-selector__trigger:hover {
+  border-color: var(--accent);
+}
+
+.font-selector__preview {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.font-selector__arrow {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-left: 4px;
+  flex-shrink: 0;
+  font-family: var(--font-ui);
+}
+
+.font-selector__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+}
+
+.font-selector__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+.font-selector__search {
+  flex-shrink: 0;
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-0);
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.font-selector__search::placeholder {
+  color: var(--text-2);
+}
+
+.font-selector__list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.font-selector__group {
+  padding: 2px 0;
+}
+
+.font-selector__group-label {
+  padding: 4px 10px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.font-selector__item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-0);
+  cursor: pointer;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.font-selector__item:hover {
+  background: var(--surface-2);
+}
+
+.font-selector__item--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.font-selector__empty {
+  padding: 12px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}

@@ -37,7 +37,7 @@ export const textKind: NodeKind = {
     ],
     inspector: [
       { path: "props.text", label: "Text", control: "textarea" },
-      { path: "props.fontFamily", label: "Font", control: "select" },
+      { path: "props.fontFamily", label: "Font", control: "font" },
       { path: "props.fontSize", label: "Size", control: "number" },
       { path: "props.weight", label: "Weight", control: "number" },
       { path: "props.align", label: "Align", control: "select", options: ["left", "center", "right"] },

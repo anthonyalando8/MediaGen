@@ -19,6 +19,7 @@ import { ChevronRight } from "lucide-react";
 import { hexStringToOklch, oklchToHex, rgbToOklch } from "renderer-webgl";
 import type { ColorOKLCH, Json } from "core";
 import type { InspectorFieldValue } from "../inspector/fields";
+import { FontSelector } from "./FontSelector";
 
 type ColorMode = "picker" | "hex" | "rgb";
 
@@ -144,6 +145,14 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
 
     case "color":
       return <ColorControl value={field.value} onChange={onChange} />;
+
+    case "font":
+      return (
+        <FontSelector
+          value={typeof field.value === "string" ? field.value : "Inter"}
+          onChange={onChange}
+        />
+      );
 
     case "asset":
       return <span style={{ color: "var(--text-2)", fontFamily: "var(--font-mono)", fontSize: "var(--text-xs)" }}>{typeof field.value === "string" ? field.value.slice(0, 8) : "none"}</span>;

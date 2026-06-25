@@ -21,6 +21,7 @@ import { moveLaneOp, buildLanes } from "../commands/move-lane";
 import type { LaneEntry } from "../commands/move-lane";
 import { ADJUSTMENT_COLOR, getKindColor } from "./kind-icons";
 import { useTimelineSnap } from "./TimelineSnapContext";
+import { useTransitionRegistry } from "../bootstrap/transition-registry-context";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
@@ -36,12 +37,56 @@ interface LivePreview {
   hoverLaneId: string | null;
 }
 
-function TransitionMarker({ side, active }: { side: "left" | "right"; active: boolean }) {
+/**
+ * TransitionBlock — rendered in the lane row BETWEEN two adjacent clips,
+ * straddling their cut/overlap point. Sized to durationF frames wide,
+ * centered on the cut point. Clicking selects both clips so the inspector
+ * shows the TransitionPanel.
+ */
+function TransitionBlock({
+  prevNode,
+  nextNode,
+  pixelsPerFrame,
+  onSelect,
+}: {
+  prevNode: Node;
+  nextNode: Node;
+  pixelsPerFrame: number;
+  onSelect: () => void;
+}) {
+  const transitionRegistry = useTransitionRegistry();
+
+  // Use transitionIn from next node (preferred), fallback to transitionOut from prev
+  const ref = nextNode.transitionIn ?? prevNode.transitionOut;
+  if (!ref) return null;
+
+  const prevEnd = (prevNode.time.start as number) + (prevNode.time.duration as number);
+  const nextStart = nextNode.time.start as number;
+
+  // Cut point — where the overlap begins or where the clips meet
+  const cutPoint = Math.min(prevEnd, Math.max(nextStart, (prevEnd + nextStart) / 2));
+  const durationF = ref.durationF as number;
+  const halfW = (durationF * pixelsPerFrame) / 2;
+  const left = cutPoint * pixelsPerFrame - halfW;
+  const width = durationF * pixelsPerFrame;
+
+  // Is the transition actually active (clips overlap)?
+  const isActive = prevEnd > nextStart;
+
+  const displayName = transitionRegistry.tryGet(ref.preset)?.displayName ?? ref.preset;
+
   return (
     <div
-      className={`timeline-track__transition-marker timeline-track__transition-marker--${side}${active ? " timeline-track__transition-marker--active" : ""}`}
-      title={active ? "Transition active" : "Transition declared (no overlap)"}
-    />
+      className={`timeline-transition-block ${isActive ? "timeline-transition-block--active" : "timeline-transition-block--inactive"}`}
+      style={{ left, width }}
+      title={`${displayName} · ${durationF}f${isActive ? "" : " · no overlap"}`}
+      onClick={(e) => { e.stopPropagation(); onSelect(); }}
+    >
+      <svg className="timeline-transition-block__chevron" viewBox="0 0 100 28" preserveAspectRatio="none">
+        <polygon points="0,0 90,0 100,14 90,28 0,28 10,14" />
+      </svg>
+      <span className="timeline-transition-block__label">{displayName}</span>
+    </div>
   );
 }
 
@@ -184,11 +229,6 @@ function ClipBar({
 
   const color = node.isAdjustment ? ADJUSTMENT_COLOR : getKindColor(node.kind);
   const isHovering = preview?.nodeId === node.id && preview.hoverLaneId !== (node.lane ?? null);
-  const nodesInLane = lanes[laneIndex]?.nodes ?? [];
-  const previous = nodesInLane.find(({ node: n }) => (n.time.start as number) + (n.time.duration as number) <= (node.time.start as number))?.node;
-  const next = nodesInLane.find(({ node: n }) => (n.time.start as number) >= (node.time.start as number) + (node.time.duration as number))?.node;
-  const leftActive = Boolean(node.transitionIn) && Boolean(previous);
-  const rightActive = Boolean(node.transitionOut) && Boolean(next);
 
   return (
     <div
@@ -202,10 +242,8 @@ function ClipBar({
       onPointerDown={(e) => handleDrag("move", e)}
       onClick={(e) => { e.stopPropagation(); onSelect(); }}
     >
-      {node.transitionIn && <TransitionMarker side="left" active={leftActive} />}
       <span className="timeline-track__bar-dot" />
       <span className="timeline-track__bar-label">{node.name}</span>
-      {node.transitionOut && <TransitionMarker side="right" active={rightActive} />}
       <div
         className="timeline-track__handle timeline-track__handle--left"
         onPointerDown={(e) => handleDrag("trim-left", e)}
@@ -255,6 +293,21 @@ function LaneRow({
           onSelect={() => store.getState().select([node.id])}
         />
       ))}
+      {/* Transition blocks — one per adjacent pair that has a transition declared */}
+      {lane.nodes.slice(0, -1).map(({ node: prevNode }, i) => {
+        const nextNode = lane.nodes[i + 1].node;
+        const hasTransition = Boolean(nextNode.transitionIn) || Boolean(prevNode.transitionOut);
+        if (!hasTransition) return null;
+        return (
+          <TransitionBlock
+            key={`tx-${prevNode.id}-${nextNode.id}`}
+            prevNode={prevNode}
+            nextNode={nextNode}
+            pixelsPerFrame={pixelsPerFrame}
+            onSelect={() => store.getState().select([prevNode.id, nextNode.id])}
+          />
+        );
+      })}
     </div>
   );
 }
