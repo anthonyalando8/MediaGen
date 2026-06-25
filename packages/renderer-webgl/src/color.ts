@@ -34,10 +34,44 @@ function oklchToLinearSrgb(color: ColorOKLCH): [number, number, number] {
 }
 
 /**
- * Converts a ColorOKLCH to a packed 0xRRGGBB integer. `alpha`, if present,
- * is dropped here — apply it via the display object's `.alpha` (already
- * carrying the node's sampled opacity) rather than per-fill alpha.
+ * Converts a packed 0xRRGGBB integer to a packed hex string like "#ff0000".
  */
+export function hexToString(hex: number): string {
+  return `#${hex.toString(16).padStart(6, "0")}`;
+}
+
+/** sRGB 0–255 integers → ColorOKLCH (via linear sRGB → OKLab → OKLCH). */
+export function rgbToOklch(r: number, g: number, b: number): ColorOKLCH {
+  // sRGB → linear
+  function toLinear(c: number): number {
+    const v = Math.min(Math.max(c / 255, 0), 1);
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  }
+  const lr = toLinear(r), lg = toLinear(g), lb = toLinear(b);
+
+  // linear sRGB → OKLab
+  const l_ = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+  const m_ = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+  const s_ = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+
+  const L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_;
+  const a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_;
+  const bLab = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_;
+
+  // OKLab → OKLCH
+  const c = Math.sqrt(a * a + bLab * bLab);
+  const h = ((Math.atan2(bLab, a) * 180) / Math.PI + 360) % 360;
+
+  return { l: Math.round(L * 1000) / 1000, c: Math.round(c * 1000) / 1000, h: Math.round(h * 10) / 10 };
+}
+
+/** Hex string ("#rrggbb" or "rrggbb") → ColorOKLCH. */
+export function hexStringToOklch(hex: string): ColorOKLCH {
+  const clean = hex.replace("#", "").padEnd(6, "0").slice(0, 6);
+  const n = parseInt(clean, 16);
+  return rgbToOklch((n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff);
+}
+
 export function oklchToHex(color: ColorOKLCH): number {
   const [r, g, b] = oklchToLinearSrgb(color).map(linearToSrgb);
   const toByte = (c: number) => Math.round(Math.min(Math.max(c, 0), 1) * 255);

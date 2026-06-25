@@ -16,25 +16,94 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { oklchToHex } from "renderer-webgl";
+import { hexStringToOklch, oklchToHex, rgbToOklch } from "renderer-webgl";
 import type { ColorOKLCH, Json } from "core";
 import type { InspectorFieldValue } from "../inspector/fields";
 
+type ColorMode = "picker" | "hex" | "rgb";
+
+function oklchToRgb(color: ColorOKLCH): [number, number, number] {
+  const hex = oklchToHex(color);
+  return [(hex >> 16) & 0xff, (hex >> 8) & 0xff, hex & 0xff];
+}
+
 function ColorControl({ value, onChange }: { value: unknown; onChange: (value: Json) => void }) {
   const color: ColorOKLCH = value && typeof value === "object" ? (value as ColorOKLCH) : { l: 0, c: 0, h: 0 };
-  const hex = `#${oklchToHex(color).toString(16).padStart(6, "0")}`;
+  const hexStr = `#${oklchToHex(color).toString(16).padStart(6, "0")}`;
+  const [rgb] = [oklchToRgb(color)];
+  const [mode, setMode] = useState<ColorMode>("picker");
+  const [hexInput, setHexInput] = useState("");
+  const [hexFocused, setHexFocused] = useState(false);
 
-  function setChannel(channel: "l" | "c" | "h", e: ChangeEvent<HTMLInputElement>): void {
-    onChange({ ...color, [channel]: Number(e.target.value) } as unknown as Json);
+  const MODES: ColorMode[] = ["picker", "hex", "rgb"];
+  const MODE_LABELS: Record<ColorMode, string> = { picker: "●", hex: "HEX", rgb: "RGB" };
+
+  function cycleMode() {
+    setMode((m) => MODES[(MODES.indexOf(m) + 1) % MODES.length]);
   }
 
   return (
-    <span className="color-control">
-      <span className="color-swatch" style={{ background: hex }} />
-      <input type="number" step={0.01} title="Lightness" value={color.l} onChange={(e) => setChannel("l", e)} />
-      <input type="number" step={0.01} title="Chroma" value={color.c} onChange={(e) => setChannel("c", e)} />
-      <input type="number" step={1} title="Hue" value={color.h} onChange={(e) => setChannel("h", e)} />
-    </span>
+    <div className="color-control-v2">
+      {/* Swatch + native picker always visible */}
+      <label className="color-swatch-btn" title="Pick color">
+        <span className="color-swatch" style={{ background: hexStr }} />
+        <input
+          type="color"
+          value={hexStr}
+          onChange={(e) => onChange(hexStringToOklch(e.target.value) as unknown as Json)}
+        />
+      </label>
+
+      {/* Mode-specific input */}
+      {mode === "picker" && (
+        <span className="color-hex-display">{hexStr}</span>
+      )}
+
+      {mode === "hex" && (
+        <input
+          className="color-hex-input"
+          type="text"
+          value={hexFocused ? hexInput : hexStr}
+          placeholder="#rrggbb"
+          onFocus={() => { setHexFocused(true); setHexInput(hexStr); }}
+          onBlur={() => { setHexFocused(false); }}
+          onChange={(e) => {
+            const v = e.target.value;
+            setHexInput(v);
+            if (/^#?[0-9a-fA-F]{6}$/.test(v)) {
+              onChange(hexStringToOklch(v) as unknown as Json);
+            }
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          spellCheck={false}
+        />
+      )}
+
+      {mode === "rgb" && (
+        <span className="color-rgb-inputs">
+          {(["R", "G", "B"] as const).map((ch, i) => (
+            <label key={ch} className="color-rgb-field">
+              <span>{ch}</span>
+              <input
+                type="number"
+                min={0} max={255} step={1}
+                value={rgb[i]}
+                onChange={(e) => {
+                  const vals: [number, number, number] = [...rgb] as [number, number, number];
+                  vals[i] = Math.min(255, Math.max(0, Number(e.target.value)));
+                  onChange(rgbToOklch(...vals) as unknown as Json);
+                }}
+              />
+            </label>
+          ))}
+        </span>
+      )}
+
+      {/* Mode toggle button */}
+      <button type="button" className="color-mode-btn" title="Switch input mode" onClick={cycleMode}>
+        {MODE_LABELS[mode]}
+      </button>
+    </div>
   );
 }
 

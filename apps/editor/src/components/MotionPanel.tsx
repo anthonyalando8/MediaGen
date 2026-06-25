@@ -120,6 +120,24 @@ export function MotionPanel({ node }: { node: Node }) {
     store.getState().play();
   }
 
+  function handleRemove(): void {
+    const state = store.getState();
+    const activeCompNow = activeComp(state);
+    const nodeIndex = activeCompNow.root.findIndex((n) => n.id === node.id);
+    if (nodeIndex === -1) return;
+    state.apply(createOp({
+      type: "set",
+      compId: activeCompNow.id,
+      path: `/root/${nodeIndex}/channels`,
+      before: activeCompNow.root[nodeIndex].channels as never,
+      after: [] as never,
+      txn: createId(),
+    }));
+    setActivePreset(null);
+  }
+
+  const hasChannels = node.channels.length > 0;
+
   return (
     <Section title="Motion" defaultOpen={true}>
       {/* Preset buttons */}
@@ -162,6 +180,18 @@ export function MotionPanel({ node }: { node: Node }) {
         <p className="motion-panel__hint">
           Select a preset to configure and apply.
         </p>
+      )}
+
+      {/* Remove all channels when motion has been applied */}
+      {hasChannels && (
+        <div className="motion-panel__remove">
+          <button className="btn btn-sm btn-danger" onClick={handleRemove}>
+            Remove motion
+          </button>
+          <span className="motion-panel__hint" style={{ flex: 1 }}>
+            {node.channels.length} channel{node.channels.length !== 1 ? "s" : ""} active
+          </span>
+        </div>
       )}
     </Section>
   );
