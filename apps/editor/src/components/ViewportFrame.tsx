@@ -1,19 +1,11 @@
 // apps/editor/src/components/ViewportFrame.tsx
 //
-// A thin border around the composition's frame — the actual "working
-// area" designs render within — so it's visually distinct from the empty
-// space around it in the viewport. Previously the only visual cue was the
-// composition's own background fill (often white), which is easy to
-// mistake for "the whole canvas is the working area" with no boundary at
-// all once the surrounding chrome is also light, or impossible to spot
-// once the background itself is transparent/dark.
-//
-// Purely decorative — computed from `fit` (the same comp-space ->
-// screen-space mapping <TransformGizmo> uses, viewport/geometry.ts) and
-// rendered in its own non-interactive `<svg>` overlay, NOT the WebGL
-// canvas — no render-loop/renderer changes needed. Sits BELOW
-// <TransformGizmo> in paint order (Viewport.tsx) so selection handles
-// always stay on top.
+// Visual chrome around the composition boundary:
+//   1. Dark overlay panels outside the comp rect — makes the working area
+//      visually distinct. Content outside is clipped by the WebGL stage mask
+//      (canvas-host.ts), so this overlay purely communicates the boundary.
+//   2. Thin accent border around the comp rect.
+//   3. Resolution label above the top-left corner.
 
 import type { FitTransform, Size } from "../viewport/geometry";
 
@@ -24,20 +16,50 @@ interface ViewportFrameProps {
 }
 
 export function ViewportFrame({ compSize, canvasSize, fit }: ViewportFrameProps) {
-  const x = fit.x;
-  const y = fit.y;
-  const width = compSize.width * fit.scale;
-  const height = compSize.height * fit.scale;
+  const cx = fit.x;
+  const cy = fit.y;
+  const cw = compSize.width * fit.scale;
+  const ch = compSize.height * fit.scale;
+  const W = canvasSize.width;
+  const H = canvasSize.height;
+
+  // Four dark overlay rects surrounding the comp rect (top, bottom, left, right).
+  // Using clipPath would be cleaner but four rects is simpler and avoids
+  // SVG clipPath browser quirks.
+  const overlayOpacity = 0.55;
 
   return (
     <svg
-      width={canvasSize.width}
-      height={canvasSize.height}
-      viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+      width={W}
+      height={H}
+      viewBox={`0 0 ${W} ${H}`}
       style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
     >
-      <rect x={x} y={y} width={width} height={height} fill="none" stroke="var(--viewport-frame-border, #3a3f47)" strokeWidth={1} />
-      <text x={x} y={y - 8} fill="var(--viewport-frame-label, #6b7280)" fontSize={11} fontFamily="var(--font-mono, monospace)">
+      {/* Dark overlay outside comp — top */}
+      {cy > 0 && <rect x={0} y={0} width={W} height={cy} fill={`rgba(0,0,0,${overlayOpacity})`} />}
+      {/* Dark overlay outside comp — bottom */}
+      {cy + ch < H && <rect x={0} y={cy + ch} width={W} height={H - (cy + ch)} fill={`rgba(0,0,0,${overlayOpacity})`} />}
+      {/* Dark overlay outside comp — left */}
+      {cx > 0 && <rect x={0} y={cy} width={cx} height={ch} fill={`rgba(0,0,0,${overlayOpacity})`} />}
+      {/* Dark overlay outside comp — right */}
+      {cx + cw < W && <rect x={cx + cw} y={cy} width={W - (cx + cw)} height={ch} fill={`rgba(0,0,0,${overlayOpacity})`} />}
+
+      {/* Comp boundary border */}
+      <rect
+        x={cx} y={cy} width={cw} height={ch}
+        fill="none"
+        stroke="rgba(255,255,255,0.15)"
+        strokeWidth={1}
+      />
+
+      {/* Resolution label */}
+      <text
+        x={cx}
+        y={cy - 7}
+        fill="rgba(255,255,255,0.35)"
+        fontSize={11}
+        fontFamily="var(--font-mono, monospace)"
+      >
         {Math.round(compSize.width)} × {Math.round(compSize.height)}
       </text>
     </svg>

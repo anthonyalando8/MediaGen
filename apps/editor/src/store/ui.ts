@@ -1,15 +1,3 @@
-// apps/editor/src/store/ui.ts
-//
-// Tier 3 · EPHEMERAL (Deliverable 09 §9.2). Viewport zoom plus the editor
-// WORKSPACE state — panel widths/height + collapsed flags. This is the spot
-// the original file reserved ("panel sizes, grid/snap toggles ... joins here
-// in later weeks without touching Tier 1/2"); it does exactly that.
-//
-// Workspace state is persisted to localStorage (a small, self-contained key,
-// independent of the Tier-1 document save in main.tsx) so panel sizes and
-// collapsed state survive reloads — per the UI/UX workspace-management pass.
-// NO Tier 1/2 logic is touched.
-
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
 
@@ -17,9 +5,16 @@ export type WorkspacePanel = "left" | "right" | "timeline";
 export type WorkspaceMode = "edit" | "preview" | "focus";
 
 export interface UiSlice {
-  /** Canvas zoom (existing) — clamped 0.1–8, consumed by <Viewport>'s fit transform. */
+  /** Canvas zoom — clamped 0.1–8, consumed by <Viewport>'s fit transform. */
   zoom: number;
   setZoom(zoom: number): void;
+
+  /** Viewport pan offset in screen pixels — added to the centering offset. */
+  panX: number;
+  panY: number;
+  setPan(x: number, y: number): void;
+  /** Resets zoom to 1 and pan to (0,0) — the "Fit" action. */
+  resetView(): void;
 
   /** Workspace — panel sizing & visibility (view-only). */
   leftWidth: number;
@@ -63,7 +58,7 @@ const WS_DEFAULTS: WorkspaceState = {
   timelineHeight: PANEL_LIMITS.timeline.default,
   leftCollapsed: false,
   rightCollapsed: false,
-  timelineCollapsed: false,
+  timelineCollapsed: true, // collapsed by default — maximises canvas height
 };
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -81,7 +76,7 @@ function loadWorkspace(): WorkspaceState {
       timelineHeight: clamp(Number(p.timelineHeight ?? WS_DEFAULTS.timelineHeight), PANEL_LIMITS.timeline.min, PANEL_LIMITS.timeline.max),
       leftCollapsed: Boolean(p.leftCollapsed ?? false),
       rightCollapsed: Boolean(p.rightCollapsed ?? false),
-      timelineCollapsed: Boolean(p.timelineCollapsed ?? false),
+      timelineCollapsed: Boolean(p.timelineCollapsed ?? WS_DEFAULTS.timelineCollapsed),
     };
   } catch {
     return { ...WS_DEFAULTS };
@@ -92,7 +87,7 @@ function saveWorkspace(ws: WorkspaceState): void {
   try {
     localStorage.setItem(WS_KEY, JSON.stringify(ws));
   } catch {
-    /* storage unavailable (private mode / quota) — workspace just won't persist */
+    /* storage unavailable — workspace just won't persist */
   }
 }
 
@@ -111,8 +106,19 @@ export const createUiSlice: StateCreator<EditorState, [], [], UiSlice> = (set, g
 
   return {
     zoom: 1,
+    panX: 0,
+    panY: 0,
+
     setZoom(zoom) {
       set({ zoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM) });
+    },
+
+    setPan(x, y) {
+      set({ panX: x, panY: y });
+    },
+
+    resetView() {
+      set({ zoom: 1, panX: 0, panY: 0 });
     },
 
     ...loadWorkspace(),

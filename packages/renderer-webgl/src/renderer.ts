@@ -27,8 +27,9 @@ export interface Renderer {
   render(tree: RenderTree, playing?: boolean): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
-  /** See CanvasHost.setViewport — maps comp-space coordinates to canvas pixels for `<TransformGizmo>` (Week 7). */
   setViewport(scale: number, x: number, y: number): void;
+  /** Updates the clip mask to match the current composition size. Call whenever comp dimensions change. */
+  setCompSize(width: number, height: number): void;
   destroy(): void;
 }
 
@@ -57,6 +58,9 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
     },
     setViewport(scale, x, y) {
       host.setViewport(scale, x, y);
+    },
+    setCompSize(width, height) {
+      host.setCompSize(width, height);
     },
     destroy() {
       adapter.destroy();

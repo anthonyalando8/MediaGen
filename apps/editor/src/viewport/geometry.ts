@@ -314,19 +314,21 @@ export interface FitTransform {
 
 /**
  * "Contain, centered" fit of `compSize` within `viewSize`, scaled by `zoom`
- * (Tier 3 `zoom`, default 1). Degenerates to `{scale:1, x:0, y:0}` if either
- * size has a non-positive dimension (e.g. the canvas hasn't been measured
- * yet) — avoids Infinity/NaN before the first resize.
+ * (Tier 3 `zoom`, default 1). `padding` (default 32px each side) keeps the
+ * comp from touching the viewport edges. Degenerates to `{scale:1, x:0, y:0}`
+ * if either size has a non-positive dimension.
  */
-export function computeFitTransform(compSize: Size, viewSize: Size, zoom = 1): FitTransform {
+export function computeFitTransform(compSize: Size, viewSize: Size, zoom = 1, padding = 32, panX = 0, panY = 0): FitTransform {
   if (compSize.width <= 0 || compSize.height <= 0 || viewSize.width <= 0 || viewSize.height <= 0) {
     return { scale: 1, x: 0, y: 0 };
   }
-  const scale = Math.min(viewSize.width / compSize.width, viewSize.height / compSize.height) * zoom;
+  const availW = viewSize.width - padding * 2;
+  const availH = viewSize.height - padding * 2;
+  const scale = Math.min(availW / compSize.width, availH / compSize.height) * zoom;
   return {
     scale,
-    x: (viewSize.width - compSize.width * scale) / 2,
-    y: (viewSize.height - compSize.height * scale) / 2,
+    x: (viewSize.width - compSize.width * scale) / 2 + panX,
+    y: (viewSize.height - compSize.height * scale) / 2 + panY,
   };
 }
 

@@ -147,6 +147,7 @@ export function Viewport() {
   const registry = useRegistry();
   const rendererRef = useRef<Renderer | null>(null);
   const lastFpsRef = useRef<number | null>(null);
+  const lastCompSizeRef = useRef<{ width: number; height: number } | null>(null);
   const lastViewportRef = useRef<FitTransform | null>(null);
   const treeRef = useRef<RenderTree | null>(null);
   const dragPreviewRef = useRef<DragPreview | null>(null);
@@ -155,13 +156,15 @@ export function Viewport() {
   const [canvasSize, setCanvasSize] = useState<Size>(ZERO_SIZE);
 
   const zoom = useEditorStore((s) => s.zoom);
+  const panX = useEditorStore((s) => s.panX);
+  const panY = useEditorStore((s) => s.panY);
   const compSize = useEditorStore((s) => activeComp(s).size);
   const selectedNode = useEditorStore((s) => {
     if (s.selection.length !== 1) return undefined;
     return activeComp(s).root.find((n) => n.id === s.selection[0]);
   });
 
-  const fit = computeFitTransform(compSize, canvasSize, zoom);
+  const fit = computeFitTransform(compSize, canvasSize, zoom, 32, panX, panY);
 
   const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
     const renderer = createWebGLRenderer(canvas, createMediaService(store));
@@ -178,6 +181,71 @@ export function Viewport() {
   }, []);
 
   const lastClickRef = useRef<{ nodeId: string; time: number } | null>(null);
+
+  const MAX_ZOOM_LIMIT = 8;
+  const MIN_ZOOM_LIMIT = 0.1;
+
+  /** Wheel handler — scroll to pan in any direction, Ctrl/Cmd+wheel to zoom toward cursor. */
+  const handleWheel = useCallback(
+    (e: WheelEvent) => {
+      e.preventDefault();
+      const state = store.getState();
+
+      if (e.ctrlKey || e.metaKey) {
+        // Zoom toward cursor so the point under the cursor stays fixed
+        const rect = clickLayerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const cursorX = e.clientX - rect.left;
+        const cursorY = e.clientY - rect.top;
+
+        const oldZoom = state.zoom;
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.min(MAX_ZOOM_LIMIT, Math.max(MIN_ZOOM_LIMIT, oldZoom * delta));
+        const zoomRatio = newZoom / oldZoom;
+
+        const currentFit = computeFitTransform(
+          activeComp(state).size, canvasSize, oldZoom, 32, state.panX, state.panY
+        );
+        const newScale = currentFit.scale * zoomRatio;
+        const compX = (cursorX - currentFit.x) / currentFit.scale;
+        const compY = (cursorY - currentFit.y) / currentFit.scale;
+        const centerX = (canvasSize.width - activeComp(state).size.width * newScale) / 2;
+        const centerY = (canvasSize.height - activeComp(state).size.height * newScale) / 2;
+        const newPanX = cursorX - compX * newScale - centerX;
+        const newPanY = cursorY - compY * newScale - centerY;
+
+        state.setZoom(newZoom);
+        state.setPan(newPanX, newPanY);
+      } else {
+        // Pan — any direction. deltaMode=1 (LINE) uses fixed 32px step.
+        const multiplier = e.deltaMode === 1 ? 32 : 1;
+        state.setPan(state.panX - e.deltaX * multiplier, state.panY - e.deltaY * multiplier);
+      }
+    },
+    [store, canvasSize]
+  );
+
+  // Non-passive so preventDefault works (prevents browser page scroll).
+  useEffect(() => {
+    const el = clickLayerRef.current;
+    if (!el) return;
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
+  }, [handleWheel]);
+
+  // F key = fit/reset view
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "f" || e.key === "F") {
+        // Only fire when not editing text
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
+        store.getState().resetView();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [store]);
 
   const handleCanvasClick = useCallback(
     (e: React.PointerEvent) => {
@@ -227,7 +295,14 @@ export function Viewport() {
             lastFpsRef.current = comp.fps;
           }
 
-          const currentFit = computeFitTransform(comp.size, canvasSize, store.getState().zoom);
+          // Update clip mask whenever comp dimensions change
+          const lastSize = lastCompSizeRef.current;
+          if (!lastSize || lastSize.width !== comp.size.width || lastSize.height !== comp.size.height) {
+            renderer.setCompSize(comp.size.width, comp.size.height);
+            lastCompSizeRef.current = comp.size;
+          }
+
+          const currentFit = computeFitTransform(comp.size, canvasSize, store.getState().zoom, 32, store.getState().panX, store.getState().panY);
           const lastFit = lastViewportRef.current;
           if (!lastFit || lastFit.scale !== currentFit.scale || lastFit.x !== currentFit.x || lastFit.y !== currentFit.y) {
             renderer.setViewport(currentFit.scale, currentFit.x, currentFit.y);

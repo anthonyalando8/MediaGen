@@ -14,7 +14,8 @@ export interface Renderer {
   render(tree: RenderTree): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
-  /** Maps comp-space coordinates to canvas pixels for `<TransformGizmo>` (Week 7). */
   setViewport(scale: number, x: number, y: number): void;
+  /** Updates the clip mask to match the current composition dimensions. */
+  setCompSize(width: number, height: number): void;
   destroy(): void;
 }

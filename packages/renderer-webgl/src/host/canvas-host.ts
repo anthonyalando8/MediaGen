@@ -12,7 +12,7 @@
 // applied once it does. This is a deliberate Phase 1 deviation worth an ADR
 // entry: the literal Deliverable 08 signature predates Pixi v8's async init.
 
-import { Application, Container } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 import type { Renderer } from "pixi.js";
 
 export interface CanvasHostOptions {
@@ -21,6 +21,9 @@ export interface CanvasHostOptions {
   /** Device pixel ratio at creation time. */
   dpr?: number;
   backgroundAlpha?: number;
+  /** Composition size — used to set up the initial clip mask. */
+  compWidth?: number;
+  compHeight?: number;
 }
 
 export interface CanvasHost {
@@ -55,6 +58,8 @@ export interface CanvasHost {
    * note above), so unlike resize/setBackground this never needs queueing.
    */
   setViewport(scale: number, x: number, y: number): void;
+  /** Updates the rectangular clip mask to match the current composition dimensions. Call whenever comp size changes. */
+  setCompSize(width: number, height: number): void;
   destroy(): void;
 }
 
@@ -63,6 +68,22 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
   let isReady = false;
   let pendingResize: { width: number; height: number; dpr: number } | null = null;
   let pendingBackground: { color: number; alpha: number } | null = null;
+
+  // Clip mask — a Graphics rect in comp-local coordinates (0,0,compW,compH).
+  // Since app.stage carries the viewport transform (scale + offset), the
+  // mask in stage-local space is always (0,0,compW,compH) regardless of zoom.
+  // This is the key: the mask travels with the stage transform, so content
+  // outside the comp rect is clipped in screen space correctly at any zoom.
+  const clipMask = new Graphics();
+  let _compWidth = options.compWidth ?? 1080;
+  let _compHeight = options.compHeight ?? 1920;
+
+  function redrawClipMask(): void {
+    clipMask.clear();
+    clipMask.rect(0, 0, _compWidth, _compHeight).fill({ color: 0xffffff, alpha: 1 });
+  }
+
+  redrawClipMask();
 
   function applyResize(width: number, height: number, dpr: number): void {
     app.renderer.resolution = dpr;
@@ -86,6 +107,9 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
     })
     .then(() => {
       isReady = true;
+      // Apply clip mask after stage exists
+      app.stage.addChild(clipMask);
+      app.stage.mask = clipMask;
       if (pendingResize) {
         applyResize(pendingResize.width, pendingResize.height, pendingResize.dpr);
         pendingResize = null;
@@ -119,6 +143,11 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
     setViewport(scale, x, y) {
       app.stage.scale.set(scale);
       app.stage.position.set(x, y);
+    },
+    setCompSize(width, height) {
+      _compWidth = width;
+      _compHeight = height;
+      redrawClipMask();
     },
     destroy() {
       app.destroy(true, { children: true, texture: true });
