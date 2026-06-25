@@ -1,28 +1,14 @@
 // packages/renderer-webgl/src/passes/transition-resolver.ts
 //
-// Resolves a "transitionGroup" RenderNode (contract — see its doc) to a
-// real, drawable result: a `Filter` that reads the "from" side as its
-// implicit input texture (the standard single-input Filter contract every
-// effect already uses) and the "to" side as an ADDED resource — a second,
-// independently pre-rendered texture supplied by the caller
-// (scene-graph.ts's `reconcileTransitionGroup`, which actually performs
-// the render-to-texture step via the real Pixi Renderer).
+// Resolves a transitionGroup RenderNode to a Pixi Filter.
 //
-// WHY A FILTER, NOT A CUSTOM MESH: a `Mesh` with a from-scratch shader
-// bypasses Pixi's automatic global/local-uniform (projection + transform)
-// wiring entirely (GlMeshAdaptor.mjs: `if (!shader.glProgram) { warn(...);
-// return }` — a custom glProgram skips ALL of Pixi's own
-// localUniformBitGl/textureBitGl setup), which is real, easy-to-get-wrong
-// surface this codebase has no way to verify against a real GL context.
-// A `Filter` reuses the EXACT vertex stage (DEFAULT_VERTEX, pass-resolver.ts)
-// and uniform-resource mechanism (Shader's constructor: passing only
-// `resources`, no `groups`, auto-assigns every key a bind slot under
-// group 99 by NAME — confirmed by reading Shader.mjs directly) every
-// shipped effect already relies on. The only difference from a normal
-// effect Filter is one extra named resource (`uTo`, a real
-// `Texture`/`RenderTexture` — `Texture.source` exists, so the
-// auto-UniformGroup-wrap check in Shader's constructor correctly skips it
-// and binds it as a texture sampler instead).
+// KEY DESIGN: Filters are CACHED per transition preset — one Filter instance
+// per active transitionGroup, reused across frames with uniforms updated
+// in-place. Creating new Filter() every frame means uProgress is never
+// uploaded (Pixi uploads uniforms on the tick AFTER the filter is set; a
+// new Filter each frame resets that cycle before the upload happens).
+// Cached filters avoid this entirely: the first frame creates and uploads,
+// subsequent frames mutate the existing uniform values directly.
 
 import { Filter, GlProgram } from "pixi.js";
 import type { Texture } from "pixi.js";
@@ -31,13 +17,11 @@ import { TransitionRegistry, registerBuiltinTransitions } from "effects";
 import type { TransitionDef } from "effects";
 import { DEFAULT_VERTEX, buildEffectUniforms } from "./pass-resolver";
 
-/** Exposed so a fitness-gate test can register into the SAME registry resolveTransitionFilter reads — mirrors pass-resolver.ts's `effectRegistry` export for the identical reason. */
 export const transitionRegistry = new TransitionRegistry();
 registerBuiltinTransitions(transitionRegistry);
 
 const transitionPrograms = new Map<string, GlProgram | null>();
 
-/** Same lazy/failure-tolerant pattern as pass-resolver.ts's `getEffectProgram` — each transition's GlProgram only compiles once. */
 function getTransitionProgram(def: TransitionDef): GlProgram | undefined {
   if (transitionPrograms.has(def.preset)) return transitionPrograms.get(def.preset) ?? undefined;
   try {
@@ -50,30 +34,78 @@ function getTransitionProgram(def: TransitionDef): GlProgram | undefined {
   }
 }
 
+/** Cached Filter state per transitionGroup node id. */
+interface FilterCache {
+  preset: string;
+  filter: Filter;
+  progressUniforms: Record<string, { value: unknown; type: string }>;
+  effectUniforms: Record<string, { value: unknown; type: string }>;
+}
+
+const filterCache = new Map<string, FilterCache>();
+
 /**
- * Builds a real, compiled `Filter` for a "transitionGroup" — applied to
- * the FROM side's Container (so Pixi's implicit `uTexture` resource is
- * the "from" content, matching every transition's GLSL convention:
- * `uniform sampler2D uFrom` reads the filter's own input — see
- * pass-resolver.ts's `buildEffectFilters` doc on the same implicit-input
- * convention). `toTexture` is the TO side's already-rendered
- * `RenderTexture` (produced by the caller via a real `renderer.render()`
- * call this module never performs itself — kept GL-context-construction
- * concerns in scene-graph.ts, mirroring pass-resolver.ts's own
- * separation). Returns `undefined` if the transition isn't registered or
- * `GlProgram` construction fails (headless test env — same degrade-
- * gracefully pattern every other pass resolver in this package uses).
+ * Returns a Filter for the given transitionGroup — reusing a cached one if
+ * the preset hasn't changed, updating uniforms in-place each frame.
+ *
+ * `nodeId` is the transitionGroup's node id, used as the cache key so each
+ * active transition gets its own Filter instance (multiple simultaneous
+ * transitions each need their own uTo texture and progress value).
  */
-export function resolveTransitionFilter(ref: string, uniforms: Json, progress: number, toTexture: Texture): Filter | undefined {
+export function resolveTransitionFilter(
+  nodeId: string,
+  ref: string,
+  uniforms: Json,
+  progress: number,
+  toTexture: Texture
+): Filter | undefined {
   const def = transitionRegistry.tryGet(ref);
   if (!def) return undefined;
 
   const program = getTransitionProgram(def);
   if (!program) return undefined;
 
-  const props = uniforms && typeof uniforms === "object" && !Array.isArray(uniforms) ? uniforms : {};
-  const transitionUniforms = buildEffectUniforms(props as Record<string, Json>);
-  transitionUniforms.uProgress = { value: progress, type: "f32" };
+  const props = uniforms && typeof uniforms === "object" && !Array.isArray(uniforms)
+    ? uniforms as Record<string, Json>
+    : {};
 
-  return new Filter({ glProgram: program, resources: { transitionUniforms, uTo: toTexture } });
+  let cached = filterCache.get(nodeId);
+
+  // Create a new Filter if this is the first frame or the preset changed
+  if (!cached || cached.preset !== ref) {
+    const effectUniforms = buildEffectUniforms(props);
+    const progressUniforms: Record<string, { value: unknown; type: string }> = {
+      uProgress: { value: progress, type: "f32" },
+    };
+
+    const resources: Record<string, unknown> = { progressUniforms, uTo: toTexture };
+    if (Object.keys(effectUniforms).length > 0) resources.effectUniforms = effectUniforms;
+
+    const filter = new Filter({ glProgram: program, resources });
+    cached = { preset: ref, filter, progressUniforms, effectUniforms };
+    filterCache.set(nodeId, cached);
+  } else {
+    // Reuse existing Filter — update uProgress in the existing UniformGroup
+    // and call .update() so Pixi re-uploads to GPU this frame.
+    const resources = cached.filter.resources as Record<string, unknown>;
+    const pg = resources.progressUniforms as { uniforms?: Record<string, unknown>; update?: () => void } | undefined;
+    if (pg?.uniforms) {
+      pg.uniforms.uProgress = progress;
+      pg.update?.();
+    }
+
+    // Update uTo texture reference in case it changed
+    resources.uTo = toTexture;
+  }
+
+  return cached.filter;
+}
+
+/** Called by SceneGraphAdapter when a transitionGroup is destroyed — cleans up its cached Filter. */
+export function destroyTransitionFilter(nodeId: string): void {
+  const cached = filterCache.get(nodeId);
+  if (cached) {
+    cached.filter.destroy();
+    filterCache.delete(nodeId);
+  }
 }

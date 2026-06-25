@@ -11,7 +11,7 @@ import { oklchToHex } from "../color";
 import { toPixiMatrix, inverseTransformRect } from "../matrix";
 import type { TextureManager } from "../textures/manager";
 import { resolvePass } from "../passes/pass-resolver";
-import { resolveTransitionFilter } from "../passes/transition-resolver";
+import { resolveTransitionFilter, destroyTransitionFilter } from "../passes/transition-resolver";
 import { buildMaskFilter } from "../passes/mask-pass";
 import type { MaskSpec } from "../passes/mask-pass";
 
@@ -198,9 +198,6 @@ export class SceneGraphAdapter {
     }
     const transitionGroup = level.transitionGroups.get(id);
     if (transitionGroup) {
-      // Both nested levels (FROM is a child of `display` itself; TO is a
-      // child of the off-tree `toContainer`) torn down the same way —
-      // plus the persistent GPU resources only a transitionGroup owns.
       for (const [childId, childDisplay] of [...transitionGroup.fromLevel.displays]) {
         this.destroyDisplay(childId, childDisplay, transitionGroup.fromLevel);
       }
@@ -209,6 +206,7 @@ export class SceneGraphAdapter {
       }
       transitionGroup.toContainer.destroy({ children: true });
       transitionGroup.toTexture.destroy(true);
+      destroyTransitionFilter(id);
       level.transitionGroups.delete(id);
     }
     display.parent?.removeChild(display);
@@ -480,7 +478,7 @@ export class SceneGraphAdapter {
     }
     renderer.render({ container: state.toContainer, target: state.toTexture });
 
-    const filter = resolveTransitionFilter(node.ref, node.uniforms, node.progress, state.toTexture);
+    const filter = resolveTransitionFilter(String(node.id), node.ref, node.uniforms, node.progress, state.toTexture);
     container.filters = filter ? [filter] : [];
   }
 
@@ -565,6 +563,7 @@ export class SceneGraphAdapter {
       text.style.fontSize = run.fontSize;
       text.style.fontWeight = String(run.weight) as Text["style"]["fontWeight"];
       text.style.fill = oklchToHex(run.color);
+      text.style.fontStyle = run.italic ? "italic" : "normal";
       if (text.resolution !== resolution) text.resolution = resolution;
     });
   }

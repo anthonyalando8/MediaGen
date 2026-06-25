@@ -16,13 +16,13 @@ import type { TransitionDef } from "../registry";
 const DIP_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform vec3 uColor;
 
 void main(void) {
-    vec4 from = texture(uFrom, vTextureCoord);
+    vec4 from = texture(uTexture, vTextureCoord);
     vec4 to = texture(uTo, vTextureCoord);
     // first half: from -> color; second half: color -> to.
     float toColor = clamp(uProgress * 2.0, 0.0, 1.0);
@@ -35,12 +35,12 @@ void main(void) {
 const CUT_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 
 void main(void) {
-    finalColor = uProgress < 0.5 ? texture(uFrom, vTextureCoord) : texture(uTo, vTextureCoord);
+    finalColor = uProgress < 0.5 ? texture(uTexture, vTextureCoord) : texture(uTo, vTextureCoord);
 }
 `;
 
@@ -67,12 +67,12 @@ export const cutTransition: TransitionDef = {
 const DISSOLVE_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 
 void main(void) {
-    finalColor = mix(texture(uFrom, vTextureCoord), texture(uTo, vTextureCoord), uProgress);
+    finalColor = mix(texture(uTexture, vTextureCoord), texture(uTo, vTextureCoord), uProgress);
 }
 `;
 

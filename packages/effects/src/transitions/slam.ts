@@ -11,7 +11,7 @@ import type { TransitionDef } from "../registry";
 const FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform float uZoomStart;
@@ -29,7 +29,7 @@ void main(void) {
     // settles), fading out by ~0.4 — gives the "impact" feel.
     float flash = uFlashIntensity * exp(-pow((uProgress - 0.15) * 6.0, 2.0));
 
-    vec4 from = texture(uFrom, vTextureCoord);
+    vec4 from = texture(uTexture, vTextureCoord);
     vec4 base = uProgress < 0.15 ? from : to;
     finalColor = vec4(mix(base.rgb, vec3(1.0), clamp(flash, 0.0, 1.0)), base.a);
 }

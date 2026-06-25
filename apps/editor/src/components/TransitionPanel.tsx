@@ -1,20 +1,11 @@
 // apps/editor/src/components/TransitionPanel.tsx
 //
-// Applies/removes a transition spanning the boundary with the PREVIOUS
-// sibling (`node.transitionIn`) or the NEXT sibling (`node.transitionOut`)
-// — Phase 2 §4.4/§5, blueprint §13 acceptance test 08. Mounted in
-// InspectorPanel alongside EffectStackPanel — a transition is a per-node
-// field exactly like `effects[]`, just one that needs to know about an
-// adjacent sibling, which is why this takes `root`/`node`.
-//
-// Per find-node-index.ts's documented Phase 1 scope, this panel is
-// top-level-only.
-//
-// UI/UX redesign: collapsed by default (low-traffic). Logic unchanged.
+// Applies/removes transitions between adjacent clips. Uses setTransitionOps()
+// which automatically creates the clip overlap the evaluator requires.
 
 import type { Node } from "core";
 import { useTransitionRegistry } from "../bootstrap/transition-registry-context";
-import { removeTransitionOp, setTransitionDurationOp, setTransitionOp } from "../commands/set-transition";
+import { removeTransitionOp, setTransitionDurationOp, setTransitionOps } from "../commands/set-transition";
 import type { TransitionSide } from "../commands/set-transition";
 import { useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
@@ -22,18 +13,26 @@ import { Section } from "./inspector-fields";
 
 const DEFAULT_DURATION_FRAMES = 15;
 
-function TransitionSideRow({ node, side, neighbor }: { node: Node; side: TransitionSide; neighbor: Node | undefined }) {
+function TransitionSideRow({
+  node, side, neighbor,
+}: {
+  node: Node;
+  side: TransitionSide;
+  neighbor: Node | undefined;
+}) {
   const store = useEditorStoreApi();
   const transitionRegistry = useTransitionRegistry();
   const ref = node[side];
-  const label = side === "transitionIn" ? "In (from previous)" : "Out (to next)";
+  const label = side === "transitionIn" ? "↓ In — from previous" : "↑ Out — to next";
+  const noNeighborMsg = side === "transitionIn" ? "No previous layer" : "No next layer";
 
   function handleApply(preset: string): void {
     if (!preset) return;
     const def = transitionRegistry.tryGet(preset);
     if (!def) return;
     const state = store.getState();
-    state.apply(setTransitionOp(activeComp(state), node.id, side, def, DEFAULT_DURATION_FRAMES));
+    const ops = setTransitionOps(activeComp(state), node.id, side, def, DEFAULT_DURATION_FRAMES);
+    for (const op of ops) state.apply(op);
   }
 
   function handleDuration(durationF: number): void {
@@ -49,47 +48,72 @@ function TransitionSideRow({ node, side, neighbor }: { node: Node; side: Transit
 
   if (!neighbor) {
     return (
-      <div className="transition-panel__row transition-panel__row--disabled">
-        <span className="field-row__label">{label}</span>
-        <span className="transition-panel__hint">No {side === "transitionIn" ? "previous" : "next"} layer</span>
+      <div className="transition-row transition-row--disabled">
+        <span className="transition-row__label">{label}</span>
+        <span className="transition-row__hint">{noNeighborMsg}</span>
       </div>
     );
   }
 
   return (
-    <div className="transition-panel__row">
-      <div className="transition-panel__row-header">
-        <span className="field-row__label">{label}</span>
-        <span className="transition-panel__neighbor">{neighbor.name}</span>
+    <div className="transition-row">
+      <div className="transition-row__header">
+        <span className="transition-row__label">{label}</span>
+        <span className="transition-row__neighbor">↔ {neighbor.name}</span>
       </div>
+
       {ref ? (
-        <div className="transition-panel__active">
-          <select value={ref.preset} onChange={(e) => handleApply(e.target.value)}>
+        // Active transition
+        <div className="transition-row__active">
+          <div className="transition-row__active-badge">
+            ✓ {transitionRegistry.tryGet(ref.preset)?.displayName ?? ref.preset}
+          </div>
+          <div className="transition-row__controls">
+            <select
+              value={ref.preset}
+              onChange={(e) => handleApply(e.target.value)}
+            >
+              {transitionRegistry.list().map((def) => (
+                <option key={def.preset} value={def.preset}>
+                  {def.displayName}
+                </option>
+              ))}
+            </select>
+            <label className="transition-row__duration">
+              <span>Frames</span>
+              <input
+                type="number"
+                min={1}
+                max={300}
+                value={ref.durationF}
+                onChange={(e) => handleDuration(Number(e.target.value))}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-sm btn-danger"
+              onClick={handleRemove}
+              title="Remove transition"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        // No transition yet
+        <div className="transition-row__add">
+          <select value="" onChange={(e) => handleApply(e.target.value)}>
+            <option value="" disabled>Add transition…</option>
             {transitionRegistry.list().map((def) => (
               <option key={def.preset} value={def.preset}>
                 {def.displayName}
               </option>
             ))}
           </select>
-          <label className="transition-panel__duration">
-            <span>Frames</span>
-            <input type="number" min={1} value={ref.durationF} onChange={(e) => handleDuration(Number(e.target.value))} />
-          </label>
-          <button type="button" className="transition-panel__remove" aria-label={`Remove ${label} transition`} onClick={handleRemove}>
-            ×
-          </button>
+          <span className="transition-row__hint">
+            {DEFAULT_DURATION_FRAMES}f overlap created automatically
+          </span>
         </div>
-      ) : (
-        <select value="" onChange={(e) => handleApply(e.target.value)}>
-          <option value="" disabled>
-            Apply a transition…
-          </option>
-          {transitionRegistry.list().map((def) => (
-            <option key={def.preset} value={def.preset}>
-              {def.displayName}
-            </option>
-          ))}
-        </select>
       )}
     </div>
   );

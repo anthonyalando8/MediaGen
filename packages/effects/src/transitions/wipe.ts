@@ -10,7 +10,7 @@ import type { TransitionDef } from "../registry";
 const LINEAR_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform float uAngle;
@@ -22,14 +22,14 @@ void main(void) {
     float pos = dot(vTextureCoord - 0.5, direction) + 0.5;
     float edge = uProgress;
     float t = smoothstep(edge - uFeather, edge + uFeather, pos);
-    finalColor = mix(texture(uFrom, vTextureCoord), texture(uTo, vTextureCoord), t);
+    finalColor = mix(texture(uTexture, vTextureCoord), texture(uTo, vTextureCoord), t);
 }
 `;
 
 const RADIAL_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform float uFeather;
@@ -38,7 +38,7 @@ void main(void) {
     float dist = distance(vTextureCoord, vec2(0.5)) / 0.7071; // normalize so the far corner is ~1.0
     float t = smoothstep(uProgress - uFeather, uProgress + uFeather, dist) ;
     // wipe IN as progress increases: "to" reveals from the center outward.
-    finalColor = mix(texture(uTo, vTextureCoord), texture(uFrom, vTextureCoord), t);
+    finalColor = mix(texture(uTo, vTextureCoord), texture(uTexture, vTextureCoord), t);
 }
 `;
 
@@ -68,7 +68,7 @@ export const radialWipeTransition: TransitionDef = {
 const PUSH_FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform float uAngle;
@@ -78,7 +78,7 @@ void main(void) {
     // "to" pushes "from" fully off-frame — both sample the SAME shifted
     // uv space, unlike whip.ts's whip-pan (which blurs); push is a clean,
     // hard-edged slide with no smear.
-    vec4 from = texture(uFrom, vTextureCoord + direction * uProgress);
+    vec4 from = texture(uTexture, vTextureCoord + direction * uProgress);
     vec4 to = texture(uTo, vTextureCoord - direction * (1.0 - uProgress));
     // whichever sample is actually in-bounds [0,1] wins; out-of-bounds reads outside [0,1] are undefined per GLSL ES, so feather the boundary by progress instead.
     finalColor = uProgress < 0.5 ? from : to;

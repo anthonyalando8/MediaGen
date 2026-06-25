@@ -10,7 +10,7 @@ import type { TransitionDef } from "../registry";
 const FRAGMENT = `in vec2 vTextureCoord;
 out vec4 finalColor;
 
-uniform sampler2D uFrom;
+uniform sampler2D uTexture;
 uniform sampler2D uTo;
 uniform float uProgress;
 uniform float uAngle;
@@ -35,7 +35,7 @@ void main(void) {
     vec2 toUv = vTextureCoord - direction * (1.0 - uProgress);
 
     float blur = uBlurAmount * sin(uProgress * 3.14159265);
-    vec4 from = sampleBlurred(uFrom, fromUv, direction, blur);
+    vec4 from = sampleBlurred(uTexture, fromUv, direction, blur);
     vec4 to = sampleBlurred(uTo, toUv, direction, blur);
 
     finalColor = mix(from, to, smoothstep(0.0, 1.0, uProgress));
