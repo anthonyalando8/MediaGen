@@ -7,12 +7,14 @@
 // Rendered as a single <svg> stretched to fill the full scroll content area
 // so lines span all rows without any per-row overhead.
 
+import { useId } from "react";
+
 interface TimelineGridProps {
   pixelsPerFrame: number;
   trackCount: number;
   totalFrames: number;
-  litFrame: number | null; // frame that is currently snapped-to; null = none
-  tickInterval: number;    // same interval as the ruler so grid lines match ticks 1:1
+  litFrame: number | null;
+  tickInterval: number;
 }
 
 export function TimelineGrid({
@@ -22,9 +24,11 @@ export function TimelineGrid({
   litFrame,
   tickInterval,
 }: TimelineGridProps) {
-  const TRACK_H = 34; // mirrors --track-h CSS token
-  const height = trackCount * TRACK_H;
-  const width = totalFrames * pixelsPerFrame;
+  const uid = useId().replace(/:/g, "");
+  const TRACK_H = 34;
+  const height = Math.max(TRACK_H, trackCount * TRACK_H);
+  const width = Math.max(1, totalFrames * pixelsPerFrame);
+  const halfInterval = Math.max(1, tickInterval / 2);
 
   const lines: number[] = [];
   for (let f = 0; f <= totalFrames; f += tickInterval) lines.push(f);
@@ -38,43 +42,28 @@ export function TimelineGrid({
       aria-hidden="true"
     >
       <defs>
-        <pattern id="tg-minor" x="0" y="0" width={tickInterval * pixelsPerFrame} height={TRACK_H} patternUnits="userSpaceOnUse">
-          {/* Minor grid — half-interval subdivision */}
+        <pattern
+          id={`tg-minor-${uid}`}
+          x="0" y="0"
+          width={halfInterval * pixelsPerFrame}
+          height={TRACK_H}
+          patternUnits="userSpaceOnUse"
+        >
           <line
-            x1={Math.round(tickInterval * pixelsPerFrame * 0.5)}
+            x1={Math.round(halfInterval * pixelsPerFrame)}
             y1="0"
-            x2={Math.round(tickInterval * pixelsPerFrame * 0.5)}
+            x2={Math.round(halfInterval * pixelsPerFrame)}
             y2={TRACK_H}
-            stroke="rgba(255,255,255,0.04)"
+            stroke="rgba(255,255,255,0.035)"
             strokeWidth="1"
           />
         </pattern>
       </defs>
 
-      {/* Minor subdivision lines via pattern */}
-      <rect width={width} height={height} fill="url(#tg-minor)" />
+      {/* Minor subdivision lines */}
+      <rect width={width} height={height} fill={`url(#tg-minor-${uid})`} />
 
-      {/* Major tick lines */}
-      {lines.map((f) => {
-        const x = Math.round(f * pixelsPerFrame);
-        const isLit = f === litFrame;
-        return (
-          <line
-            key={f}
-            x1={x} y1={0}
-            x2={x} y2={height}
-            stroke={isLit ? "var(--accent)" : "rgba(255,255,255,0.07)"}
-            strokeWidth={isLit ? 1.5 : 1}
-            opacity={isLit ? 0.85 : 1}
-          >
-            {isLit && (
-              <animate attributeName="opacity" values="1;0.5;1" dur="0.4s" repeatCount="2" />
-            )}
-          </line>
-        );
-      })}
-
-      {/* Horizontal row dividers — faint lines between tracks */}
+      {/* Horizontal row dividers */}
       {Array.from({ length: trackCount }, (_, i) => (
         <line
           key={`h${i}`}
@@ -84,6 +73,39 @@ export function TimelineGrid({
           strokeWidth="1"
         />
       ))}
+
+      {/* Major tick lines — drawn last so they appear on top */}
+      {lines.map((f) => {
+        const x = Math.round(f * pixelsPerFrame);
+        const isLit = litFrame !== null && f === litFrame;
+        return (
+          <line
+            key={f}
+            x1={x} y1={0}
+            x2={x} y2={height}
+            stroke={isLit ? "var(--accent)" : "rgba(255,255,255,0.08)"}
+            strokeWidth={isLit ? 2 : 1}
+          />
+        );
+      })}
+
+      {/* Snap flash — a bright overlay line rendered only when lit */}
+      {litFrame !== null && (() => {
+        const x = Math.round(litFrame * pixelsPerFrame);
+        const isOnTick = lines.includes(litFrame);
+        if (!isOnTick) return null;
+        return (
+          <line
+            key="snap-flash"
+            x1={x} y1={0}
+            x2={x} y2={height}
+            stroke="var(--accent)"
+            strokeWidth="2"
+            opacity="0.9"
+            style={{ filter: "drop-shadow(0 0 4px var(--accent))" }}
+          />
+        );
+      })()}
     </svg>
   );
 }

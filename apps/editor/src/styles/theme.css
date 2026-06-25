@@ -2156,3 +2156,56 @@ input[type="range"]::-moz-range-track {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ── Multi-lane timeline track additions ─────────────────────────────── */
+
+/* Drop target row highlight when dragging a clip onto a lane */
+.timeline-track__row--drop-target {
+  background: rgba(53, 214, 193, 0.08);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+/* Clip lifting effect — shows the bar is being moved to another lane */
+.timeline-track__bar--lifting {
+  opacity: 0.65;
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5), 0 0 0 1.5px var(--accent) !important;
+  z-index: 10;
+  transition: transform 0.08s, opacity 0.08s;
+}
+
+/* Stacked kind chips for multi-clip lanes */
+.track-header__chips {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 10px;
+}
+
+.track-header__chip {
+  width: 8px;
+  height: 22px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.track-header__chip--stacked {
+  width: 8px;
+  height: 6px;
+  border-radius: 2px;
+}
+
+/* Clip count badge on multi-clip lane headers */
+.track-header__count {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  min-width: 18px;
+  text-align: center;
+}

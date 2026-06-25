@@ -12,7 +12,7 @@
 //  - Timecode display in HH:MM:SS:FF format.
 //  - FPS readout in transport.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Pause, Play, SkipBack, SkipForward,
   ZoomIn, ZoomOut, Navigation
@@ -59,7 +59,9 @@ export function TimelinePlaceholder() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const snapCtx = { litFrame, setLitFrame };
+  // Stable context value — setLitFrame from useState is already stable,
+  // but memoizing prevents unnecessary re-renders of all context consumers.
+  const snapCtx = useMemo(() => ({ litFrame, setLitFrame }), [litFrame]);
 
   // Derive tick interval (same logic as ruler) to align grid lines with ticks
   function pickTickInterval(ppf: number): number {
@@ -76,7 +78,11 @@ export function TimelinePlaceholder() {
     return activeComp(s).root.find((n) => n.id === s.selection[0]);
   });
   const hasChannels = (selectedNode?.channels.length ?? 0) > 0;
-  const trackCount = useEditorStore((s) => activeComp(s).root.length);
+  const trackCount = useEditorStore((s) => {
+    const comp = activeComp(s);
+    const laneIds = new Set(comp.root.map((n) => n.lane ?? `__solo__${n.id}`));
+    return Math.max(1, laneIds.size);
+  });
   const visibleDuration = useEditorStore((s) => {
     const comp = activeComp(s);
     const maxEnd = comp.root.reduce(
