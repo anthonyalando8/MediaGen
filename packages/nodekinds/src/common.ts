@@ -45,24 +45,49 @@ export function layout(props: Record<string, Scalar>): GlyphRun[] {
   if (spans && Array.isArray(spans) && spans.length > 0) {
     const runs: GlyphRun[] = [];
     let lineIndex = 0;
+    let lineX = 0; // running x offset within current line
+
+    // Canvas 2D context for measuring text widths
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let ctx: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    if (typeof g.document !== "undefined") {
+      const c = g.document.createElement("canvas");
+      ctx = c.getContext("2d");
+    }
+
+    function measureWidth(text: string, fSize: number, fFamily: string, fWeight: number): number {
+      if (!ctx) return text.length * fSize * 0.6;
+      ctx.font = `${fWeight >= 600 ? "bold" : "normal"} ${fSize}px ${fFamily}`;
+      return ctx.measureText(text).width;
+    }
 
     for (const span of spans) {
       const lines = span.text.split("\n");
       for (let i = 0; i < lines.length; i++) {
-        if (i > 0) lineIndex++; // each \n advances to the next line
+        if (i > 0) {
+          lineIndex++;
+          lineX = 0; // reset x at start of each new line
+        }
         const lineText = lines[i];
-        if (lineText === "") continue; // skip empty segments (pure line breaks)
+        if (lineText === "") continue;
+        const runFontSize   = span.fontSize   ?? fontSize;
+        const runFontFamily = span.fontFamily ?? fontFamily;
+        const runWeight     = span.weight     ?? weight;
         runs.push({
-          text: lineText,
-          x: 0,
-          y: lineIndex * fontSize * lineHeight,
-          fontFamily: span.fontFamily ?? fontFamily,
-          fontSize: span.fontSize ?? fontSize,
-          weight: span.weight ?? weight,
-          color: span.color ?? color,
-          italic: span.italic,
-          underline: span.underline,
+          text:       lineText,
+          x:          lineX,
+          y:          lineIndex * fontSize * lineHeight,
+          fontFamily: runFontFamily,
+          fontSize:   runFontSize,
+          weight:     runWeight,
+          color:      span.color ?? color,
+          italic:     span.italic,
+          underline:  span.underline,
         });
+        // Advance x by the width of this run
+        lineX += measureWidth(lineText, runFontSize, runFontFamily, runWeight);
       }
     }
     return runs;

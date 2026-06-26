@@ -237,21 +237,47 @@ export function Viewport() {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [handleWheel]);
 
-  // F key = fit/reset view; V/T/R/B = tool shortcuts
+  // F key = fit/reset view; V/T/R/B = tool shortcuts; Escape = dismiss editors
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
+
+      // Escape dismisses the text editor from ANYWHERE — even when focus is
+      // in the inspector's format bar (color picker, buttons, etc.)
+      if (e.key === "Escape") {
+        if (editingNodeIdRef.current) {
+          e.preventDefault();
+          setEditing(null);
+          return;
+        }
+        if (store.getState().tool === "draw") store.getState().setTool("select");
+        return;
+      }
+
+      // All other shortcuts only fire when focus is NOT in an input/editor
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
       if (e.key === "f" || e.key === "F") store.getState().resetView();
       if (e.key === "v" || e.key === "V") store.getState().setTool("select");
       if (e.key === "t" || e.key === "T") store.getState().setTool("text");
       if (e.key === "r" || e.key === "R") store.getState().setTool("shape");
       if (e.key === "b" || e.key === "B") store.getState().setTool("draw");
-      if (e.key === "Escape" && store.getState().tool === "draw") store.getState().setTool("select");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [store]);
+
+  // Dismiss text editor on click outside the editor div or format bar
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      if (!editingNodeIdRef.current) return;
+      const target = e.target as HTMLElement;
+      // Keep editor open if clicking inside the editor itself or the format bar
+      if (target.closest?.(".rich-text-editor") || target.closest?.(".insp-section")) return;
+      setEditing(null);
+    }
+    window.addEventListener("pointerdown", onPointerDown, { capture: true });
+    return () => window.removeEventListener("pointerdown", onPointerDown, { capture: true });
+  }, []);
 
   const handleCanvasClick = useCallback(
     (e: React.PointerEvent) => {
@@ -423,10 +449,13 @@ export function Viewport() {
       {editingNodeId && (() => {
         const node = activeComp(store.getState()).root.find((n) => n.id === editingNodeId);
         if (!node || node.kind !== "text") return null;
+        const renderNode = treeRef.current?.nodes.find((n) => n.id === editingNodeId);
+        const nodeMatrix = renderNode?.matrix ?? [1,0,0,0,1,0,0,0,1] as import("contract").Mat3;
         return (
           <RichTextEditor
             node={node}
             fit={fit}
+            nodeMatrix={nodeMatrix}
             onDismiss={() => setEditing(null)}
             editorHandle={editorHandleRef}
           />

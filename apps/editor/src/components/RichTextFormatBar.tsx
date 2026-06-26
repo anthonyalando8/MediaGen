@@ -25,14 +25,14 @@ export function RichTextFormatBar() {
         <button
           className="btn btn-sm rich-format-btn"
           title="Bold (⌘B)"
-          onPointerDown={(e) => { e.preventDefault(); handle.applyBold(); }}
+          onPointerDown={(e) => { e.preventDefault(); handle.applyBold(); handle.focus(); }}
         >
           <b>B</b>
         </button>
         <button
           className="btn btn-sm rich-format-btn"
           title="Italic (⌘I)"
-          onPointerDown={(e) => { e.preventDefault(); handle.applyItalic(); }}
+          onPointerDown={(e) => { e.preventDefault(); handle.applyItalic(); handle.focus(); }}
         >
           <i>I</i>
         </button>
@@ -41,10 +41,17 @@ export function RichTextFormatBar() {
           <input
             type="color"
             defaultValue="#ffffff"
-            onInput={(e) => {
+            onFocus={() => {
+              // Save selection BEFORE the picker steals focus from the editor
+              handle.saveSelection();
+            }}
+            onChange={(e) => {
               const hex = (e.target as HTMLInputElement).value;
-              handle.focus();
               handle.applyColor(hex);
+            }}
+            onBlur={() => {
+              // Return focus to the editor after the color picker closes
+              setTimeout(() => handle.focus(), 0);
             }}
           />
         </label>

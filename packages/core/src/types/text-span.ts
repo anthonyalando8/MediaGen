@@ -27,6 +27,4 @@ export interface TextSpan {
   fontFamily?: string;
   /** Underline decoration. */
   underline?: boolean;
-  /** Internal: raw CSS color string from execCommand foreColor — converted to ColorOKLCH on commit. */
-  inlineColor?: string;
 }
