@@ -118,14 +118,16 @@ function SpanRow({ span, index, nodeId, fps }: SpanRowProps) {
               key={fm}
               className={`btn btn-xs ${fillMode === fm ? "btn-active" : ""}`}
               title={
-                fm === "forwards"  ? "Hold final state (default)" :
-                fm === "none"      ? "Reset to original" :
-                fm === "backwards" ? "Pre-hide before start" :
-                                     "Pre-hide + hold final"
+                fm === "forwards"  ? "Hold final state — text stays visible after animating in" :
+                fm === "none"      ? "Return to start — e.g. fade-in resets to invisible after playing" :
+                fm === "backwards" ? "Pre-hide — hidden before animation starts, stays visible after" :
+                                     "Pre-hide + return to start — hidden before and after, visible only during"
               }
               onClick={() => setFillMode(fm)}
             >
-              {fm === "forwards" ? "Hold" : fm === "none" ? "Reset" : fm === "backwards" ? "Pre-hide" : "Both"}
+              {fm === "forwards"  ? "Hold"     :
+               fm === "none"      ? "Return"   :
+               fm === "backwards" ? "Pre-hide" : "Wrap"}
             </button>
           ))}
         </div>

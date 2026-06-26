@@ -66,34 +66,38 @@ export function sampleSpanChannels(span: TextSpan, frame: Frame): SampledSpan {
   // ── Before the window ────────────────────────────────────────────────
   if (frame < start) {
     if (fillMode === "backwards" || fillMode === "both") {
-      // Hold FIRST keyframe value (localFrame 0)
+      // Pre-hide: hold FIRST keyframe value before the window.
+      // For a fade-in (key[0]=opacity:0), span is hidden until it starts.
       if (span.channels?.length) {
         for (const ch of span.channels) {
           applyChannel(result, ch.path, sampleChannel(ch, 0 as Frame));
         }
       }
-    } else {
-      // "none" or "forwards" before window — static defaults, but
-      // if the first keyframe starts at opacity:0 we still want to hide.
-      // For "none"/"forwards": return defaults (span is fully visible pre-entry
-      // unless the author explicitly wants "backwards").
     }
+    // "none" / "forwards": span is fully visible before window (static defaults).
     return result;
   }
 
   // ── After the window ─────────────────────────────────────────────────
   if (frame >= end) {
     if (fillMode === "forwards" || fillMode === "both") {
-      // Hold LAST keyframe value. Keyframes are authored at span-local frames
-      // 0..durationF. Passing `duration` clamps to the last key via
-      // interpolate()'s beyond-last-key behaviour (returns the last value).
+      // Hold: sample at `duration` — clamps to last keyframe value.
       if (span.channels?.length) {
         for (const ch of span.channels) {
           applyChannel(result, ch.path, sampleChannel(ch, duration as Frame));
         }
       }
+    } else if (fillMode === "none") {
+      // Reset: hold the FIRST keyframe value after the window ends.
+      // For a fade-in (key[0]=opacity:0) this makes the span invisible again —
+      // a clear visual signal the animation has "reset" and can play again.
+      if (span.channels?.length) {
+        for (const ch of span.channels) {
+          applyChannel(result, ch.path, sampleChannel(ch, 0 as Frame));
+        }
+      }
     }
-    // "none" / "backwards": fall through → return static defaults (resets)
+    // "backwards": return static defaults after window (fully visible base state)
     return result;
   }
 
