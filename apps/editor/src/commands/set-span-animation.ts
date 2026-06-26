@@ -95,11 +95,12 @@ export function setSpanTimeOp(
   spanIndex: number,
   start: Frame,
   duration: Frame,
+  fillMode: "none" | "forwards" | "backwards" | "both" = "forwards",
 ): Op {
   const idx = findNodeIndex(comp, nodeId);
   const node = comp.root[idx];
   const spans: TextSpan[] = ((node.props.spans as unknown as TextSpan[]) ?? []).map((s, i) =>
-    i === spanIndex ? { ...s, time: { start, duration } } : s
+    i === spanIndex ? { ...s, time: { start, duration, fillMode } } : s
   );
   const before = node.props as unknown as Json;
   const after = { ...(node.props as object), spans } as unknown as Json;

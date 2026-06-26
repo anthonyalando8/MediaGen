@@ -41,27 +41,37 @@ function SpanRow({ span, index, nodeId, fps }: SpanRowProps) {
   const store = useEditorStoreApi();
   const hasAnim = Boolean(span.channels?.length || span.time);
   const [dur, setDur] = useState(span.time?.duration ?? 15);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
+  const fillMode = span.time?.fillMode ?? "forwards";
 
   function applyPreset(preset: typeof PRESETS[number]["id"]) {
     const state = store.getState();
     const comp = activeComp(state);
     const start = (span.time?.start ?? 0) as Frame;
     const channels = spanPresetChannels(preset, dur);
-    // Apply channels first, then ensure time window exists
     state.apply(setSpanChannelsOp(comp, nodeId, index, channels));
     const afterComp = activeComp(store.getState());
-    state.apply(setSpanTimeOp(afterComp, nodeId, index, start, dur as Frame));
+    state.apply(setSpanTimeOp(afterComp, nodeId, index, start, dur as Frame, fillMode));
+    setActivePreset(preset);
   }
 
   function setStart(v: number) {
     const state = store.getState();
     const comp = activeComp(state);
-    state.apply(setSpanTimeOp(comp, nodeId, index, v as Frame, (span.time?.duration ?? dur) as Frame));
+    state.apply(setSpanTimeOp(comp, nodeId, index, v as Frame, (span.time?.duration ?? dur) as Frame, fillMode));
+  }
+
+  function setFillMode(fm: "none" | "forwards" | "backwards" | "both") {
+    if (!span.time) return;
+    const state = store.getState();
+    const comp = activeComp(state);
+    state.apply(setSpanTimeOp(comp, nodeId, index, span.time.start, span.time.duration, fm));
   }
 
   function clearAnim() {
     const state = store.getState();
     state.apply(clearSpanAnimationOp(activeComp(state), nodeId, index));
+    setActivePreset(null);
   }
 
   const preview = span.text.length > 20 ? span.text.slice(0, 18) + "…" : span.text;
@@ -99,11 +109,33 @@ function SpanRow({ span, index, nodeId, fps }: SpanRowProps) {
         </label>
       </div>
 
+      {/* Fill mode — only show when a time window exists */}
+      {span.time && (
+        <div className="span-anim-row__fillmode">
+          <span className="span-anim-field__label">After</span>
+          {(["forwards", "none", "backwards", "both"] as const).map((fm) => (
+            <button
+              key={fm}
+              className={`btn btn-xs ${fillMode === fm ? "btn-active" : ""}`}
+              title={
+                fm === "forwards"  ? "Hold final state (default)" :
+                fm === "none"      ? "Reset to original" :
+                fm === "backwards" ? "Pre-hide before start" :
+                                     "Pre-hide + hold final"
+              }
+              onClick={() => setFillMode(fm)}
+            >
+              {fm === "forwards" ? "Hold" : fm === "none" ? "Reset" : fm === "backwards" ? "Pre-hide" : "Both"}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="span-anim-row__presets">
         {PRESETS.map((p) => (
           <button
             key={p.id}
-            className="btn btn-xs"
+            className={`btn btn-xs ${activePreset === p.id ? "btn-active" : ""}`}
             onClick={() => applyPreset(p.id)}
           >
             {p.label}

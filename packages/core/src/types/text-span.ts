@@ -14,11 +14,38 @@ import type { ColorOKLCH } from "./primitives";
 import type { Channel } from "./channel";
 import type { Frame, Id } from "./ids";
 
+/**
+ * Post-animation fill behaviour — mirrors CSS animation-fill-mode.
+ *
+ *  "none"      — outside the time window the span uses its static (un-animated)
+ *                values. The animation plays and then vanishes back to the base
+ *                state. Use for: repeating pulses, momentary highlights.
+ *
+ *  "forwards"  — after the window ends the span holds the value of its LAST
+ *                keyframe. A fade-in stays visible; a slide-in stays in place.
+ *                This is the DEFAULT because it's correct for virtually every
+ *                "enter animation" — the content comes in and stays.
+ *
+ *  "backwards" — before the window starts the span holds the value of its
+ *                FIRST keyframe instead of the static default. Useful when the
+ *                first keyframe is opacity:0 and you want the span hidden before
+ *                it enters rather than popping in at full opacity.
+ *
+ *  "both"      — backwards before the window + forwards after it.
+ */
+export type FillMode = "none" | "forwards" | "backwards" | "both";
+
 export interface TextSpanTime {
-  /** Frame at which this span becomes visible (inclusive). */
+  /** Frame at which this span's animation begins (inclusive). */
   start: Frame;
-  /** Duration in frames that this span is visible. */
+  /** Duration in frames of the animation window. */
   duration: Frame;
+  /**
+   * What happens outside the animation window.
+   * Defaults to "forwards" — span holds its last-keyframe state after the
+   * animation ends (e.g. a fade-in stays fully visible).
+   */
+  fillMode?: FillMode;
 }
 
 export interface TextSpan {

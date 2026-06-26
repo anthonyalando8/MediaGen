@@ -85,6 +85,8 @@
   display: flex;
   gap: var(--space-3);
   margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .span-anim-row__presets {
@@ -101,11 +103,21 @@
   gap: 5px;
   font-size: 11px;
   color: var(--text-1);
+  min-width: 0;
 }
 
 .span-anim-field span:first-child {
   color: var(--text-2);
-  min-width: 36px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Constrain number inputs inside span-anim rows */
+.span-anim-row .insp-number,
+.span-anim-field .insp-number {
+  width: 52px !important;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .span-anim-field__unit {
@@ -130,4 +142,19 @@
   padding: 0 8px;
   font-size: 10px;
   border-radius: var(--radius-sm);
+}
+
+/* ── Fill mode row ───────────────────────────────────────────────────── */
+
+.span-anim-row__fillmode {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--space-2);
+}
+
+.span-anim-field__label {
+  font-size: 11px;
+  color: var(--text-2);
+  min-width: 28px;
 }
