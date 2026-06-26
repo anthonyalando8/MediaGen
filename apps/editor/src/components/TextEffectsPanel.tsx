@@ -12,7 +12,7 @@ import type { ColorOKLCH } from "core";
 import { createId, createOp } from "core";
 import { useEditorStoreApi } from "../store/context";
 import { getActiveSpanIndex, subscribeActiveSpan } from "../store/active-span-handle";
-import { getActiveEditor } from "../store/editor-handle";
+import { getActiveEditor, subscribeActiveEditor } from "../store/editor-handle";
 import { activeComp } from "../store/selectors";
 import { hexStringToOklch, oklchToHex } from "renderer-webgl";
 import { findNodeIndex } from "../commands/find-node-index";
@@ -110,19 +110,33 @@ function SpanEffectEditor({
   const store = useEditorStoreApi();
 
   function patch(p: Partial<TextSpan>) {
+    const editorSnap = getActiveEditor();
+
+    // index === -1 means unnamed selection — create the span first, then apply
+    if (index === -1) {
+      if (!editorSnap.handle) return;
+      const newId = editorSnap.handle.ensureSelectionIsSpan();
+      if (!newId) return;
+      // Find the newly created span's index and patch it
+      const state = store.getState();
+      const comp = activeComp(state);
+      const nodeData = comp.root.find(n => n.id === nodeId);
+      const spans = (nodeData?.props.spans as unknown as TextSpan[]) ?? [];
+      const newIdx = spans.findIndex(s => s.id === newId);
+      if (newIdx >= 0) commitSpans(store, nodeId, updateSpan(spans, newIdx, p));
+      return;
+    }
+
     const state = store.getState();
     let comp = activeComp(state);
-    const idx = findNodeIndex(comp, nodeId);
-    let spans = (comp.root[idx].props.spans as unknown as TextSpan[]) ?? [];
+    const nodeIdx = findNodeIndex(comp, nodeId);
+    let spans = (comp.root[nodeIdx].props.spans as unknown as TextSpan[]) ?? [];
 
-    // If the editor is open and the current span has no ID, auto-create one
-    // from the current selection so the effect binds to a real span.
-    const editorSnap = getActiveEditor();
-    if (editorSnap?.handle && !span.id) {
+    // If span has no ID yet, ensure it gets one before applying effect
+    if (editorSnap.handle && !span.id) {
       editorSnap.handle.ensureSelectionIsSpan();
-      // Re-read spans after potential auto-split
       comp = activeComp(store.getState());
-      spans = (activeComp(store.getState()).root.find(n => n.id === nodeId)?.props.spans as unknown as TextSpan[]) ?? [];
+      spans = (comp.root.find(n => n.id === nodeId)?.props.spans as unknown as TextSpan[]) ?? [];
     }
 
     commitSpans(store, nodeId, updateSpan(spans, index, p));
@@ -241,11 +255,19 @@ export function TextEffectsPanel({ node }: TextEffectsPanelProps) {
   const activeSpanIndex = useSyncExternalStore(subscribeActiveSpan, getActiveSpanIndex);
 
   // Check if the text editor is currently open
-  const editorIsOpen = getActiveEditor()?.handle !== null && getActiveEditor() !== null;
+  const editorSnapshot = useSyncExternalStore(subscribeActiveEditor, getActiveEditor);
+  const editorIsOpen = editorSnapshot.handle !== null;
 
-  // When editor is open: if a span is focused show only it; otherwise show
-  // a prompt to select text. When editor is closed: show all spans or empty state.
-  if (editorIsOpen && activeSpanIndex === null) {
+  // activeSpanIndex:
+  //   null  = no selection
+  //   -1    = selection exists but not yet a named span
+  //   0..N  = specific named span
+
+  const hasSelection = activeSpanIndex !== null; // -1 or a real index
+  const namedSpanIndex = (activeSpanIndex !== null && activeSpanIndex >= 0 && activeSpanIndex < spans.length)
+    ? activeSpanIndex : null;
+
+  if (editorIsOpen && !hasSelection) {
     return (
       <div className="span-anim-empty">
         <p>Select a word in the text editor on the canvas, then effects will appear here for that word.</p>
@@ -264,30 +286,35 @@ export function TextEffectsPanel({ node }: TextEffectsPanelProps) {
     );
   }
 
-  const focusedIndex = activeSpanIndex !== null && activeSpanIndex < spans.length ? activeSpanIndex : null;
-
-  // When editor is open: show only focused span (or nothing — handled above).
-  // When editor is closed: show all spans (for review/editing previously set effects).
-  const visibleSpans = (editorIsOpen && focusedIndex !== null)
-    ? [{ span: spans[focusedIndex], i: focusedIndex }]
-    : (showAll || !editorIsOpen)
-    ? spans.map((span, i) => ({ span, i }))
-    : spans.map((span, i) => ({ span, i }));
+  // When editor open with selection: show only the relevant span (or a placeholder for unnamed)
+  // When editor closed: show all spans that have effects
+  const visibleSpans = editorIsOpen
+    ? (namedSpanIndex !== null ? [{ span: spans[namedSpanIndex], i: namedSpanIndex }] : [])
+    : (showAll ? spans : spans.filter(s => s.stroke || s.shadow || s.highlight || s.blur || s.colorMatrix))
+        .map((span, _) => ({ span, i: spans.indexOf(span) }));
 
   return (
     <div className="text-fx-panel">
-      {editorIsOpen && focusedIndex !== null && (
+      {editorIsOpen && hasSelection && (
         <div className="span-anim-focus-bar">
-          <span>"{spans[focusedIndex].text.trim().slice(0, 24)}"</span>
+          {namedSpanIndex !== null
+            ? <span>"{spans[namedSpanIndex].text.trim().slice(0, 24)}"</span>
+            : <span>Selection ready — enable an effect to apply it</span>
+          }
         </div>
       )}
       {!editorIsOpen && spans.length > 1 && (
         <div className="span-anim-focus-bar">
-          <span>{spans.length} spans with effects</span>
+          <span>{spans.length} spans</span>
           <button className="btn btn-xs" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Collapse" : "Show all"}
+            {showAll ? "Effects only" : "Show all"}
           </button>
         </div>
+      )}
+      {/* When editor open with unnamed selection, show a dummy SpanEffectEditor
+          that will auto-create the span on first effect toggle */}
+      {editorIsOpen && activeSpanIndex === -1 && (
+        <SpanEffectEditor span={{ text: "" }} index={-1} nodeId={node.id} />
       )}
       {visibleSpans.map(({ span, i }) => (
         <SpanEffectEditor key={span.id ?? i} span={span} index={i} nodeId={node.id} />

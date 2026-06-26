@@ -245,8 +245,15 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
       const el = editorRef.current;
       if (!el) return;
       const sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0) return;
+      if (!sel || sel.rangeCount === 0) { setActiveSpanIndex(null); return; }
       const range = sel.getRangeAt(0);
+
+      // Check selection is actually inside our editor
+      if (!el.contains(range.commonAncestorContainer)) {
+        setActiveSpanIndex(null);
+        return;
+      }
+
       // Walk up from the anchor node to find a data-span-id element
       let domNode: globalThis.Node | null = range.startContainer;
       while (domNode && domNode !== el) {
@@ -259,13 +266,17 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
             const currentNode = comp.root.find((n) => n.id === nodeIdRef.current);
             const spans = (currentNode?.props.spans as unknown as TextSpan[] | undefined) ?? [];
             const idx = spans.findIndex((s) => s.id === spanId);
-            setActiveSpanIndex(idx >= 0 ? idx : null);
+            setActiveSpanIndex(idx >= 0 ? idx : -1);
             return;
           }
         }
         domNode = domNode.parentNode;
       }
-      setActiveSpanIndex(null);
+
+      // Selection is inside the editor but not in a named span.
+      // Use -1 as sentinel: "something is selected, but not yet a span".
+      // This lets the effects/animation panels show controls ready to apply.
+      setActiveSpanIndex(sel.isCollapsed ? null : -1);
     }
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {

@@ -23,7 +23,7 @@ import { splitSpansIntoWordsOp } from "../commands/text-span-ops";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { getActiveSpanIndex, subscribeActiveSpan } from "../store/active-span-handle";
-import { getActiveEditor } from "../store/editor-handle";
+import { getActiveEditor, subscribeActiveEditor } from "../store/editor-handle";
 
 const PRESETS = [
   { id: "fadeIn",    label: "Fade In"    },
@@ -195,11 +195,16 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
     );
   }
 
-  const editorIsOpen = getActiveEditor() !== null;
-  const focusedIndex = activeSpanIndex !== null && activeSpanIndex < spans.length ? activeSpanIndex : null;
-  // When editor is open show only the focused span; when closed show all (for review)
-  const visibleSpans = (editorIsOpen && focusedIndex !== null && !showAll)
-    ? [{ span: spans[focusedIndex], i: focusedIndex }]
+  const editorSnapshot = useSyncExternalStore(subscribeActiveEditor, getActiveEditor);
+  const editorIsOpen = editorSnapshot.handle !== null;
+  // -1 = selection exists but not yet a named span; 0..N = named span
+  const hasSelection = activeSpanIndex !== null;
+  const focusedIndex = (activeSpanIndex !== null && activeSpanIndex >= 0 && activeSpanIndex < spans.length)
+    ? activeSpanIndex : null;
+  // When editor open: show only focused span (or nothing if unselected)
+  // When editor closed: show all
+  const visibleSpans = (editorIsOpen && !showAll)
+    ? (focusedIndex !== null ? [{ span: spans[focusedIndex], i: focusedIndex }] : [])
     : spans.map((span, i) => ({ span, i }));
 
   function applyStagger(preset: typeof PRESETS[number]["id"]) {
@@ -224,13 +229,16 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
         <span className="span-anim-actions__count">{spans.length} span{spans.length !== 1 ? "s" : ""}</span>
       </div>
 
-      {/* Focus indicator — shown when editing a specific span */}
-      {focusedIndex !== null && (
+      {/* Focus indicator — shown when editor is open */}
+      {editorIsOpen && (
         <div className="span-anim-focus-bar">
-          <span>Span #{focusedIndex + 1}: <em>"{spans[focusedIndex].text.slice(0, 20)}"</em></span>
-          <button className="btn btn-xs" onClick={() => setShowAll((v) => !v)}>
-            {showAll ? "Show selected only" : `All ${spans.length} spans`}
-          </button>
+          {focusedIndex !== null
+            ? <><span>"{spans[focusedIndex].text.trim().slice(0, 20)}"</span>
+                <button className="btn btn-xs" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? "Selected only" : `All ${spans.length}`}
+                </button></>
+            : <span style={{ color: "var(--text-2)" }}>Select a word to animate it</span>
+          }
         </div>
       )}
 
