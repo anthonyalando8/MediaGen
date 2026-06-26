@@ -65,7 +65,13 @@ function SpanRow({ span, index, nodeId, fps }: SpanRowProps) {
     if (!span.time) return;
     const state = store.getState();
     const comp = activeComp(state);
-    state.apply(setSpanTimeOp(comp, nodeId, index, span.time.start, span.time.duration, fm));
+    // Pre-hide and Wrap only have visible effect BEFORE the start frame.
+    // If start is 0, auto-advance it to 30f so the pre-hidden state is visible.
+    const currentStart = span.time.start as number;
+    const newStart = (fm === "backwards" || fm === "both") && currentStart === 0
+      ? 30
+      : currentStart;
+    state.apply(setSpanTimeOp(comp, nodeId, index, newStart as Frame, span.time.duration, fm));
   }
 
   function clearAnim() {
@@ -118,10 +124,10 @@ function SpanRow({ span, index, nodeId, fps }: SpanRowProps) {
               key={fm}
               className={`btn btn-xs ${fillMode === fm ? "btn-active" : ""}`}
               title={
-                fm === "forwards"  ? "Hold final state — text stays visible after animating in" :
-                fm === "none"      ? "Return to start — e.g. fade-in resets to invisible after playing" :
-                fm === "backwards" ? "Pre-hide — hidden before animation starts, stays visible after" :
-                                     "Pre-hide + return to start — hidden before and after, visible only during"
+                fm === "forwards"  ? "Hold — stays visible after animating in" :
+                fm === "none"      ? "Return — goes back to first keyframe state (e.g. invisible) after playing" :
+                fm === "backwards" ? "Pre-hide — hidden before start frame, stays visible after. Needs start > 0 to be visible." :
+                                     "Wrap — hidden before AND returns to first keyframe after. Needs start > 0."
               }
               onClick={() => setFillMode(fm)}
             >
