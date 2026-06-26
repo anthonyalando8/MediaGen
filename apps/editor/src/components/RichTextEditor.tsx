@@ -22,6 +22,7 @@ import { activeComp } from "../store/selectors";
 import type { FitTransform } from "../viewport/geometry";
 import { compToScreen } from "../viewport/geometry";
 import { hexStringToOklch, oklchToHex, rgbToOklch } from "renderer-webgl";
+import { setActiveSpanIndex } from "../store/active-span-handle";
 
 // ── DOM → spans ───────────────────────────────────────────────────────────
 
@@ -51,13 +52,16 @@ function domToSpans(container: HTMLElement): TextSpan[] {
     if (dataColor) {
       try { style.color = JSON.parse(dataColor) as ColorOKLCH; } catch { /* */ }
     } else {
-      // inline color from execCommand("foreColor") — comes in as CSS rgb() string
       const inlineColor = el.style.color;
       if (inlineColor) {
         const oklch = cssColorToOklch(inlineColor);
         if (oklch) style.color = oklch;
       }
     }
+
+    // Carry through our own span metadata via data-span-id
+    const spanId = el.dataset.spanId;
+    if (spanId) style.id = spanId as import("core").Id;
 
     const size = el.dataset.fontSize;
     if (size) style.fontSize = Number(size);
@@ -84,6 +88,37 @@ function domToSpans(container: HTMLElement): TextSpan[] {
   return spans.filter((s) => s.text !== undefined);
 }
 
+/**
+ * Merge animation/effect metadata from previous spans into newly parsed spans.
+ * Matches by span ID (data-span-id in DOM) — preserves time, channels, stroke,
+ * shadow, highlight, blur, colorMatrix on the matched span.
+ * Spans without an ID match get no metadata (plain new text).
+ */
+function mergeSpanMetadata(newSpans: TextSpan[], prevSpans: TextSpan[]): TextSpan[] {
+  // Build a lookup from id → prevSpan for fast matching
+  const byId = new Map<string, TextSpan>();
+  for (const s of prevSpans) {
+    if (s.id) byId.set(s.id, s);
+  }
+
+  return newSpans.map((s) => {
+    if (!s.id) return s;
+    const prev = byId.get(s.id);
+    if (!prev) return s;
+    // Carry over all animation/effect metadata; keep the new text and style fields
+    return {
+      ...s,
+      time:        prev.time,
+      channels:    prev.channels,
+      stroke:      prev.stroke,
+      shadow:      prev.shadow,
+      highlight:   prev.highlight,
+      blur:        prev.blur,
+      colorMatrix: prev.colorMatrix,
+    };
+  });
+}
+
 // ── Spans → HTML ──────────────────────────────────────────────────────────
 
 export function spansToHtml(spans: TextSpan[], baseColor: ColorOKLCH): string {
@@ -93,11 +128,12 @@ export function spansToHtml(spans: TextSpan[], baseColor: ColorOKLCH): string {
 
   function spanToInline(span: TextSpan): string {
     const text = span.text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const hasStyle = span.weight === 700 || span.italic || span.color || span.fontSize;
+    const hasStyle = span.weight === 700 || span.italic || span.color || span.fontSize || span.id;
     if (!hasStyle) return text;
     const dataAttrs = [
-      span.color ? `data-color='${JSON.stringify(span.color)}'` : "",
+      span.color  ? `data-color='${JSON.stringify(span.color)}'` : "",
       span.fontSize ? `data-font-size='${span.fontSize}'` : "",
+      span.id     ? `data-span-id='${span.id}'` : "",
     ].filter(Boolean).join(" ");
     const styles = [
       span.weight === 700 ? "font-weight:700" : "",
@@ -128,6 +164,8 @@ export interface RichTextEditorHandle {
   applyColor(hex: string): void;
   saveSelection(): void;
   focus(): void;
+  /** Wraps the current selection in a span with a stable ID if it isn't already one. Returns the span ID or null if nothing selected. */
+  ensureSelectionIsSpan(): string | null;
 }
 
 // ── Main component ────────────────────────────────────────────────────────
@@ -144,6 +182,8 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
   const store = useEditorStoreApi();
   const editorRef = useRef<HTMLDivElement>(null);
   const suppressNextChange = useRef(false);
+  const nodeIdRef = useRef(node.id);
+  useLayoutEffect(() => { nodeIdRef.current = node.id; }, [node.id]);
 
   const fontSize   = (node.props.fontSize   as number)     ?? 64;
   const fontFamily = (node.props.fontFamily as string)     ?? "Inter";
@@ -189,12 +229,50 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
     if (suppressNextChange.current) return;
     const el = editorRef.current;
     if (!el) return;
-    const newSpans = domToSpans(el);
+    const rawSpans = domToSpans(el);
+    // Merge animation/effect metadata from the current store spans by ID
     const state = store.getState();
-    state.apply(setSpansAndTextOp(activeComp(state), node.id, newSpans));
+    const comp = activeComp(state);
+    const currentNode = comp.root.find((n) => n.id === node.id);
+    const prevSpans = (currentNode?.props.spans as unknown as TextSpan[] | undefined) ?? [];
+    const mergedSpans = mergeSpanMetadata(rawSpans, prevSpans);
+    state.apply(setSpansAndTextOp(comp, node.id, mergedSpans));
   }, [store, node.id]);
 
-  // Save/restore selection so color picker doesn't lose the selection range
+  // Track which span the cursor is in so SpanAnimPanel/TextEffectsPanel can focus it
+  useLayoutEffect(() => {
+    function onSelectionChange() {
+      const el = editorRef.current;
+      if (!el) return;
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      // Walk up from the anchor node to find a data-span-id element
+      let domNode: globalThis.Node | null = range.startContainer;
+      while (domNode && domNode !== el) {
+        if (domNode.nodeType === globalThis.Node.ELEMENT_NODE) {
+          const spanId = (domNode as HTMLElement).dataset?.spanId;
+          if (spanId) {
+            // Find which index this span ID corresponds to in the current spans
+            const state = store.getState();
+            const comp = activeComp(state);
+            const currentNode = comp.root.find((n) => n.id === nodeIdRef.current);
+            const spans = (currentNode?.props.spans as unknown as TextSpan[] | undefined) ?? [];
+            const idx = spans.findIndex((s) => s.id === spanId);
+            setActiveSpanIndex(idx >= 0 ? idx : null);
+            return;
+          }
+        }
+        domNode = domNode.parentNode;
+      }
+      setActiveSpanIndex(null);
+    }
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      document.removeEventListener("selectionchange", onSelectionChange);
+      setActiveSpanIndex(null);
+    };
+  }, [store]);
   const savedRangeRef = useRef<Range | null>(null);
 
   function saveSelection() {
@@ -262,6 +340,38 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
         saveSelection();
       },
       focus() { editorRef.current?.focus(); },
+      ensureSelectionIsSpan() {
+        editorRef.current?.focus();
+        restoreSelection();
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
+        const range = sel.getRangeAt(0);
+        // Check if already inside a span with data-span-id
+        let anc: globalThis.Node | null = range.commonAncestorContainer;
+        while (anc && anc !== editorRef.current) {
+          if (anc.nodeType === globalThis.Node.ELEMENT_NODE) {
+            const existing = (anc as HTMLElement).dataset?.spanId;
+            if (existing) return existing;
+          }
+          anc = anc.parentNode;
+        }
+        // Wrap selection in a new span with a stable ID
+        const newId = Math.random().toString(36).slice(2, 10);
+        const span = document.createElement("span");
+        span.dataset.spanId = newId;
+        try { range.surroundContents(span); }
+        catch {
+          const fragment = range.extractContents();
+          span.appendChild(fragment);
+          range.insertNode(span);
+        }
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+        handleInput();
+        return newId;
+      },
     };
   }
 

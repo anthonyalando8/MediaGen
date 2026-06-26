@@ -26,6 +26,8 @@
 import type { Json } from "core";
 import { useRegistry } from "../bootstrap/registry-context";
 import { setNodeProp } from "../commands/set-node-prop";
+import { setSpansAndTextOp } from "../commands/text-span-ops";
+import type { TextSpan } from "core";
 import { getInspectorFields } from "../inspector/fields";
 import type { InspectorFieldValue } from "../inspector/fields";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -104,6 +106,15 @@ export function InspectorPanel() {
 
   function handleChange(path: string, value: Json): void {
     const state = store.getState();
+    // When editing props.text directly on a text node that has spans,
+    // replace spans with a single plain span so the canvas updates immediately.
+    if (node!.kind === "text" && path === "props.text" && typeof value === "string") {
+      const existingSpans = (node!.props.spans as unknown as TextSpan[] | undefined) ?? [];
+      if (existingSpans.length > 0) {
+        state.apply(setSpansAndTextOp(activeComp(state), node!.id, [{ text: value }]));
+        return;
+      }
+    }
     state.apply(setNodeProp(activeComp(state), node!.id, path, value));
   }
 

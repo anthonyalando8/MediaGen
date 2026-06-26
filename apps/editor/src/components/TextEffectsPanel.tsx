@@ -5,12 +5,14 @@
 //   Stroke, Shadow/Glow, Highlight, Blur, Color Matrix
 // All stored directly on TextSpan; rendered in the Pixi scene via GlyphRun.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { Node } from "core";
 import type { TextSpan } from "core";
 import type { ColorOKLCH } from "core";
 import { createId, createOp } from "core";
-import { useEditorStore, useEditorStoreApi } from "../store/context";
+import { useEditorStoreApi } from "../store/context";
+import { getActiveSpanIndex, subscribeActiveSpan } from "../store/active-span-handle";
+import { getActiveEditor } from "../store/editor-handle";
 import { activeComp } from "../store/selectors";
 import { hexStringToOklch, oklchToHex } from "renderer-webgl";
 import { findNodeIndex } from "../commands/find-node-index";
@@ -109,9 +111,20 @@ function SpanEffectEditor({
 
   function patch(p: Partial<TextSpan>) {
     const state = store.getState();
-    const comp = activeComp(state);
+    let comp = activeComp(state);
     const idx = findNodeIndex(comp, nodeId);
-    const spans = (comp.root[idx].props.spans as unknown as TextSpan[]) ?? [];
+    let spans = (comp.root[idx].props.spans as unknown as TextSpan[]) ?? [];
+
+    // If the editor is open and the current span has no ID, auto-create one
+    // from the current selection so the effect binds to a real span.
+    const editorSnap = getActiveEditor();
+    if (editorSnap?.handle && !span.id) {
+      editorSnap.handle.ensureSelectionIsSpan();
+      // Re-read spans after potential auto-split
+      comp = activeComp(store.getState());
+      spans = (activeComp(store.getState()).root.find(n => n.id === nodeId)?.props.spans as unknown as TextSpan[]) ?? [];
+    }
+
     commitSpans(store, nodeId, updateSpan(spans, index, p));
   }
 
@@ -224,18 +237,59 @@ interface TextEffectsPanelProps {
 
 export function TextEffectsPanel({ node }: TextEffectsPanelProps) {
   const spans = (node.props.spans as unknown as TextSpan[] | undefined) ?? [];
+  const [showAll, setShowAll] = useState(false);
+  const activeSpanIndex = useSyncExternalStore(subscribeActiveSpan, getActiveSpanIndex);
 
-  if (spans.length === 0) {
+  // Check if the text editor is currently open
+  const editorIsOpen = getActiveEditor()?.handle !== null && getActiveEditor() !== null;
+
+  // When editor is open: if a span is focused show only it; otherwise show
+  // a prompt to select text. When editor is closed: show all spans or empty state.
+  if (editorIsOpen && activeSpanIndex === null) {
     return (
       <div className="span-anim-empty">
-        Split text into word spans first (Text tab → Span Animation → Split into words), then apply effects per word here.
+        <p>Select a word in the text editor on the canvas, then effects will appear here for that word.</p>
+        <p style={{ marginTop: 6, fontSize: 10, color: "var(--text-2)" }}>
+          No need to split text first — selecting any word auto-creates a span for it.
+        </p>
       </div>
     );
   }
 
+  if (!editorIsOpen && spans.length === 0) {
+    return (
+      <div className="span-anim-empty">
+        <p>Double-click the text on canvas, select a word, then effects for that word appear here.</p>
+      </div>
+    );
+  }
+
+  const focusedIndex = activeSpanIndex !== null && activeSpanIndex < spans.length ? activeSpanIndex : null;
+
+  // When editor is open: show only focused span (or nothing — handled above).
+  // When editor is closed: show all spans (for review/editing previously set effects).
+  const visibleSpans = (editorIsOpen && focusedIndex !== null)
+    ? [{ span: spans[focusedIndex], i: focusedIndex }]
+    : (showAll || !editorIsOpen)
+    ? spans.map((span, i) => ({ span, i }))
+    : spans.map((span, i) => ({ span, i }));
+
   return (
     <div className="text-fx-panel">
-      {spans.map((span, i) => (
+      {editorIsOpen && focusedIndex !== null && (
+        <div className="span-anim-focus-bar">
+          <span>"{spans[focusedIndex].text.trim().slice(0, 24)}"</span>
+        </div>
+      )}
+      {!editorIsOpen && spans.length > 1 && (
+        <div className="span-anim-focus-bar">
+          <span>{spans.length} spans with effects</span>
+          <button className="btn btn-xs" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Collapse" : "Show all"}
+          </button>
+        </div>
+      )}
+      {visibleSpans.map(({ span, i }) => (
         <SpanEffectEditor key={span.id ?? i} span={span} index={i} nodeId={node.id} />
       ))}
     </div>

@@ -9,7 +9,7 @@
 //
 // No canvas interaction needed — all driven from inspector.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { Node } from "core";
 import type { TextSpan } from "core";
 import type { Frame } from "core";
@@ -22,6 +22,8 @@ import {
 import { splitSpansIntoWordsOp } from "../commands/text-span-ops";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
+import { getActiveSpanIndex, subscribeActiveSpan } from "../store/active-span-handle";
+import { getActiveEditor } from "../store/editor-handle";
 
 const PRESETS = [
   { id: "fadeIn",    label: "Fade In"    },
@@ -164,6 +166,10 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
   const spans = (node.props.spans as unknown as TextSpan[] | undefined) ?? [];
   const fps = useEditorStore((s) => activeComp(s).fps);
   const [staggerF, setStaggerF] = useState(8);
+  const [showAll, setShowAll] = useState(false);
+
+  // Track which span the cursor is currently in (set by RichTextEditor)
+  const activeSpanIndex = useSyncExternalStore(subscribeActiveSpan, getActiveSpanIndex);
 
   function handleSplit() {
     const state = store.getState();
@@ -189,6 +195,13 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
     );
   }
 
+  const editorIsOpen = getActiveEditor() !== null;
+  const focusedIndex = activeSpanIndex !== null && activeSpanIndex < spans.length ? activeSpanIndex : null;
+  // When editor is open show only the focused span; when closed show all (for review)
+  const visibleSpans = (editorIsOpen && focusedIndex !== null && !showAll)
+    ? [{ span: spans[focusedIndex], i: focusedIndex }]
+    : spans.map((span, i) => ({ span, i }));
+
   function applyStagger(preset: typeof PRESETS[number]["id"]) {
     const state = store.getState();
     let comp = activeComp(state);
@@ -204,41 +217,49 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
 
   return (
     <div className="span-anim-panel">
-      {/* Re-split button */}
       <div className="span-anim-actions">
         <button className="btn btn-sm" style={{ flex: 1 }} onClick={handleSplit} title="Re-split text into one span per word">
           ✦ Split into words
         </button>
         <span className="span-anim-actions__count">{spans.length} span{spans.length !== 1 ? "s" : ""}</span>
       </div>
-      <div className="span-anim-stagger">
-        <div className="span-anim-stagger__header">
-          <span className="insp-label">Stagger all spans</span>
-          <label className="span-anim-field">
-            <span>Offset</span>
-            <input
-              type="number" min={1} max={60} value={staggerF}
-              className="insp-number"
-              onChange={(e) => setStaggerF(Number(e.target.value))}
-            />
-            <span className="span-anim-field__unit">f</span>
-          </label>
-        </div>
-        <div className="span-anim-stagger__presets">
-          {PRESETS.map((p) => (
-            <button key={p.id} className="btn btn-sm" onClick={() => applyStagger(p.id)}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      <div className="insp-divider" />
+      {/* Focus indicator — shown when editing a specific span */}
+      {focusedIndex !== null && (
+        <div className="span-anim-focus-bar">
+          <span>Span #{focusedIndex + 1}: <em>"{spans[focusedIndex].text.slice(0, 20)}"</em></span>
+          <button className="btn btn-xs" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show selected only" : `All ${spans.length} spans`}
+          </button>
+        </div>
+      )}
 
-      {/* Per-span rows */}
+      {/* Stagger — only when showing all */}
+      {(focusedIndex === null || showAll) && (
+        <>
+          <div className="span-anim-stagger">
+            <div className="span-anim-stagger__header">
+              <span className="insp-label">Stagger all</span>
+              <label className="span-anim-field">
+                <span>Offset</span>
+                <input type="number" min={1} max={60} value={staggerF} className="insp-number"
+                  onChange={(e) => setStaggerF(Number(e.target.value))} />
+                <span className="span-anim-field__unit">f</span>
+              </label>
+            </div>
+            <div className="span-anim-stagger__presets">
+              {PRESETS.map((p) => (
+                <button key={p.id} className="btn btn-sm" onClick={() => applyStagger(p.id)}>{p.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="insp-divider" />
+        </>
+      )}
+
       <div className="span-anim-list">
-        {spans.map((span, i) => (
-          <SpanRow key={i} span={span} index={i} nodeId={node.id} fps={fps} />
+        {visibleSpans.map(({ span, i }) => (
+          <SpanRow key={span.id ?? i} span={span} index={i} nodeId={node.id} fps={fps} />
         ))}
       </div>
     </div>

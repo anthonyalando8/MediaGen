@@ -287,3 +287,24 @@
   background: var(--surface-3);
   color: var(--text-0);
 }
+
+/* ── Focused span indicator bar ──────────────────────────────────────── */
+
+.span-anim-focus-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 5px 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-2);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.span-anim-focus-bar em {
+  font-style: normal;
+  color: var(--text-0);
+}
