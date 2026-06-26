@@ -34,6 +34,8 @@ import { CompNodeSection } from "./CompNodeSection";
 import { MotionPanel } from "./MotionPanel";
 import { RichTextFormatBar } from "./RichTextFormatBar";
 import { FieldRow, Section } from "./inspector-fields";
+import { convertToPathOp } from "../commands/convert-to-path";
+import { enterPathEditMode } from "../store/path-edit-handle";
 export { FieldControl, FieldRow } from "./inspector-fields";
 
 const TRANSFORM_PREFIX = "transform.";
@@ -96,6 +98,20 @@ export function InspectorPanel() {
   const color = adjustment ? ADJUSTMENT_COLOR : getKindColor(node.kind);
   const kindTitle = node.kind.charAt(0).toUpperCase() + node.kind.slice(1);
 
+  // For shape nodes, only show props relevant to the current shape type
+  const visibleRest = node.kind === "shape"
+    ? rest.filter((f) => {
+        const shape = node.props.shape as string;
+        if (f.path === "props.sides")      return shape === "ngon";
+        if (f.path === "props.points")     return shape === "star";
+        if (f.path === "props.innerRatio") return shape === "star";
+        if (f.path === "props.headRatio")  return shape === "arrow";
+        if (f.path === "props.shaftRatio") return shape === "arrow";
+        if (f.path === "props.radius")     return shape === "rect";
+        return true;
+      })
+    : rest;
+
   return (
     <div className="panel panel--right">
       <div className="inspector__header">
@@ -131,11 +147,31 @@ export function InspectorPanel() {
             ))}
           </Section>
         )}
-        {rest.length > 0 && (
+        {visibleRest.length > 0 && (
           <Section title={kindTitle}>
-            {rest.map((field) => (
+            {visibleRest.map((field) => (
               <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
             ))}
+            {node.kind === "shape" && !["polygon", "line"].includes(node.props.shape as string) && (
+              <div style={{ paddingTop: "var(--space-2)" }}>
+                <button
+                  className="btn btn-sm"
+                  style={{ width: "100%" }}
+                  title="Convert to editable bezier path"
+                  onClick={() => {
+                    const state = store.getState();
+                    const op = convertToPathOp(activeComp(state), node!.id);
+                    if (op) {
+                      state.apply(op);
+                      // Auto-open path editor so the user can start editing immediately
+                      enterPathEditMode(String(node!.id));
+                    }
+                  }}
+                >
+                  Convert to path
+                </button>
+              </div>
+            )}
           </Section>
         )}
         <EffectStackPanel node={node} />

@@ -20,6 +20,7 @@ import { hexStringToOklch, oklchToHex, rgbToOklch } from "renderer-webgl";
 import type { ColorOKLCH, Json } from "core";
 import type { InspectorFieldValue } from "../inspector/fields";
 import { FontSelector } from "./FontSelector";
+import { ShapePicker } from "./ShapePicker";
 
 type ColorMode = "picker" | "hex" | "rgb";
 
@@ -150,6 +151,14 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
       return (
         <FontSelector
           value={typeof field.value === "string" ? field.value : "Inter"}
+          onChange={onChange}
+        />
+      );
+
+    case "shape" as never:
+      return (
+        <ShapePicker
+          value={typeof field.value === "string" ? field.value : "rect"}
           onChange={onChange}
         />
       );

@@ -31,7 +31,13 @@ export interface Stroke {
 export type ShapeGeom =
   | { kind: "rect"; width: number; height: number; radius: number }
   | { kind: "ellipse"; width: number; height: number }
-  | { kind: "line"; length: number };
+  | { kind: "line"; length: number }
+  | {
+      kind: "polygon";
+      /** Bezier anchor points in node-local space. Same structure as MaskPath — each has a position and optional in/out tangent handles. */
+      points: Array<{ point: { x: number; y: number }; inHandle?: { x: number; y: number }; outHandle?: { x: number; y: number } }>;
+      closed: boolean;
+    };
 
 export interface RenderCommon {
   id: string;

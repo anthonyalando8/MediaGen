@@ -19,6 +19,8 @@ import { ViewportFrame } from "./ViewportFrame";
 import { MaskPenOverlay } from "./MaskPenOverlay";
 import { RichTextEditor } from "./RichTextEditor";
 import type { RichTextEditorHandle } from "./RichTextEditor";
+import { PathEditOverlay } from "./PathEditOverlay";
+import { registerPathEditHandler } from "../store/path-edit-handle";
 import { setActiveEditor } from "../store/editor-handle";
 
 /**
@@ -354,6 +356,19 @@ export function Viewport() {
   const tool = useEditorStore((s) => s.tool);
   const editingNodeIdRef = useRef<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [pathEditNodeId, setPathEditNodeId] = useState<string | null>(null);
+
+  // Register so InspectorPanel's "Convert to path" button can open the overlay
+  useEffect(() => {
+    registerPathEditHandler((id) => setPathEditNodeId(id));
+  }, []);
+  // Dismiss path edit if the edited node is deselected
+  const selectedIds = useEditorStore((s) => s.selection);
+  useEffect(() => {
+    if (pathEditNodeId && !selectedIds.includes(pathEditNodeId as never)) {
+      setPathEditNodeId(null);
+    }
+  }, [selectedIds, pathEditNodeId]);
   const editorHandleRef = useRef<RichTextEditorHandle | null>(null);
 
   // Notify the module singleton after the RichTextEditor has mounted and
@@ -386,6 +401,21 @@ export function Viewport() {
           cursor: tool === "select" ? "default" : "crosshair",
         }}
       />
+      {pathEditNodeId && (() => {
+        const pNode = activeComp(store.getState()).root.find((n) => n.id === pathEditNodeId);
+        if (!pNode || pNode.kind !== "shape") return null;
+        const renderNode = treeRef.current?.nodes.find((n) => n.id === pathEditNodeId);
+        const nodeMatrix = renderNode?.matrix ?? [1,0,0,0,1,0,0,0,1] as import("contract").Mat3;
+        return (
+          <PathEditOverlay
+            node={pNode}
+            fit={fit}
+            canvasSize={canvasSize}
+            nodeMatrix={nodeMatrix}
+            onDismiss={() => setPathEditNodeId(null)}
+          />
+        );
+      })()}
       {editingNodeId && (() => {
         const node = activeComp(store.getState()).root.find((n) => n.id === editingNodeId);
         if (!node || node.kind !== "text") return null;
@@ -398,7 +428,7 @@ export function Viewport() {
           />
         );
       })()}
-      {selectedNode && !selectedNode.locked && tool !== "mask" && (
+      {selectedNode && !selectedNode.locked && tool !== "mask" && !pathEditNodeId && (
         <TransformGizmo
           nodeId={selectedNode.id}
           selectedNode={selectedNode}
@@ -406,7 +436,16 @@ export function Viewport() {
           canvasSize={canvasSize}
           treeRef={treeRef}
           onPreview={handlePreview}
-          onDoubleClick={selectedNode.kind === "text" ? () => setEditing(String(selectedNode.id)) : undefined}
+          onDoubleClick={
+            selectedNode.kind === "text"
+              ? () => setEditing(String(selectedNode.id))
+              : selectedNode.kind === "shape" &&
+                (selectedNode.props.shape as string) === "polygon" &&
+                Array.isArray(selectedNode.props.pathPoints) &&
+                (selectedNode.props.pathPoints as unknown[]).length > 0
+              ? () => setPathEditNodeId(String(selectedNode.id))
+              : undefined
+          }
         />
       )}
       {tool === "mask" && selectedNode && (() => {

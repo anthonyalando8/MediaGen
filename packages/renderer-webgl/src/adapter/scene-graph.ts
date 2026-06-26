@@ -580,6 +580,26 @@ export class SceneGraphAdapter {
       case "line":
         graphics.moveTo(0, 0).lineTo(geom.length, 0);
         break;
+      case "polygon": {
+        const pts = geom.points;
+        if (pts.length < 2) break;
+        graphics.moveTo(pts[0].point.x, pts[0].point.y);
+        for (let i = 0; i < pts.length; i++) {
+          const curr = pts[i];
+          const next = pts[(i + 1) % pts.length];
+          if (i === pts.length - 1 && !geom.closed) break;
+          // Cubic bezier: curr.outHandle → next.inHandle
+          const cp1 = curr.outHandle
+            ? { x: curr.point.x + curr.outHandle.x, y: curr.point.y + curr.outHandle.y }
+            : curr.point;
+          const cp2 = next.inHandle
+            ? { x: next.point.x + next.inHandle.x, y: next.point.y + next.inHandle.y }
+            : next.point;
+          graphics.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, next.point.x, next.point.y);
+        }
+        if (geom.closed) graphics.closePath();
+        break;
+      }
     }
     if (fill && geom.kind !== "line") {
       graphics.fill(oklchToHex(fill));
@@ -587,7 +607,6 @@ export class SceneGraphAdapter {
     if (stroke) {
       graphics.stroke({ width: stroke.width, color: oklchToHex(stroke.color) });
     } else if (geom.kind === "line") {
-      // An unstroked line is invisible — fall back to a 1px stroke in `fill`'s color (or black).
       graphics.stroke({ width: 1, color: fill ? oklchToHex(fill) : 0x000000 });
     }
   }
