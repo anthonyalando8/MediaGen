@@ -1,6 +1,14 @@
 // apps/editor/src/components/App.tsx
+//
+// The editor shell. This revision swaps the old <Header> for the new
+// <Menubar> (File/Edit/View/Insert/Help + brand + Preview/Export). The grid
+// is UNCHANGED — the menubar occupies the same first "auto" row the header
+// did, so the shell stays at two chrome rows (menubar + toolbar) over the
+// middle band and timeline. All workspace drag/collapse logic, the viewport
+// stage + status bar, and theme persistence are untouched.
+
 import { useCallback, useEffect, useState } from "react";
-import { Header } from "./Header";
+import { Menubar } from "./Menubar";
 import { Toolbar } from "./Toolbar";
 import { LayerPanel } from "./LayerPanel";
 import { Viewport } from "./Viewport";
@@ -24,19 +32,6 @@ function loadTheme(): Theme {
   }
 }
 
-/**
- * The editor shell (Deliverable 09 §9.1). Pure layout — all *document* state
- * still lives in the store (Tier 1/2/3); panels are thin and re-render only
- * on selection/document change. <Viewport>'s render loop stays outside React.
- *
- * Workspace ergonomics pass: the shell's CSS grid is now driven by Tier-3 UI
- * state (panel widths/height + collapsed flags in store/ui.ts), and the gaps
- * between panels are draggable <ShellDivider>s (drag to resize · double-click
- * to collapse). The Toolbar's View cluster collapses panels and applies
- * Edit/Preview/Focus presets. Zoom moved off the canvas into <ViewportStatusBar>.
- * `theme` and all workspace state persist to localStorage. No document/store
- * logic changes — only `data-theme` (view flag) and the new Tier-3 UI slice.
- */
 export function App() {
   useUndoRedoShortcuts();
   useDeleteShortcut();
@@ -104,16 +99,14 @@ export function App() {
   );
 
   // Columns: [left] [v-divider] [viewport] [v-divider] [right]
-  // Rows:    [header] [toolbar] [middle] [h-divider] [timeline]
-  // A collapsed panel (and its divider) shrink to 0; minmax(0,1fr) lets the
-  // viewport take all remaining space and shrink last when room is tight.
+  // Rows:    [menubar] [toolbar] [middle] [h-divider] [timeline]
   const gridTemplateColumns = `${leftCollapsed ? 0 : leftWidth}px ${leftCollapsed ? 0 : DIVIDER}px minmax(0, 1fr) ${rightCollapsed ? 0 : DIVIDER}px ${rightCollapsed ? 0 : rightWidth}px`;
   const gridTemplateRows = `auto auto minmax(0, 1fr) ${timelineCollapsed ? 0 : DIVIDER}px ${timelineCollapsed ? 0 : timelineHeight}px`;
 
   return (
     <div className="app-shell" data-theme={theme} style={{ gridTemplateColumns, gridTemplateRows }}>
       <div className="app-shell__span">
-        <Header theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
+        <Menubar theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
       </div>
       <div className="app-shell__span">
         <Toolbar />

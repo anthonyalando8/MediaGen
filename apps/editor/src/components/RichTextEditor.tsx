@@ -224,12 +224,38 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
         handleInput();
       },
       applyColor(hex) {
-        // Restore the selection that was saved when the color picker opened,
-        // then apply — without this the selection is lost when focus moved
-        // to the color input and execCommand affects nothing.
+        // Don't use execCommand("foreColor") — it produces inconsistent markup
+        // (<font color=...> in some browsers, <span style=...> in others) that
+        // domToSpans can't reliably read back. Instead wrap the selection in a
+        // <span> with our own data-color attribute so the round-trip is stable.
         editorRef.current?.focus();
         restoreSelection();
-        document.execCommand("foreColor", false, hex);
+        const sel = window.getSelection();
+        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+          // No selection — nothing to color
+          return;
+        }
+        const range = sel.getRangeAt(0);
+        const oklch = hexStringToOklch(hex);
+        // Create a span with our markup
+        const span = document.createElement("span");
+        span.style.color = hex;
+        span.dataset.color = JSON.stringify(oklch);
+        // surround the selection contents
+        try {
+          range.surroundContents(span);
+        } catch {
+          // surroundContents fails when selection crosses element boundaries
+          // Fall back: extract and rewrap
+          const fragment = range.extractContents();
+          span.appendChild(fragment);
+          range.insertNode(span);
+        }
+        // Restore selection to cover the new span
+        const newRange = document.createRange();
+        newRange.selectNodeContents(span);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
         handleInput();
       },
       saveSelection() {

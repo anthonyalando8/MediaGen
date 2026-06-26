@@ -1,134 +1,53 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, Layers, MousePointer2, PanelBottom, PanelLeft, PanelRight, PenLine, Pencil, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
-import type { Id, NodeKindId } from "core";
-import { addNode, appendNodeOp } from "../commands/add-node";
-import { groupNodes } from "../commands/group-nodes";
-import { ungroupNode } from "../commands/ungroup-node";
-import { precompose } from "../commands/precompose";
-import { useRegistry } from "../bootstrap/registry-context";
-import { deleteSelection } from "../store/delete-selection";
+//
+// Simplified toolbar (UI/UX redesign). The toolbar is now ONLY tools +
+// zoom + history:
+//
+//   [ Select  Text  Shape  Draw  Mask ] | [ −  100%  + ] ......... [ ⤺  ⤼ ]
+//
+// All Insert / Arrange / View clusters moved up to the <Menubar>:
+//   • Insert (Shape/Text/Group/Null/Adjustment/Precomp) → Insert menu
+//   • Group / Ungroup → Insert / Edit menus
+//   • Edit/Preview/Focus presets + panel toggles → View menu
+//
+// Tool selection and undo/redo call the same store API as before; the zoom
+// stepper reads/writes the existing `zoom` / `setZoom` (clamped 0.1–8) that
+// <Viewport> and <ViewportStatusBar> already share. No document/store logic
+// changed — only which controls live here.
+
+import { MousePointer2, Pencil, PenLine, Plus, Minus, Redo2, Square, Type, Undo2 } from "lucide-react";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
-import { activeComp } from "../store/selectors";
 import type { Tool } from "../store/selection";
 
-const ADDABLE_KINDS: { kind: NodeKindId; label: string; icon: typeof Square }[] = [
-  { kind: "shape", label: "Shape", icon: Square },
-  { kind: "text", label: "Text", icon: Type },
-  { kind: "group", label: "Group", icon: Group },
-  { kind: "null", label: "Null", icon: MousePointer2 },
-];
-
 const TOOLS: { tool: Tool; label: string; icon: typeof Square }[] = [
-  { tool: "select", label: "Select (V)",    icon: MousePointer2 },
-  { tool: "text",   label: "Text (T)",      icon: Type          },
-  { tool: "shape",  label: "Shape (R)",     icon: Square        },
-  { tool: "draw",   label: "Draw / Brush (B)", icon: Pencil     },
+  { tool: "select", label: "Select (V)", icon: MousePointer2 },
+  { tool: "text", label: "Text (T)", icon: Type },
+  { tool: "shape", label: "Shape (R)", icon: Square },
+  { tool: "draw", label: "Draw / Brush (B)", icon: Pencil },
 ];
 
 const ICON_SIZE = 15;
 
-/**
- * Add node · group selection · undo/redo · tool select (Deliverable 09 §9.1).
- *
- * UI/UX redesign: the same actions, reorganized into labeled clusters
- * (Insert · Arrange · Tools · View · History) for discoverability. The brand
- * mark moved to <Header>. Every document handler below is unchanged; the new
- * View cluster only drives Tier-3 UI workspace state (store/ui.ts).
- */
 export function Toolbar() {
   const store = useEditorStoreApi();
-  const registry = useRegistry();
   const canUndo = useEditorStore((s) => s.canUndo());
   const canRedo = useEditorStore((s) => s.canRedo());
   const tool = useEditorStore((s) => s.tool);
+  const zoom = useEditorStore((s) => s.zoom);
   const selection = useEditorStore((s) => s.selection);
-  const leftCollapsed = useEditorStore((s) => s.leftCollapsed);
-  const rightCollapsed = useEditorStore((s) => s.rightCollapsed);
-  const timelineCollapsed = useEditorStore((s) => s.timelineCollapsed);
-  const selectedKind = useEditorStore((s) => {
-    if (s.selection.length !== 1) return undefined;
-    return activeComp(s).root.find((n) => n.id === s.selection[0])?.kind;
-  });
-
-  function handleAdd(kind: NodeKindId): void {
-    const state = store.getState();
-    state.apply(addNode(activeComp(state), registry, kind));
-  }
-
-  function handleAddAdjustment(): void {
-    const state = store.getState();
-    state.apply(appendNodeOp(activeComp(state), registry, "shape", { isAdjustment: true, name: "Adjustment" }));
-  }
-
-  function handleGroup(): void {
-    const state = store.getState();
-    const op = groupNodes(activeComp(state), registry, selection);
-    state.apply(op);
-    const after = op.after as unknown as { group: { id: Id }; at: number };
-    state.select([after.group.id]);
-  }
-
-  function handleUngroup(): void {
-    const state = store.getState();
-    const op = ungroupNode(activeComp(state), selection[0]);
-    state.apply(op);
-    const before = op.before as unknown as { group: { children: { id: Id }[] }; at: number };
-    state.select(before.group.children.map((c) => c.id));
-  }
-
-  function handlePrecompose(): void {
-    const state = store.getState();
-    const result = precompose(activeComp(state), registry, selection);
-    state.addComp(result.newComp);
-    state.apply(result.op);
-    state.select([result.compNodeId]);
-  }
-
-  function handleDelete(): void {
-    deleteSelection(store);
-  }
 
   return (
     <div className="toolbar">
-      <span className="toolbar__label">Insert</span>
-      <div className="btn-group">
-        {ADDABLE_KINDS.map(({ kind, label, icon: Icon }) => (
-          <button key={kind} className="btn" title={`Add ${label}`} onClick={() => handleAdd(kind)}>
-            <Icon size={ICON_SIZE} />
-            {label}
-          </button>
-        ))}
-        <button className="btn" title="Add Adjustment Layer" onClick={handleAddAdjustment}>
-          <Sliders size={ICON_SIZE} />
-          Adjust
-        </button>
-      </div>
-
-      <div className="toolbar__divider" />
-
-      <div className="toolbar__cluster">
-        <button className="btn btn-outline" disabled={selection.length < 2} onClick={handleGroup} title="Group the selected layers">
-          <Group size={ICON_SIZE} />
-          Group
-        </button>
-        <button className="btn btn-outline" disabled={selectedKind !== "group"} onClick={handleUngroup} title="Ungroup the selected group">
-          <Ungroup size={ICON_SIZE} />
-          Ungroup
-        </button>
-        <button className="btn btn-outline" disabled={selection.length === 0} onClick={handlePrecompose} title="Precompose selected layers into a reusable composition">
-          <Layers size={ICON_SIZE} />
-          Precomp
-        </button>
-        <button className="btn btn-icon btn-outline btn-danger" disabled={selection.length === 0} onClick={handleDelete} title="Delete the selected layer(s)">
-          <Trash2 size={ICON_SIZE} />
-        </button>
-      </div>
-
-      <span className="toolbar__spacer" />
-      <span className="toolbar__label">Tools</span>
+      {/* Tools */}
       <div className="btn-group">
         {TOOLS.map(({ tool: t, label, icon: Icon }) => (
-          <button key={t} className="btn btn-icon" aria-pressed={tool === t} title={label} onClick={() => store.getState().setTool(t)}>
+          <button
+            key={t}
+            className="btn btn-icon"
+            aria-pressed={tool === t}
+            title={label}
+            onClick={() => store.getState().setTool(t)}
+          >
             <Icon size={ICON_SIZE} />
           </button>
         ))}
@@ -143,35 +62,28 @@ export function Toolbar() {
         </button>
       </div>
 
+      <div className="toolbar__divider" />
+
+      {/* Zoom */}
+      <div className="btn-group toolbar__zoom">
+        <button className="btn btn-icon" title="Zoom out" onClick={() => store.getState().setZoom(zoom / 1.2)}>
+          <Minus size={ICON_SIZE} />
+        </button>
+        <button
+          className="btn toolbar__zoom-val"
+          title="Reset zoom to 100%"
+          onClick={() => store.getState().setZoom(1)}
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <button className="btn btn-icon" title="Zoom in" onClick={() => store.getState().setZoom(zoom * 1.2)}>
+          <Plus size={ICON_SIZE} />
+        </button>
+      </div>
+
       <span className="toolbar__spacer" />
 
-      <div className="toolbar__divider" />
-      <span className="toolbar__label">View</span>
-      <div className="btn-group">
-        <button className="btn" title="Editing layout — all panels visible" onClick={() => store.getState().setWorkspaceMode("edit")}>
-          Edit
-        </button>
-        <button className="btn" title="Preview layout — maximum viewport" onClick={() => store.getState().setWorkspaceMode("preview")}>
-          Preview
-        </button>
-        <button className="btn" title="Focus layout — canvas and timeline only" onClick={() => store.getState().setWorkspaceMode("focus")}>
-          Focus
-        </button>
-      </div>
-      <div className="btn-group">
-        <button className="btn btn-icon" aria-pressed={!leftCollapsed} title="Toggle left panel" onClick={() => store.getState().togglePanel("left")}>
-          <PanelLeft size={ICON_SIZE} />
-        </button>
-        <button className="btn btn-icon" aria-pressed={!timelineCollapsed} title="Toggle timeline" onClick={() => store.getState().togglePanel("timeline")}>
-          <PanelBottom size={ICON_SIZE} />
-        </button>
-        <button className="btn btn-icon" aria-pressed={!rightCollapsed} title="Toggle inspector" onClick={() => store.getState().togglePanel("right")}>
-          <PanelRight size={ICON_SIZE} />
-        </button>
-      </div>
-
-      <div className="toolbar__divider" />
-
+      {/* History */}
       <div className="btn-group">
         <button className="btn btn-icon" disabled={!canUndo} onClick={() => store.getState().undo()} title="Undo (⌘Z)">
           <Undo2 size={ICON_SIZE} />

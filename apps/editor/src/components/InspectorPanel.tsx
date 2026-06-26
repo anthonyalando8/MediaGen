@@ -1,22 +1,27 @@
 // apps/editor/src/components/InspectorPanel.tsx
 //
-// Schema-driven from NodeKind.schema.inspector (Deliverable 09 §9.1, Week
-// 8). Renders `getInspectorFields(node, registry)` — COMMON_INSPECTOR_FIELDS
-// (name/opacity/blend/transform) plus the selected node's kind-specific
-// fields — generically by `field.control`. Never branches on `node.kind`
-// for FIELD DEFINITIONS: a new NodeKind's `schema.inspector` entries render
-// here for free (gate 12.1's "6th NodeKind" property).
+// Schema-driven inspector (Deliverable 09 §9.1) — now organized into TABS
+// instead of one long scrolling column (UI/UX redesign). The field system is
+// unchanged: `getInspectorFields(node, registry)` still returns a flat
+// `InspectorFieldValue[]` rendered generically by `field.control` via
+// FieldRow — we never branch on `node.kind` for field DEFINITIONS. Tabs are a
+// purely presentational routing layer on top of that flat list.
 //
-// `partitionFields` groups the flat field list into "Appearance" /
-// "Transform" / kind-specific sections purely by PATH PATTERN — a UI-only
-// grouping that any future kind's fields fall into automatically.
+// Tabs (active tab lives in the store: `inspectorTab` / `setInspectorTab`):
+//   • Properties — Transform + kind geometry (shape props, etc.) + the
+//     low-traffic Parent / Matte / Layer settings (collapsed).
+//   • Style — Appearance (opacity / blend) + Fill & Stroke (color fields) +
+//     the Effects stack.
+//   • Animate — Motion presets + Transitions.
+//   • Text — ONLY for text nodes: typography (font / size / weight / line
+//     height / color) + the per-character Format Selection bar, with a clear
+//     "select text on canvas" instruction.
 //
-// Every control's onChange is `setNodeProp(comp, node.id, field.path,
-// value)` -> `apply()` — one generic command for the whole panel.
-//
-// UI/UX redesign: the header leads with a kind-colored chip; sections are
-// collapsible (see inspector-fields' Section), with high-traffic groups open
-// and Transitions/Parent/Matte/Layer collapsed by default. No logic changed.
+// Field → tab routing (`tabForField`) is by `field.control` + path PATTERN,
+// so a future NodeKind's fields fall into a sensible tab automatically:
+// color → Style (or Text, for text nodes); transform.* → Properties;
+// everything else → the kind section (Properties for non-text, Text for
+// text). Every control's onChange is still `setNodeProp(...)` → `apply()`.
 
 import type { Json } from "core";
 import { useRegistry } from "../bootstrap/registry-context";
@@ -25,6 +30,7 @@ import { getInspectorFields } from "../inspector/fields";
 import type { InspectorFieldValue } from "../inspector/fields";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
+import type { InspectorTab } from "../store/ui";
 import { ADJUSTMENT_COLOR, getKindColor, getKindIcon } from "./kind-icons";
 import { EffectStackPanel } from "./EffectStackPanel";
 import { TransitionPanel } from "./TransitionPanel";
@@ -41,7 +47,7 @@ export { FieldControl, FieldRow } from "./inspector-fields";
 const TRANSFORM_PREFIX = "transform.";
 const GENERAL_PATHS = new Set(["opacity", "blend"]);
 
-/** Splits `fields` into name / general / transform / kind-specific groups, by PATH PATTERN — see module doc. */
+/** Splits `fields` into name / general / transform / kind-specific groups, by PATH PATTERN. */
 function partitionFields(fields: InspectorFieldValue[]) {
   const general: InspectorFieldValue[] = [];
   const transform: InspectorFieldValue[] = [];
@@ -56,11 +62,18 @@ function partitionFields(fields: InspectorFieldValue[]) {
   return { name, general, transform, rest };
 }
 
+const TABS: { id: InspectorTab; label: string }[] = [
+  { id: "properties", label: "Properties" },
+  { id: "style", label: "Style" },
+  { id: "animate", label: "Animate" },
+];
+
 export function InspectorPanel() {
   const store = useEditorStoreApi();
   const registry = useRegistry();
   const selection = useEditorStore((s) => s.selection);
   const root = useEditorStore((s) => activeComp(s).root);
+  const inspectorTab = useEditorStore((s) => s.inspectorTab);
 
   if (selection.length === 0) {
     return (
@@ -92,13 +105,14 @@ export function InspectorPanel() {
     state.apply(setNodeProp(activeComp(state), node!.id, path, value));
   }
 
+  const isText = node.kind === "text";
   const { name, general, transform, rest } = partitionFields(getInspectorFields(node, registry));
   const Icon = getKindIcon(node.kind);
   const adjustment = Boolean(node.isAdjustment);
   const color = adjustment ? ADJUSTMENT_COLOR : getKindColor(node.kind);
   const kindTitle = node.kind.charAt(0).toUpperCase() + node.kind.slice(1);
 
-  // For shape nodes, only show props relevant to the current shape type
+  // For shape nodes, only show props relevant to the current shape type.
   const visibleRest = node.kind === "shape"
     ? rest.filter((f) => {
         const shape = node.props.shape as string;
@@ -112,8 +126,35 @@ export function InspectorPanel() {
       })
     : rest;
 
+  // Route kind-specific fields. Color fields → Style (or Text, for text
+  // nodes); the remaining kind fields are geometry (Properties) for non-text,
+  // or typography (Text tab) for text nodes.
+  const colorFields = visibleRest.filter((f) => f.control === "color");
+  const nonColorRest = visibleRest.filter((f) => f.control !== "color");
+  const geometryFields = isText ? [] : nonColorRest;     // Properties (non-text)
+  const typographyFields = isText ? nonColorRest : [];   // Text tab
+  const fillStrokeFields = isText ? [] : colorFields;    // Style (non-text)
+  const textColorFields = isText ? colorFields : [];     // Text tab
+
+  // The Text tab only exists for text nodes; fall back if it's stale.
+  const tabs = isText ? [...TABS, { id: "text" as InspectorTab, label: "Text" }] : TABS;
+  const activeTab: InspectorTab = inspectorTab === "text" && !isText ? "properties" : inspectorTab;
+
+  const showConvertToPath =
+    node.kind === "shape" && !["polygon", "line"].includes(node.props.shape as string);
+
+  function handleConvertToPath(): void {
+    const state = store.getState();
+    const op = convertToPathOp(activeComp(state), node!.id);
+    if (op) {
+      state.apply(op);
+      enterPathEditMode(String(node!.id));
+    }
+  }
+
   return (
     <div className="panel panel--right">
+      {/* Header */}
       <div className="inspector__header">
         <span className="kind-chip kind-chip--lg" style={{ background: `${color}22`, border: `1px solid ${color}` }}>
           <Icon size={16} style={{ color }} />
@@ -132,70 +173,119 @@ export function InspectorPanel() {
           <div className="inspector__kind">{adjustment ? "Adjustment layer" : node.kind}</div>
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div className="insp-tabs" role="tablist">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            className="insp-tab"
+            aria-selected={activeTab === t.id}
+            onClick={() => store.getState().setInspectorTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="panel__body">
-        {general.length > 0 && (
-          <Section title="Appearance">
-            {general.map((field) => (
-              <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
-            ))}
-          </Section>
-        )}
-        {transform.length > 0 && (
-          <Section title="Transform">
-            {transform.map((field) => (
-              <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
-            ))}
-          </Section>
-        )}
-        {visibleRest.length > 0 && (
-          <Section title={kindTitle}>
-            {visibleRest.map((field) => (
-              <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
-            ))}
-            {node.kind === "shape" && !["polygon", "line"].includes(node.props.shape as string) && (
-              <div style={{ paddingTop: "var(--space-2)" }}>
-                <button
-                  className="btn btn-sm"
-                  style={{ width: "100%" }}
-                  title="Convert to editable bezier path"
-                  onClick={() => {
-                    const state = store.getState();
-                    const op = convertToPathOp(activeComp(state), node!.id);
-                    if (op) {
-                      state.apply(op);
-                      // Auto-open path editor so the user can start editing immediately
-                      enterPathEditMode(String(node!.id));
-                    }
-                  }}
-                >
-                  Convert to path
-                </button>
-              </div>
+        {/* ── PROPERTIES ─────────────────────────────────────────────── */}
+        {activeTab === "properties" && (
+          <>
+            {transform.length > 0 && (
+              <Section title="Transform">
+                {transform.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+              </Section>
             )}
-          </Section>
+            {geometryFields.length > 0 && (
+              <Section title={kindTitle}>
+                {geometryFields.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+                {showConvertToPath && (
+                  <div style={{ paddingTop: "var(--space-2)" }}>
+                    <button
+                      className="btn btn-sm"
+                      style={{ width: "100%" }}
+                      title="Convert to editable bezier path"
+                      onClick={handleConvertToPath}
+                    >
+                      Convert to path
+                    </button>
+                  </div>
+                )}
+              </Section>
+            )}
+            {node.kind === "comp" && <CompNodeSection node={node} />}
+            <ParentPicker node={node} root={root} />
+            <MattePicker node={node} root={root} />
+            <Section title="Layer" defaultOpen={false}>
+              <label className="inspector-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.isAdjustment)}
+                  onChange={(e) => handleChange("isAdjustment", e.target.checked)}
+                />
+                <span>
+                  Adjustment layer
+                  <span style={{ display: "block", color: "var(--text-2)", fontSize: "11px", marginTop: "1px" }}>
+                    Effects apply to layers below
+                  </span>
+                </span>
+              </label>
+            </Section>
+          </>
         )}
-        <EffectStackPanel node={node} />
-        <MotionPanel node={node} />
-        {node.kind === "text" && <RichTextFormatBar />}
-        <TransitionPanel node={node} root={root} />
-        <ParentPicker node={node} root={root} />
-        <MattePicker node={node} root={root} />
-        {node.kind === "comp" && <CompNodeSection node={node} />}
-        <Section title="Layer" defaultOpen={false}>
-          <label className="inspector-checkbox-row">
-            <input
-              type="checkbox"
-              checked={Boolean(node.isAdjustment)}
-              onChange={(e) => handleChange("isAdjustment", e.target.checked)}
-            />
-            <span>
-              Adjustment layer
-              <span style={{ display: "block", color: "var(--text-2)", fontSize: "11px", marginTop: "1px" }}>
-                Effects apply to layers below
-              </span>
-            </span>
-          </label>
-        </Section>
+
+        {/* ── STYLE ──────────────────────────────────────────────────── */}
+        {activeTab === "style" && (
+          <>
+            {general.length > 0 && (
+              <Section title="Appearance">
+                {general.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+              </Section>
+            )}
+            {fillStrokeFields.length > 0 && (
+              <Section title="Fill & Stroke">
+                {fillStrokeFields.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+              </Section>
+            )}
+            <EffectStackPanel node={node} />
+          </>
+        )}
+
+        {/* ── ANIMATE ────────────────────────────────────────────────── */}
+        {activeTab === "animate" && (
+          <>
+            <MotionPanel node={node} />
+            <TransitionPanel node={node} root={root} />
+          </>
+        )}
+
+        {/* ── TEXT (text nodes only) ─────────────────────────────────── */}
+        {activeTab === "text" && isText && (
+          <>
+            {(typographyFields.length > 0 || textColorFields.length > 0) && (
+              <Section title="Typography">
+                {typographyFields.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+                {textColorFields.map((field) => (
+                  <FieldRow key={field.path} field={field} onChange={(value) => handleChange(field.path, value)} />
+                ))}
+              </Section>
+            )}
+            <RichTextFormatBar />
+          </>
+        )}
       </div>
     </div>
   );

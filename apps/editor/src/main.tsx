@@ -1,4 +1,9 @@
 // apps/editor/src/main.tsx
+//
+// Only change vs. the original: import the new `inspector-tabs.css` AFTER
+// workspace.css so the menubar / tab / status-bar chrome layers on top.
+// Everything else (registries, store, auto-save subscription, providers) is
+// untouched — copy this file or just add the one import line.
 
 import { createRoot } from "react-dom/client";
 // @ts-ignore CSS side-effect import type declarations are handled by the bundler.
@@ -6,6 +11,8 @@ import { createRoot } from "react-dom/client";
 import "./styles/theme.css";
 // @ts-ignore
 import "./styles/workspace.css"; // workspace ergonomics layer (must load after theme.css)
+// @ts-ignore
+import "./styles/inspector-tabs.css"; // menubar + tabbed inspector + status bar (load last)
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";
@@ -21,17 +28,8 @@ const registry = createRegistry();
 const effectRegistry = createEffectRegistry();
 const transitionRegistry = createTransitionRegistry();
 
-// Exit criterion 10: "User reloads; project persists and re-renders
-// identically." `loadProject()` validates against ProjectSchema and returns
-// `undefined` on first run / corrupt / schema-invalid data, in which case we
-// fall back to a fresh blank project.
 const store = createEditorStore(loadProject() ?? createBlankProject());
 
-// Auto-save on every Tier 1 (document) change. `document.project` is only
-// replaced by reference on apply/undo/redo (Tier 1) — Tier 3 changes
-// (selection/playback/ui, which fire far more often, e.g. every RAF frame
-// while playing) leave it untouched, so this reference check is sufficient
-// to avoid redundant writes.
 let lastProject = store.getState().document.project;
 store.subscribe((state) => {
   if (state.document.project !== lastProject) {
