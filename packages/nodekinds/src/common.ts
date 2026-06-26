@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { ColorOKLCH, GlyphRun } from "contract";
 import type { Frame } from "core";
 import type { Node, Scalar } from "core";
+import { sampleSpanChannels } from "core";
 
 /** Zod mirror of ColorOKLCH (Deliverable 05.1), local to avoid depending on `schema`. */
 export const ColorOKLCHSchema = z.object({
@@ -33,7 +34,7 @@ export const BLACK: ColorOKLCH = { l: 0, c: 0, h: 0 };
  * Backwards-compatible: if `props.spans` is absent, falls back to splitting
  * `props.text` by "\n" exactly as before.
  */
-export function layout(props: Record<string, Scalar>): GlyphRun[] {
+export function layout(props: Record<string, Scalar>, frame: Frame = 0 as Frame): GlyphRun[] {
   const fontFamily = String(props.fontFamily ?? "Inter");
   const fontSize = Number(props.fontSize ?? 64);
   const weight = Number(props.weight ?? 400);
@@ -63,12 +64,16 @@ export function layout(props: Record<string, Scalar>): GlyphRun[] {
       return ctx.measureText(text).width;
     }
 
-    for (const span of spans) {
+    for (let spanIdx = 0; spanIdx < spans.length; spanIdx++) {
+      const span = spans[spanIdx];
+      // Sample per-span animation channels at the current frame
+      const anim = sampleSpanChannels(span, frame);
+
       const lines = span.text.split("\n");
       for (let i = 0; i < lines.length; i++) {
         if (i > 0) {
           lineIndex++;
-          lineX = 0; // reset x at start of each new line
+          lineX = 0;
         }
         const lineText = lines[i];
         if (lineText === "") continue;
@@ -77,16 +82,20 @@ export function layout(props: Record<string, Scalar>): GlyphRun[] {
         const runWeight     = span.weight     ?? weight;
         runs.push({
           text:       lineText,
-          x:          lineX,
-          y:          lineIndex * fontSize * lineHeight,
+          x:          lineX + (anim.offsetX ?? 0),
+          y:          lineIndex * fontSize * lineHeight + (anim.offsetY ?? 0),
           fontFamily: runFontFamily,
-          fontSize:   runFontSize,
+          fontSize:   runFontSize * (anim.scale ?? 1),
           weight:     runWeight,
-          color:      span.color ?? color,
+          color:      anim.color ?? span.color ?? color,
           italic:     span.italic,
           underline:  span.underline,
+          opacity:    anim.opacity,
+          offsetX:    anim.offsetX,
+          offsetY:    anim.offsetY,
+          scale:      anim.scale,
+          spanIndex:  spanIdx,
         });
-        // Advance x by the width of this run
         lineX += measureWidth(lineText, runFontSize, runFontFamily, runWeight);
       }
     }

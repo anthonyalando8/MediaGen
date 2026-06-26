@@ -39,6 +39,7 @@ import { MattePicker } from "./MattePicker";
 import { CompNodeSection } from "./CompNodeSection";
 import { MotionPanel } from "./MotionPanel";
 import { RichTextFormatBar } from "./RichTextFormatBar";
+import { SpanAnimPanel } from "./SpanAnimPanel";
 import { FieldRow, Section } from "./inspector-fields";
 import { convertToPathOp } from "../commands/convert-to-path";
 import { enterPathEditMode } from "../store/path-edit-handle";
@@ -284,6 +285,9 @@ export function InspectorPanel() {
               </Section>
             )}
             <RichTextFormatBar />
+            <Section title="Span Animation" defaultOpen={false}>
+              <SpanAnimPanel node={node} />
+            </Section>
           </>
         )}
       </div>

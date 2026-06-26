@@ -536,13 +536,6 @@ export class SceneGraphAdapter {
   }
 
   private updateText(container: Container, runs: GlyphRun[]): void {
-    // `Text` rasterizes to a bitmap at `resolution` px per CSS px, then
-    // `reconcile()`'s `setFromMatrix(toPixiMatrix(node.matrix))` (above)
-    // stretches `container` (and its Text children) by `transform.scale`.
-    // Without this, scaling a text node up (Deliverable 09 Week 7's resize
-    // gizmo) stretches the existing bitmap and visibly pixelates it —
-    // re-rasterize at a resolution that covers the current scale, capped to
-    // bound texture memory for extreme zooms.
     const dpr = typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1;
     const resolution = Math.min(Math.max(Math.abs(container.scale.x), Math.abs(container.scale.y), 1) * dpr, MAX_TEXT_RESOLUTION);
 
@@ -565,6 +558,9 @@ export class SceneGraphAdapter {
       text.style.fill = oklchToHex(run.color);
       text.style.fontStyle = run.italic ? "italic" : "normal";
       if (text.resolution !== resolution) text.resolution = resolution;
+      // Per-span animation values from span channels
+      text.alpha = run.opacity ?? 1;
+      text.scale.set(run.scale ?? 1);
     });
   }
 

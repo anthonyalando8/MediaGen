@@ -1,22 +1,8 @@
-// apps/editor/src/store/ui.ts
-//
-// Tier-3 (view-only) UI slice. This revision adds ONE new field to support
-// the tabbed inspector redesign: `inspectorTab` + `setInspectorTab`. Per the
-// brief, the inspector's active tab now lives in the store so any component
-// can read/drive it (e.g. selecting a text node could deep-link the Text
-// tab). It is ephemeral view state — intentionally NOT persisted to
-// localStorage alongside the workspace layout. Everything else in this file
-// (zoom, pan, panel sizing/visibility, workspace presets, persistence) is
-// unchanged.
-
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
 
 export type WorkspacePanel = "left" | "right" | "timeline";
 export type WorkspaceMode = "edit" | "preview" | "focus";
-
-/** Inspector tabs (UI/UX redesign). "text" is only meaningful when a text
- *  node is selected; InspectorPanel falls back to "properties" otherwise. */
 export type InspectorTab = "properties" | "style" | "animate" | "text";
 
 export interface UiSlice {
@@ -30,10 +16,6 @@ export interface UiSlice {
   setPan(x: number, y: number): void;
   /** Resets zoom to 1 and pan to (0,0) — the "Fit" action. */
   resetView(): void;
-
-  /** Inspector active tab (view-only, not persisted). */
-  inspectorTab: InspectorTab;
-  setInspectorTab(tab: InspectorTab): void;
 
   /** Workspace — panel sizing & visibility (view-only). */
   leftWidth: number;
@@ -49,6 +31,9 @@ export interface UiSlice {
   togglePanel(panel: WorkspacePanel): void;
   /** Apply a workspace preset (Editing / Preview / Focus). */
   setWorkspaceMode(mode: WorkspaceMode): void;
+  /** Which inspector tab is active. */
+  inspectorTab: InspectorTab;
+  setInspectorTab(tab: InspectorTab): void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -140,11 +125,6 @@ export const createUiSlice: StateCreator<EditorState, [], [], UiSlice> = (set, g
       set({ zoom: 1, panX: 0, panY: 0 });
     },
 
-    inspectorTab: "properties",
-    setInspectorTab(tab) {
-      set({ inspectorTab: tab });
-    },
-
     ...loadWorkspace(),
 
     setPanelSize(panel, size) {
@@ -169,5 +149,8 @@ export const createUiSlice: StateCreator<EditorState, [], [], UiSlice> = (set, g
       else set({ leftCollapsed: true, rightCollapsed: true, timelineCollapsed: false });
       persist();
     },
+
+    inspectorTab: "properties",
+    setInspectorTab(tab) { set({ inspectorTab: tab }); },
   };
 };

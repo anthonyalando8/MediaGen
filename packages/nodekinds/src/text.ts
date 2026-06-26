@@ -59,14 +59,14 @@ export const textKind: NodeKind = {
       lineHeight: 1.2,
     },
   }),
-  render: (node) => [
+  render: (node, frame) => [
     {
       id: node.id,
       matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1],
       opacity: 1,
       blend: "normal",
       t: "text",
-      runs: layout(node.props),
+      runs: layout(node.props, frame),
     },
   ],
 };

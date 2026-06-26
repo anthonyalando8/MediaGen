@@ -11,6 +11,15 @@
 // Backwards-compat: nodes without `props.spans` fall back to `props.text`.
 
 import type { ColorOKLCH } from "./primitives";
+import type { Channel } from "./channel";
+import type { Frame, Id } from "./ids";
+
+export interface TextSpanTime {
+  /** Frame at which this span becomes visible (inclusive). */
+  start: Frame;
+  /** Duration in frames that this span is visible. */
+  duration: Frame;
+}
 
 export interface TextSpan {
   /** The text content, may contain "\n" for line breaks. */
@@ -27,4 +36,22 @@ export interface TextSpan {
   fontFamily?: string;
   /** Underline decoration. */
   underline?: boolean;
+  /**
+   * Optional time window for this span. When set, the span is only visible
+   * between [start, start+duration). Outside this window opacity=0.
+   * When absent the span is always visible (inherits node visibility).
+   */
+  time?: TextSpanTime;
+  /**
+   * Per-span animation channels. Path is relative to the span itself:
+   *   "opacity"  → number 0–1
+   *   "offsetX"  → number px
+   *   "offsetY"  → number px
+   *   "scale"    → number multiplier
+   *   "color"    → ColorOKLCH
+   * Sampled by sampleSpanChannels() in the evaluator.
+   */
+  channels?: Channel[];
+  /** Stable identity for timeline display + channel addressing. Auto-assigned. */
+  id?: Id;
 }

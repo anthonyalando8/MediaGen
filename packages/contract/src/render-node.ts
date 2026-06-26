@@ -21,6 +21,13 @@ export interface GlyphRun {
   italic?: boolean;
   /** Underline decoration. */
   underline?: boolean;
+  /** Per-span animation values — sampled from span.channels at current frame. */
+  opacity?: number;   // 0–1; default 1
+  offsetX?: number;   // additional x offset in local px; default 0
+  offsetY?: number;   // additional y offset in local px; default 0
+  scale?: number;     // uniform scale multiplier; default 1
+  /** Index into the originating spans array — used for timeline lane display. */
+  spanIndex?: number;
 }
 
 export interface Stroke {
