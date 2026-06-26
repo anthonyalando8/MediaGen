@@ -127,10 +127,15 @@ export function PathEditOverlay({ node, fit, canvasSize, nodeMatrix, onDismiss }
     const comp  = activeComp(state);
     const idx   = comp.root.findIndex((n) => n.id === node.id);
     if (idx === -1) return;
-    const before = node.props as unknown as import("core").Json;
-    const after  = { ...(node.props as object), pathPoints: pts, pathClosed: isClosed } as unknown as import("core").Json;
+    // Read the CURRENT node props from the store — not the stale `node` prop
+    // (Viewport doesn't re-render on prop changes, so node.props would be stale
+    //  after the first commit, causing each subsequent commit to overwrite
+    //  the previous one with the original props as `before`).
+    const currentProps = comp.root[idx].props;
+    const before = currentProps as unknown as import("core").Json;
+    const after  = { ...(currentProps as object), pathPoints: pts, pathClosed: isClosed } as unknown as import("core").Json;
     state.apply(createOp({ type: "set", compId: comp.id, path: `/root/${idx}/props`, before, after, txn: createId() }));
-  }, [store, node]);
+  }, [store, node.id]);
 
   // ── Keyboard ────────────────────────────────────────────────────────────
 
