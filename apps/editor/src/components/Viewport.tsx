@@ -20,6 +20,8 @@ import { MaskPenOverlay } from "./MaskPenOverlay";
 import { RichTextEditor } from "./RichTextEditor";
 import type { RichTextEditorHandle } from "./RichTextEditor";
 import { PathEditOverlay } from "./PathEditOverlay";
+import { DrawOverlay } from "./DrawOverlay";
+import { DrawOptionsBar } from "./DrawOptionsBar";
 import { registerPathEditHandler } from "../store/path-edit-handle";
 import { setActiveEditor } from "../store/editor-handle";
 
@@ -235,15 +237,17 @@ export function Viewport() {
     return () => el.removeEventListener("wheel", handleWheel);
   }, [handleWheel]);
 
-  // F key = fit/reset view
+  // F key = fit/reset view; V/T/R/B = tool shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "f" || e.key === "F") {
-        // Only fire when not editing text
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
-        store.getState().resetView();
-      }
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable) return;
+      if (e.key === "f" || e.key === "F") store.getState().resetView();
+      if (e.key === "v" || e.key === "V") store.getState().setTool("select");
+      if (e.key === "t" || e.key === "T") store.getState().setTool("text");
+      if (e.key === "r" || e.key === "R") store.getState().setTool("shape");
+      if (e.key === "b" || e.key === "B") store.getState().setTool("draw");
+      if (e.key === "Escape" && store.getState().tool === "draw") store.getState().setTool("select");
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -428,6 +432,12 @@ export function Viewport() {
           />
         );
       })()}
+      {tool === "draw" && (
+        <>
+          <DrawOptionsBar />
+          <DrawOverlay fit={fit} canvasSize={canvasSize} />
+        </>
+      )}
       {selectedNode && !selectedNode.locked && tool !== "mask" && !pathEditNodeId && (
         <TransformGizmo
           nodeId={selectedNode.id}

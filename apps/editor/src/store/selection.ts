@@ -6,7 +6,7 @@ import type { Id } from "core";
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
 
-export type Tool = "select" | "text" | "shape" | "mask";
+export type Tool = "select" | "text" | "shape" | "mask" | "draw";
 
 export interface SelectionSlice {
   selection: Id[];

@@ -2494,3 +2494,59 @@ input[type="range"]::-moz-range-track {
 .shape-picker__btn--active svg line {
   stroke: var(--accent);
 }
+
+/* ── Draw options bar ────────────────────────────────────────────────── */
+
+.draw-options-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  pointer-events: all;
+  white-space: nowrap;
+}
+
+.draw-options-bar__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--text-1);
+}
+
+.draw-options-bar__field input[type="range"] {
+  width: 72px;
+}
+
+.draw-options-bar__field input[type="color"] {
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  padding: 1px;
+}
+
+.draw-options-bar__val {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-2);
+  min-width: 28px;
+}
+
+.draw-options-bar__hint {
+  font-size: 10px;
+  color: var(--text-2);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border);
+}

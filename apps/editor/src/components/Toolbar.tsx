@@ -1,5 +1,5 @@
 // apps/editor/src/components/Toolbar.tsx
-import { Group, Layers, MousePointer2, PanelBottom, PanelLeft, PanelRight, PenLine, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
+import { Group, Layers, MousePointer2, PanelBottom, PanelLeft, PanelRight, PenLine, Pencil, Redo2, Sliders, Square, Trash2, Type, Undo2, Ungroup } from "lucide-react";
 import type { Id, NodeKindId } from "core";
 import { addNode, appendNodeOp } from "../commands/add-node";
 import { groupNodes } from "../commands/group-nodes";
@@ -19,9 +19,10 @@ const ADDABLE_KINDS: { kind: NodeKindId; label: string; icon: typeof Square }[] 
 ];
 
 const TOOLS: { tool: Tool; label: string; icon: typeof Square }[] = [
-  { tool: "select", label: "Select (V)", icon: MousePointer2 },
-  { tool: "text", label: "Text (T)", icon: Type },
-  { tool: "shape", label: "Shape (R)", icon: Square },
+  { tool: "select", label: "Select (V)",    icon: MousePointer2 },
+  { tool: "text",   label: "Text (T)",      icon: Type          },
+  { tool: "shape",  label: "Shape (R)",     icon: Square        },
+  { tool: "draw",   label: "Draw / Brush (B)", icon: Pencil     },
 ];
 
 const ICON_SIZE = 15;
