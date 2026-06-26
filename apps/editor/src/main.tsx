@@ -15,6 +15,8 @@ import "./styles/workspace.css"; // workspace ergonomics layer (must load after 
 import "./styles/inspector-tabs.css"; // menubar + tabbed inspector + status bar (load last)
 // @ts-ignore
 import "./styles/span-anim.css"; // per-span text animation panel
+// @ts-ignore
+import "./styles/text-effects.css"; // per-span text visual effects panel
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

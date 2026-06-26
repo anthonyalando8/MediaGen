@@ -81,4 +81,53 @@ export interface TextSpan {
   channels?: Channel[];
   /** Stable identity for timeline display + channel addressing. Auto-assigned. */
   id?: Id;
+
+  // ── Per-span visual effects ──────────────────────────────────────────
+
+  /**
+   * Stroke / outline around each character.
+   * `width` in font-size pixels (2 = typical thin outline).
+   */
+  stroke?: { color: ColorOKLCH; width: number };
+
+  /**
+   * Drop shadow or glow.
+   * Set `distance: 0` with a large `blur` for a neon glow effect.
+   * `angle` in radians (0 = right, Math.PI/4 = bottom-right).
+   * `alpha` 0–1.
+   */
+  shadow?: {
+    color: ColorOKLCH;
+    blur: number;
+    distance: number;
+    angle: number;
+    alpha: number;
+  };
+
+  /**
+   * Rectangular highlight / background behind the text run.
+   * `padding` in px adds space around the tight text bounds.
+   */
+  highlight?: { color: ColorOKLCH; padding: number };
+
+  /**
+   * Gaussian blur applied to the rendered character.
+   * 0 = sharp (default), higher = blurrier.
+   * Animatable via span.channels path "blur".
+   */
+  blur?: number;
+
+  /**
+   * Color matrix adjustments. Each is a multiplier (1 = no change).
+   *   brightness: 0.5 = half, 2 = double
+   *   saturation: 0 = greyscale, 1 = normal
+   *   hue:        rotation in degrees (0–360)
+   *   contrast:   0.5 = low, 2 = high
+   */
+  colorMatrix?: {
+    brightness?: number;
+    saturation?: number;
+    hue?: number;
+    contrast?: number;
+  };
 }

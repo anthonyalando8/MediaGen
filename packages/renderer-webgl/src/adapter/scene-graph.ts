@@ -4,7 +4,7 @@
 // (keyed diff)" (Deliverable 08). NO domain types cross this boundary —
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
-import { Container, Graphics, Matrix, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
+import { BlurFilter, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
 import type { Renderer } from "pixi.js";
 import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
@@ -539,28 +539,137 @@ export class SceneGraphAdapter {
     const dpr = typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1;
     const resolution = Math.min(Math.max(Math.abs(container.scale.x), Math.abs(container.scale.y), 1) * dpr, MAX_TEXT_RESOLUTION);
 
+    // Each run gets a wrapper Container (slot) so we can attach filters and
+    // draw highlight backgrounds without polluting the shared parent container.
+    // Slot layout: [slot0: Container([highlight: Graphics, text: Text]), slot1: …]
+    // We recycle slots by count; if the run count changes we add/remove from the end.
     while (container.children.length > runs.length) {
-      const extra = container.children[container.children.length - 1];
+      const extra = container.children[container.children.length - 1] as Container;
       container.removeChild(extra);
-      extra.destroy();
+      extra.destroy({ children: true });
     }
+
     runs.forEach((run, i) => {
-      let text = container.children[i] as Text | undefined;
-      if (!text) {
-        text = new Text({ text: run.text, style: {} });
-        container.addChild(text);
+      // ── Get or create the slot container ──
+      let slot = container.children[i] as Container | undefined;
+      if (!slot) {
+        slot = new Container();
+        container.addChild(slot);
       }
+
+      // ── Position + opacity + scale on the slot ──
+      slot.position.set(run.x, run.y);
+      slot.alpha = run.opacity ?? 1;
+      slot.scale.set(run.scale ?? 1);
+
+      // ── Highlight background (drawn first so it sits behind text) ──
+      let highlight = slot.children[0] as Graphics | undefined;
+      let text      = slot.children[1] as Text | Text | undefined;
+      if (run.highlight) {
+        if (!highlight || !(highlight instanceof Graphics)) {
+          if (highlight) { slot.removeChild(highlight as import('pixi.js').Container); (highlight as Graphics).destroy(); }
+          highlight = new Graphics();
+          slot.addChildAt(highlight, 0);
+        }
+        highlight.clear();
+        const pad = run.highlight.padding ?? 0;
+        // Use the Text child's measured width when available (accurate after first render),
+        // otherwise estimate from fontSize. Text anchor is (0,0) — top-left of the bounding
+        // box — so the rect simply extends `pad` px outside that box on all sides.
+        // We defer the width update to after text is configured below by re-drawing in a
+        // second pass; for now lay out at estimate so the rect exists.
+        const estimatedW = run.fontSize * run.text.length * 0.55 + pad * 2;
+        const estimatedH = run.fontSize * 1.15 + pad * 2;
+        highlight.roundRect(-pad, -pad, estimatedW, estimatedH, 4);
+        highlight.fill(oklchToHex(run.highlight.color));
+      } else if (highlight instanceof Graphics) {
+        slot.removeChild(highlight);
+        highlight.destroy();
+        highlight = undefined;
+      }
+
+      // ── Text child (index 1 if highlight exists, else 0) ──
+      const textIdx = run.highlight ? 1 : 0;
+      if (slot.children.length <= textIdx || !(slot.children[textIdx] instanceof Text)) {
+        // Remove any stale non-Text child at this slot
+        while (slot.children.length > textIdx) {
+          const stale = slot.children[slot.children.length - 1];
+          slot.removeChild(stale);
+          stale.destroy();
+        }
+        text = new Text({ text: run.text, style: {} });
+        slot.addChild(text);
+      } else {
+        text = slot.children[textIdx] as Text;
+      }
+
+      // ── Apply text style ──
       text.text = run.text;
-      text.position.set(run.x, run.y);
-      text.style.fontFamily = run.fontFamily;
-      text.style.fontSize = run.fontSize;
-      text.style.fontWeight = String(run.weight) as Text["style"]["fontWeight"];
-      text.style.fill = oklchToHex(run.color);
-      text.style.fontStyle = run.italic ? "italic" : "normal";
+      text.position.set(0, 0);
+      text.style.fontFamily  = run.fontFamily;
+      text.style.fontSize    = run.fontSize;
+      text.style.fontWeight  = String(run.weight) as Text["style"]["fontWeight"];
+      text.style.fill        = oklchToHex(run.color);
+      text.style.fontStyle   = run.italic ? "italic" : "normal";
       if (text.resolution !== resolution) text.resolution = resolution;
-      // Per-span animation values from span channels
-      text.alpha = run.opacity ?? 1;
-      text.scale.set(run.scale ?? 1);
+
+      // Stroke / outline
+      if (run.stroke) {
+        text.style.stroke = { color: oklchToHex(run.stroke.color), width: run.stroke.width };
+      } else {
+        (text.style as unknown as Record<string, unknown>).stroke = null;
+      }
+
+      // Drop shadow / glow (distance:0 + large blur = glow)
+      if (run.shadow) {
+        text.style.dropShadow = {
+          color:    oklchToHex(run.shadow.color),
+          blur:     run.shadow.blur,
+          distance: run.shadow.distance,
+          angle:    run.shadow.angle,
+          alpha:    run.shadow.alpha,
+        };
+      } else {
+        (text.style as unknown as Record<string, unknown>).dropShadow = null;
+      }
+
+      // ── Filters on the slot (blur + color matrix) ──
+      const newFilters: import("pixi.js").Filter[] = [];
+
+      if (run.blur && run.blur > 0) {
+        // Reuse existing BlurFilter if present
+        const existingBlur = (slot as Container & { _seaBytesBlurFilter?: BlurFilter })._seaBytesBlurFilter;
+        const bf = existingBlur ?? new BlurFilter({ strength: run.blur });
+        if (existingBlur) bf.strength = run.blur;
+        (slot as Container & { _seaBytesBlurFilter?: BlurFilter })._seaBytesBlurFilter = bf;
+        newFilters.push(bf);
+      }
+
+      if (run.colorMatrix) {
+        const existingCmf = (slot as Container & { _seaBytesCmf?: ColorMatrixFilter })._seaBytesCmf;
+        const cmf = existingCmf ?? new ColorMatrixFilter();
+        (slot as Container & { _seaBytesCmf?: ColorMatrixFilter })._seaBytesCmf = cmf;
+        cmf.reset();
+        if (run.colorMatrix.brightness != null) cmf.brightness(run.colorMatrix.brightness, true);
+        if (run.colorMatrix.saturation  != null) cmf.saturate(run.colorMatrix.saturation - 1, true);
+        if (run.colorMatrix.hue         != null) cmf.hue(run.colorMatrix.hue, true);
+        if (run.colorMatrix.contrast    != null) cmf.contrast(run.colorMatrix.contrast - 1, true);
+        newFilters.push(cmf);
+      }
+
+      slot.filters = newFilters.length > 0 ? newFilters : null;
+
+      // Second-pass highlight resize: now that the Text style is fully applied
+      // we can read text.width (which Pixi computes lazily from font metrics).
+      // Redraw the highlight rect with the accurate measured width.
+      if (run.highlight && highlight instanceof Graphics && text) {
+        const pad = run.highlight.padding ?? 0;
+        const measuredW = text.width + pad * 2;
+        const measuredH = text.height + pad * 2;
+        highlight.clear();
+        highlight.roundRect(-pad, -pad, measuredW, measuredH, 4);
+        highlight.fill(oklchToHex(run.highlight.color));
+      }
     });
   }
 

@@ -81,20 +81,26 @@ export function layout(props: Record<string, Scalar>, frame: Frame = 0 as Frame)
         const runFontFamily = span.fontFamily ?? fontFamily;
         const runWeight     = span.weight     ?? weight;
         runs.push({
-          text:       lineText,
-          x:          lineX + (anim.offsetX ?? 0),
-          y:          lineIndex * fontSize * lineHeight + (anim.offsetY ?? 0),
-          fontFamily: runFontFamily,
-          fontSize:   runFontSize * (anim.scale ?? 1),
-          weight:     runWeight,
-          color:      anim.color ?? span.color ?? color,
-          italic:     span.italic,
-          underline:  span.underline,
-          opacity:    anim.opacity,
-          offsetX:    anim.offsetX,
-          offsetY:    anim.offsetY,
-          scale:      anim.scale,
-          spanIndex:  spanIdx,
+          text:        lineText,
+          x:           lineX + (anim.offsetX ?? 0),
+          y:           lineIndex * fontSize * lineHeight + (anim.offsetY ?? 0),
+          fontFamily:  runFontFamily,
+          fontSize:    runFontSize * (anim.scale ?? 1),
+          weight:      runWeight,
+          color:       anim.color ?? span.color ?? color,
+          italic:      span.italic,
+          underline:   span.underline,
+          opacity:     anim.opacity,
+          offsetX:     anim.offsetX,
+          offsetY:     anim.offsetY,
+          scale:       anim.scale,
+          spanIndex:   spanIdx,
+          // Visual effects — pass through from span
+          stroke:      span.stroke,
+          shadow:      span.shadow,
+          highlight:   span.highlight,
+          blur:        span.blur,
+          colorMatrix: span.colorMatrix,
         });
         lineX += measureWidth(lineText, runFontSize, runFontFamily, runWeight);
       }

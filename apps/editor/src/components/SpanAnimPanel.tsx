@@ -19,7 +19,8 @@ import {
   setSpanTimeOp,
   spanPresetChannels,
 } from "../commands/set-span-animation";
-import { useEditorStoreApi } from "../store/context";
+import { splitSpansIntoWordsOp } from "../commands/text-span-ops";
+import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
 const PRESETS = [
@@ -161,14 +162,29 @@ interface SpanAnimPanelProps {
 export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
   const store = useEditorStoreApi();
   const spans = (node.props.spans as unknown as TextSpan[] | undefined) ?? [];
-  const fps = 30; // TODO: read from comp
+  const fps = useEditorStore((s) => activeComp(s).fps);
   const [staggerF, setStaggerF] = useState(8);
+
+  function handleSplit() {
+    const state = store.getState();
+    state.apply(splitSpansIntoWordsOp(activeComp(state), node.id));
+  }
+
+  const hasText = Boolean(node.props.text || spans.length);
 
   if (spans.length === 0) {
     return (
       <div className="span-anim-empty">
-        Double-click the text on canvas to enter rich-text editing, then use Format
-        to split into styled spans. Spans appear here for per-word animation.
+        {hasText ? (
+          <>
+            <p>This text has no spans yet.</p>
+            <button className="btn btn-sm" style={{ marginTop: 8, width: "100%" }} onClick={handleSplit}>
+              ✦ Split into words
+            </button>
+          </>
+        ) : (
+          <p>Double-click the text on canvas to enter editing. Then click Split into words to animate each word independently.</p>
+        )}
       </div>
     );
   }
@@ -188,7 +204,13 @@ export function SpanAnimPanel({ node }: SpanAnimPanelProps) {
 
   return (
     <div className="span-anim-panel">
-      {/* Stagger section */}
+      {/* Re-split button */}
+      <div className="span-anim-actions">
+        <button className="btn btn-sm" style={{ flex: 1 }} onClick={handleSplit} title="Re-split text into one span per word">
+          ✦ Split into words
+        </button>
+        <span className="span-anim-actions__count">{spans.length} span{spans.length !== 1 ? "s" : ""}</span>
+      </div>
       <div className="span-anim-stagger">
         <div className="span-anim-stagger__header">
           <span className="insp-label">Stagger all spans</span>

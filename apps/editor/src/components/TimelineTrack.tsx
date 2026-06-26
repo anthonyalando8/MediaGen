@@ -10,15 +10,19 @@
 //  - Snap-to-grid (8px threshold) still applies on horizontal drags.
 //  - Clicking empty lane area deselects.
 
-import { useState } from "react";
+import { useState, useContext as _useContext } from "react";
+import React from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import type { Id, Node } from "core";
+import type { Frame, Id, Node } from "core";
 import {
   moveClipOp, trimClipOp,
   calcCompDuration, setCompDurationOp,
 } from "../commands/move-clip-time";
 import { moveLaneOp, buildLanes } from "../commands/move-lane";
 import type { LaneEntry } from "../commands/move-lane";
+import { setSpanTimeOp } from "../commands/set-span-animation";
+import type { TextSpan } from "core";
+import { SpanLaneContext } from "./SpanLaneContext";
 import { ADJUSTMENT_COLOR, getKindColor } from "./kind-icons";
 import { useTimelineSnap } from "./TimelineSnapContext";
 import { useTransitionRegistry } from "../bootstrap/transition-registry-context";
@@ -312,6 +316,103 @@ function LaneRow({
   );
 }
 
+// ── Span sub-lanes ────────────────────────────────────────────────────────
+// Shown below a text node's clip row when the node has any span with a
+// time window. Each animated span appears as a small draggable clip bar
+// on its own sub-row. Drag left/right changes span.time.start.
+
+const SPAN_ROW_H = 22;
+
+function SpanClip({
+  span,
+  spanIndex,
+  nodeId,
+  nodeStart,
+  pixelsPerFrame,
+}: {
+  span: TextSpan;
+  spanIndex: number;
+  nodeId: Id;
+  nodeStart: number;
+  pixelsPerFrame: number;
+}) {
+  const store = useEditorStoreApi();
+  if (!span.time) return null;
+
+  const left  = (nodeStart + (span.time.start as number)) * pixelsPerFrame;
+  const width = Math.max(8, (span.time.duration as number) * pixelsPerFrame);
+  const label = span.text.replace(/\n/g, "↵").trim().slice(0, 20);
+
+  function handleDrag(e: React.PointerEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    const originStart = span.time!.start as number;
+    const startX = e.clientX;
+
+    function onMove(ev: PointerEvent) {
+      const delta = Math.round((ev.clientX - startX) / pixelsPerFrame);
+      const newStart = Math.max(0, originStart + delta) as Frame;
+      const state = store.getState();
+      const comp = activeComp(state);
+      state.apply(setSpanTimeOp(comp, nodeId, spanIndex, newStart, span.time!.duration, span.time!.fillMode ?? "forwards"));
+    }
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <div
+      className="span-sublane__clip"
+      style={{ left, width }}
+      onPointerDown={handleDrag}
+      title={`"${label}" · start ${span.time.start}f · ${span.time.duration}f`}
+    >
+      <span className="span-sublane__label">{label}</span>
+    </div>
+  );
+}
+
+function SpanSubLanes({
+  node,
+  pixelsPerFrame,
+}: {
+  node: Node;
+  pixelsPerFrame: number;
+}) {
+  const { expanded } = React.useContext(SpanLaneContext);
+  if (!expanded.has(node.id)) return null;
+
+  const spans = (node.props.spans as unknown as TextSpan[] | undefined) ?? [];
+  const animated = spans.filter((s) => s.time);
+  if (animated.length === 0) return null;
+
+  const nodeStart = node.time.start as number;
+
+  return (
+    <div className="span-sublane-group">
+      {spans.map((span, i) => {
+        if (!span.time) return null;
+        return (
+          <div key={span.id ?? i} className="span-sublane__row">
+            <SpanClip
+              span={span}
+              spanIndex={i}
+              nodeId={node.id}
+              nodeStart={nodeStart}
+              pixelsPerFrame={pixelsPerFrame}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Export ────────────────────────────────────────────────────────────────
 
 export function TimelineTrack({
@@ -335,16 +436,27 @@ export function TimelineTrack({
   return (
     <div className="timeline-track">
       {lanes.map((lane, laneIndex) => (
-        <LaneRow
-          key={lane.laneId}
-          lane={lane}
-          laneIndex={laneIndex}
-          lanes={lanes}
-          pixelsPerFrame={pixelsPerFrame}
-          selection={selection}
-          isDropTarget={false}
-          isAlt={laneIndex % 2 === 1}
-        />
+        <div key={lane.laneId}>
+          <LaneRow
+            lane={lane}
+            laneIndex={laneIndex}
+            lanes={lanes}
+            pixelsPerFrame={pixelsPerFrame}
+            selection={selection}
+            isDropTarget={false}
+            isAlt={laneIndex % 2 === 1}
+          />
+          {/* Span sub-lanes — only for text nodes with animated spans */}
+          {lane.nodes
+            .filter(({ node }) => node.kind === "text")
+            .map(({ node }) => (
+              <SpanSubLanes
+                key={`spans-${node.id}`}
+                node={node}
+                pixelsPerFrame={pixelsPerFrame}
+              />
+            ))}
+        </div>
       ))}
       <div
         className="timeline-track__playhead"

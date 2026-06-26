@@ -40,6 +40,7 @@ import { CompNodeSection } from "./CompNodeSection";
 import { MotionPanel } from "./MotionPanel";
 import { RichTextFormatBar } from "./RichTextFormatBar";
 import { SpanAnimPanel } from "./SpanAnimPanel";
+import { TextEffectsPanel } from "./TextEffectsPanel";
 import { FieldRow, Section } from "./inspector-fields";
 import { convertToPathOp } from "../commands/convert-to-path";
 import { enterPathEditMode } from "../store/path-edit-handle";
@@ -287,6 +288,9 @@ export function InspectorPanel() {
             <RichTextFormatBar />
             <Section title="Span Animation" defaultOpen={false}>
               <SpanAnimPanel node={node} />
+            </Section>
+            <Section title="Text Effects" defaultOpen={false}>
+              <TextEffectsPanel node={node} />
             </Section>
           </>
         )}

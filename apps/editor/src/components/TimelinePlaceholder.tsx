@@ -25,6 +25,7 @@ import { TimelineTrack } from "./TimelineTrack";
 import { TimelineTrackHeaders } from "./TimelineTrackHeaders";
 import { TimelineGrid } from "./TimelineGrid";
 import { TimelineSnapContext } from "./TimelineSnapContext";
+import { SpanLaneContext } from "./SpanLaneContext";
 import { CurveEditor } from "./CurveEditor";
 
 const DEFAULT_PX_PER_FRAME = 4;
@@ -56,6 +57,20 @@ export function TimelinePlaceholder() {
   const [mode, setMode] = useState<TimelineMode>("clips");
   const [followPlayhead, setFollowPlayhead] = useState(true);
   const [litFrame, setLitFrame] = useState<number | null>(null);
+  const [spanExpanded, setSpanExpanded] = useState<Set<string>>(new Set());
+
+  function toggleSpanLane(nodeId: string) {
+    setSpanExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId);
+      return next;
+    });
+  }
+
+  const spanLaneCtx = useMemo(
+    () => ({ expanded: spanExpanded, toggle: toggleSpanLane }),
+    [spanExpanded]
+  );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -235,6 +250,7 @@ export function TimelinePlaceholder() {
       {/* ── Timeline body ──────────────────────────────────────────────── */}
       {mode === "clips" ? (
         <TimelineSnapContext.Provider value={snapCtx}>
+          <SpanLaneContext.Provider value={spanLaneCtx}>
           <div className="timeline-body">
             <TimelineTrackHeaders />
             <div
@@ -263,6 +279,7 @@ export function TimelinePlaceholder() {
               </div>
             </div>
           </div>
+          </SpanLaneContext.Provider>
         </TimelineSnapContext.Provider>
       ) : (
         <div className="timeline-body">

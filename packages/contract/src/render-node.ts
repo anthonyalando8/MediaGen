@@ -28,6 +28,12 @@ export interface GlyphRun {
   scale?: number;     // uniform scale multiplier; default 1
   /** Index into the originating spans array — used for timeline lane display. */
   spanIndex?: number;
+  // ── Visual effects (pass-through from TextSpan) ──────────────────────
+  stroke?: { color: import("./primitives").ColorOKLCH; width: number };
+  shadow?: { color: import("./primitives").ColorOKLCH; blur: number; distance: number; angle: number; alpha: number };
+  highlight?: { color: import("./primitives").ColorOKLCH; padding: number };
+  blur?: number;
+  colorMatrix?: { brightness?: number; saturation?: number; hue?: number; contrast?: number };
 }
 
 export interface Stroke {
