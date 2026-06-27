@@ -254,6 +254,12 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
         return;
       }
 
+      // Always save the selection so ensureSelectionIsSpan / applyColor
+      // can restore it after the inspector panel steals focus
+      if (!sel.isCollapsed) {
+        savedRangeRef.current = range.cloneRange();
+      }
+
       // Walk up from the anchor node to find a data-span-id element
       let domNode: globalThis.Node | null = range.startContainer;
       while (domNode && domNode !== el) {
@@ -353,10 +359,14 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
       focus() { editorRef.current?.focus(); },
       ensureSelectionIsSpan() {
         editorRef.current?.focus();
-        restoreSelection();
         const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null;
-        const range = sel.getRangeAt(0);
+        // If selection is collapsed (focus was stolen by inspector), restore saved range
+        if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+          restoreSelection();
+        }
+        const sel2 = window.getSelection();
+        if (!sel2 || sel2.rangeCount === 0 || sel2.isCollapsed) return null;
+        const range = sel2.getRangeAt(0);
         // Check if already inside a span with data-span-id
         let anc: globalThis.Node | null = range.commonAncestorContainer;
         while (anc && anc !== editorRef.current) {
@@ -368,18 +378,19 @@ export function RichTextEditor({ node, fit, nodeMatrix, onDismiss, editorHandle 
         }
         // Wrap selection in a new span with a stable ID
         const newId = Math.random().toString(36).slice(2, 10);
-        const span = document.createElement("span");
-        span.dataset.spanId = newId;
-        try { range.surroundContents(span); }
+        const wrapSpan = document.createElement("span");
+        wrapSpan.dataset.spanId = newId;
+        try { range.surroundContents(wrapSpan); }
         catch {
           const fragment = range.extractContents();
-          span.appendChild(fragment);
-          range.insertNode(span);
+          wrapSpan.appendChild(fragment);
+          range.insertNode(wrapSpan);
         }
         const newRange = document.createRange();
-        newRange.selectNodeContents(span);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
+        newRange.selectNodeContents(wrapSpan);
+        sel2.removeAllRanges();
+        sel2.addRange(newRange);
+        savedRangeRef.current = newRange.cloneRange();
         handleInput();
         return newId;
       },
