@@ -1,0 +1,162 @@
+/* apps/editor/src/styles/range-slider.css
+ * Polished bounded numeric input with slider track, nudge buttons, click-to-edit.
+ * Used in inspector fields (opacity, scale, rotation, shape props, text props)
+ * and text effects panel.
+ */
+
+.range-slider {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 0;
+}
+
+/* Label */
+.range-slider__label {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+/* Track */
+.range-slider__track {
+  position: relative;
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+
+.range-slider__track:hover .range-slider__fill {
+  background: color-mix(in srgb, var(--accent) 90%, white);
+}
+
+.range-slider__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  border-radius: 2px;
+  pointer-events: none;
+  transition: background 0.1s;
+}
+
+.range-slider__thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  transition: box-shadow 0.1s;
+}
+
+.range-slider__track:hover .range-slider__thumb,
+.range-slider__track:active .range-slider__thumb {
+  box-shadow: 0 0 0 3px rgba(53, 214, 193, 0.25);
+}
+
+/* Controls: − value + */
+.range-slider__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.range-slider__nudge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.range-slider__nudge:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.range-slider__nudge:active {
+  background: var(--accent-soft);
+}
+
+.range-slider__value {
+  min-width: 40px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-0);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-align: center;
+  cursor: text;
+  transition: background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+}
+
+.range-slider__value:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.range-slider__input {
+  width: 52px;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--surface-1);
+  color: var(--text-0);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-align: center;
+  outline: none;
+}
+
+.range-slider__unit {
+  font-size: 9px;
+  color: var(--text-2);
+  margin-left: 1px;
+}
+
+/* Inside text-effects panel rows — full width */
+.text-fx-row__body .range-slider {
+  width: 100%;
+  grid-template-columns: 72px 1fr auto;
+}
+
+/* Inside span-anim fields — compact */
+.span-anim-field .range-slider {
+  grid-template-columns: auto 80px auto;
+  gap: 4px;
+}
+
+/* Inside insp-section — normal */
+.insp-section .range-slider {
+  padding: 2px 0;
+}

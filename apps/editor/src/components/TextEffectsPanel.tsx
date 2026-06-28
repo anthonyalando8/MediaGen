@@ -16,6 +16,7 @@ import { getActiveEditor, subscribeActiveEditor } from "../store/editor-handle";
 import { activeComp } from "../store/selectors";
 import { hexStringToOklch, oklchToHex } from "renderer-webgl";
 import { findNodeIndex } from "../commands/find-node-index";
+import { RangeSlider } from "./RangeSlider";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -86,17 +87,20 @@ function EffectRow({
   );
 }
 
-function NumInput({ label, value, min, max, step = 1, unit, onChange }: {
+function NumInput({ label, value, min = 0, max = 100, step = 1, unit, onChange }: {
   label: string; value: number; min?: number; max?: number; step?: number; unit?: string;
   onChange: (v: number) => void;
 }) {
   return (
-    <label className="text-fx-field">
-      <span>{label}</span>
-      <input type="number" className="insp-number" value={value} min={min} max={max} step={step}
-        onChange={(e) => onChange(Number(e.target.value))} />
-      {unit && <span className="text-fx-unit">{unit}</span>}
-    </label>
+    <RangeSlider
+      label={label}
+      value={value}
+      min={min}
+      max={max}
+      step={step}
+      unit={unit}
+      onChange={(v) => onChange(v as number)}
+    />
   );
 }
 

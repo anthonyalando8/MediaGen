@@ -394,7 +394,21 @@ export class SceneGraphAdapter {
 
     container.filters = allFilters;
     if (localRect) {
+      // Mask/matte passes need local-space filterArea for correct UV alignment
       container.filterArea = new Rectangle(localRect.x, localRect.y, localRect.width, localRect.height);
+    } else {
+      // For plain effects (blur, colorMatrix etc) do NOT set filterArea.
+      // filterArea must be in canvas-pixel space but scene-graph has no access
+      // to the viewport transform (zoom/pan). Instead clear any stale filterArea
+      // and rely on Pixi's auto-bounds, but set a generous padding on each
+      // filter so it covers shapes larger than the default filter padding.
+      container.filterArea = null as unknown as Rectangle;
+    }
+    // Ensure filters cover the full shape regardless of its drawn size.
+    // Pixi's default filter padding (8px) is too small for large shapes.
+    const shapePadding = Math.max(this.compSize.width, this.compSize.height);
+    for (const f of allFilters) {
+      if (f.padding < shapePadding) f.padding = shapePadding;
     }
   }
 

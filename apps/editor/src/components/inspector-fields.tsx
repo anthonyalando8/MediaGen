@@ -21,6 +21,7 @@ import type { ColorOKLCH, Json } from "core";
 import type { InspectorFieldValue } from "../inspector/fields";
 import { FontSelector } from "./FontSelector";
 import { ShapePicker } from "./ShapePicker";
+import { RangeSlider } from "./RangeSlider";
 
 type ColorMode = "picker" | "hex" | "rgb";
 
@@ -124,8 +125,32 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
         />
       );
 
-    case "number":
-      return <input type="number" value={typeof field.value === "number" ? field.value : 0} onChange={(e) => onChange(Number(e.target.value))} />;
+    case "number": {
+      const numVal = typeof field.value === "number" ? field.value : 0;
+      // Use RangeSlider when both min and max are defined (bounded range)
+      if (field.min !== undefined && field.max !== undefined) {
+        return (
+          <RangeSlider
+            label=""
+            value={numVal}
+            min={field.min}
+            max={field.max}
+            step={field.step}
+            unit={field.unit}
+            onChange={onChange}
+          />
+        );
+      }
+      // Unbounded — plain scrubber input
+      return (
+        <input
+          type="number"
+          value={numVal}
+          step={field.step ?? 1}
+          onChange={(e) => onChange(Number(e.target.value))}
+        />
+      );
+    }
 
     case "toggle":
       return <input type="checkbox" checked={Boolean(field.value)} onChange={(e) => onChange(e.target.checked)} />;
@@ -172,6 +197,21 @@ export function FieldControl({ field, onChange }: { field: InspectorFieldValue; 
 }
 
 export function FieldRow({ field, onChange }: { field: InspectorFieldValue; onChange: (value: Json) => void }) {
+  const isSlider = field.control === "number" && field.min !== undefined && field.max !== undefined;
+  if (isSlider) {
+    const numVal = typeof field.value === "number" ? field.value : 0;
+    return (
+      <RangeSlider
+        label={field.label}
+        value={numVal}
+        min={field.min!}
+        max={field.max!}
+        step={field.step}
+        unit={field.unit}
+        onChange={onChange}
+      />
+    );
+  }
   return (
     <label className="field-row">
       <span className="field-row__label">{field.label}</span>

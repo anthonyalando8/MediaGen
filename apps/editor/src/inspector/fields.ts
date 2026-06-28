@@ -19,18 +19,18 @@ import { getByPath } from "../util/path";
  */
 export const COMMON_INSPECTOR_FIELDS: InspectorField[] = [
   { path: "name", label: "Name", control: "text" },
-  { path: "opacity", label: "Opacity", control: "number" },
+  { path: "opacity", label: "Opacity", control: "number", min: 0, max: 1, step: 0.01 },
   {
     path: "blend",
     label: "Blend",
     control: "select",
     options: ["normal", "multiply", "screen", "overlay", "add", "darken", "lighten"],
   },
-  { path: "transform.position.x", label: "X", control: "number" },
-  { path: "transform.position.y", label: "Y", control: "number" },
-  { path: "transform.scale.x", label: "Scale X", control: "number" },
-  { path: "transform.scale.y", label: "Scale Y", control: "number" },
-  { path: "transform.rotation", label: "Rotation", control: "number" },
+  { path: "transform.position.x", label: "X", control: "number", step: 1, unit: "px" },
+  { path: "transform.position.y", label: "Y", control: "number", step: 1, unit: "px" },
+  { path: "transform.scale.x", label: "Scale X", control: "number", min: 0, max: 10, step: 0.01 },
+  { path: "transform.scale.y", label: "Scale Y", control: "number", min: 0, max: 10, step: 0.01 },
+  { path: "transform.rotation", label: "Rotation", control: "number", min: -360, max: 360, step: 0.1, unit: "°" },
 ];
 
 export interface InspectorFieldValue extends InspectorField {

@@ -28,8 +28,13 @@ export interface ChannelSpec {
 export interface InspectorField {
   path: string;
   label: string;
-  control: "text" | "textarea" | "number" | "color" | "font" | "select" | "toggle" | "asset";
+  control: "text" | "textarea" | "number" | "color" | "font" | "select" | "toggle" | "asset" | "shape";
   options?: string[];
+  /** For control:"number" — when both min+max are set, renders as a bounded slider. */
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
 }
 
 export interface NodeSchema {
