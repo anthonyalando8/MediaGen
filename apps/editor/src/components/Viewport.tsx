@@ -362,7 +362,7 @@ export function Viewport() {
           }
 
           treeRef.current = tree;
-          renderer.render(tree, state.playing);
+          renderer.render(tree, state.playing, state.playhead);
         } catch (err) {
           // A single bad frame (e.g. a transiently-invalid composition
           // mid-edit) must not silently kill this RAF loop — without this,

@@ -11,7 +11,7 @@ import { TextureManager } from "./textures/manager";
 import type { MediaService } from "./textures/manager";
 
 export interface Renderer {
-  render(tree: RenderTree, playing?: boolean): void;
+  render(tree: RenderTree, playing?: boolean, frame?: number): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
   setViewport(scale: number, x: number, y: number): void;
@@ -30,18 +30,16 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
   host.stage.addChild(adapter.root);
 
   return {
-    render(tree, playing = false) {
-      // STEP 1: reconcile — updates the scene graph AND sets filter.padding
-      //         on all effectGroup filters for the current frame.
-      adapter.reconcile(tree, playing);
+    render(tree, playing = false, frame = 0) {
+      // Stamp the current frame onto the tree so the pass-resolver can
+      // auto-inject uTime = frame/fps for overlay effects.
+      const treeWithFrame: RenderTree = frame !== undefined
+        ? { ...tree, frame }
+        : tree;
+      adapter.reconcile(treeWithFrame, playing);
       if (tree.background) {
         host.setBackground(oklchToHex(tree.background), tree.background.alpha ?? 1);
       }
-      // STEP 2: draw — Pixi reads filter.padding during this call.
-      // Because Pixi's own ticker is disabled (autoStart: false in canvas-host),
-      // this is the ONLY place pixels get drawn. Guarantees reconcile (which
-      // sets filter.padding) always precedes the GPU draw call, fixing the
-      // "effects only cover part of the image until viewport resize" bug.
       host.renderFrame();
     },
     resize(width, height, dpr) {

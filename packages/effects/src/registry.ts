@@ -9,7 +9,7 @@
 import type { ZodType } from "zod";
 import type { ChannelSpec, InspectorField } from "core";
 
-export type EffectCategory = "blur" | "color" | "stylize" | "distort";
+export type EffectCategory = "blur" | "color" | "stylize" | "distort" | "overlay";
 
 export interface EffectDef {
   /** Registry key — matches `EffectRef.effect` (core/types/effect.ts) and a PassSpec's `ref`. */

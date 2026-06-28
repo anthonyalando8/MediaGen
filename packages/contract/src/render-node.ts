@@ -167,4 +167,10 @@ export interface RenderTree {
   size: { width: number; height: number };
   background?: ColorOKLCH;
   nodes: RenderNode[];
+  /**
+   * The current composition frame number — injected by the evaluator and
+   * stored by SceneGraphAdapter so pass-resolver can compute
+   * `uTime = frame / fps` for overlay effects without needing a `time` prop.
+   */
+  frame?: number;
 }

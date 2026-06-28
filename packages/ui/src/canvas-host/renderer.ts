@@ -1,17 +1,19 @@
 // packages/ui/src/canvas-host/renderer.ts
 //
-// Mirrors `renderer-webgl`'s public `Renderer` interface (Deliverable 08:
-// "mirror this interface in `ui` for injection"). `ui` never imports
-// `renderer-webgl` (dep-cruiser: "ui-no-renderer-webgl") — the app
-// (apps/editor) constructs a real renderer via
-// `createWebGLRenderer(canvas, media)` and injects it through
-// `CanvasHostProps.createRenderer`, which is structurally typed against this
-// interface.
+// Mirrors `renderer-webgl`'s public `Renderer` interface (Deliverable 08).
+// `ui` never imports `renderer-webgl` — the app constructs a real renderer
+// and injects it through `CanvasHostProps.createRenderer`.
 
 import type { RenderTree } from "contract";
 
 export interface Renderer {
-  render(tree: RenderTree): void;
+  /**
+   * Render the given tree at the given frame.
+   * `frame` is used to compute `uTime = frame/fps` which is auto-injected
+   * into every effect shader — overlay effects (rain, snow, sparkles etc.)
+   * animate automatically without the user keyframing anything.
+   */
+  render(tree: RenderTree, playing?: boolean, frame?: number): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
   setViewport(scale: number, x: number, y: number): void;
