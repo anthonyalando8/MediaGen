@@ -1,7 +1,7 @@
 // packages/effects/src/register-builtins.ts
 import { EffectRegistry, TransitionRegistry } from "./registry";
 
-// ── Pre-existing ──────────────────────────────────────────────────────────────
+// ── Pre-existing effects ──────────────────────────────────────────────────────
 import { blurEffect }       from "./effects/blur";
 import { gradeEffect }      from "./effects/grade";
 import { glowEffect }       from "./effects/glow";
@@ -11,26 +11,21 @@ import { dropShadowEffect } from "./effects/drop-shadow";
 import { levelsEffect }     from "./effects/levels";
 
 // ── Color & grading ───────────────────────────────────────────────────────────
-import { sepiaEffect }         from "./effects/sepia";
-import { colorGradeEffect }    from "./effects/color-grade";
-import { curvesEffect }        from "./effects/curves";
-import { tonemapFilmicEffect } from "./effects/tonemap-filmic";
-import { bleachBypassEffect }  from "./effects/bleach-bypass";
-import { tealOrangeEffect }    from "./effects/teal-orange";
-import { dayForNightEffect }   from "./effects/day-for-night";
-import { infraredEffect }      from "./effects/infrared";
+import { sepiaEffect }          from "./effects/sepia";
+import { colorGradeEffect }     from "./effects/color-grade";
+import { curvesEffect }         from "./effects/curves";
+import { tonemapFilmicEffect }  from "./effects/tonemap-filmic";
+import { bleachBypassEffect }   from "./effects/bleach-bypass";
+import { tealOrangeEffect }     from "./effects/teal-orange";
+import { dayForNightEffect }    from "./effects/day-for-night";
 
 // ── Stylize ───────────────────────────────────────────────────────────────────
-import { bloomEffect }     from "./effects/bloom";
-import { filmGrainEffect } from "./effects/film-grain";
-import { vignetteEffect }  from "./effects/vignette";
-import { letterboxEffect } from "./effects/letterbox";
-import { halationEffect }  from "./effects/halation";
-import { fogEffect }       from "./effects/fog";
-import { glassEffect }     from "./effects/glass";
-import { oldTvEffect }     from "./effects/old-tv";
-import { pixelateEffect }  from "./effects/pixelate";
-import { neonEffect }      from "./effects/neon";
+import { bloomEffect }           from "./effects/bloom";
+import { filmGrainEffect }       from "./effects/film-grain";
+import { vignetteEffect }        from "./effects/vignette";
+import { letterboxEffect }       from "./effects/letterbox";
+import { halationEffect }        from "./effects/halation";
+import { fogEffect }             from "./effects/fog";
 
 // ── Lens & optics ─────────────────────────────────────────────────────────────
 import { lensFlareEffect }       from "./effects/lens-flare";
@@ -43,9 +38,6 @@ import { glitchEffect }              from "./effects/glitch";
 import { cameraShakeEffect }         from "./effects/camera-shake";
 import { motionBlurEffect }          from "./effects/motion-blur";
 import { radialBlurEffect }          from "./effects/radial-blur";
-import { mirrorEffect }              from "./effects/mirror";
-import { kaleidoscopeEffect }        from "./effects/kaleidoscope";
-import { rippleEffect }              from "./effects/ripple";
 
 // ── Transitions ───────────────────────────────────────────────────────────────
 import { cutTransition, dipTransition, crossDissolveTransition } from "./transitions/dip";
@@ -53,23 +45,63 @@ import { slamTransition }      from "./transitions/slam";
 import { whipPanTransition }   from "./transitions/whip";
 import { linearWipeTransition, radialWipeTransition, pushTransition } from "./transitions/wipe";
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const builtinEffects = [
-  blurEffect, gradeEffect, glowEffect, rgbSplitEffect, displaceEffect, dropShadowEffect, levelsEffect,
-  sepiaEffect, colorGradeEffect, curvesEffect, tonemapFilmicEffect, bleachBypassEffect, tealOrangeEffect, dayForNightEffect, infraredEffect,
-  bloomEffect, filmGrainEffect, vignetteEffect, letterboxEffect, halationEffect, fogEffect, glassEffect, oldTvEffect, pixelateEffect, neonEffect,
-  lensFlareEffect, anamorphicStreakEffect, depthOfFieldEffect,
-  chromaticAberrationEffect, glitchEffect, cameraShakeEffect, motionBlurEffect, radialBlurEffect, mirrorEffect, kaleidoscopeEffect, rippleEffect,
+  // Pre-existing
+  blurEffect,
+  gradeEffect,
+  glowEffect,
+  rgbSplitEffect,
+  displaceEffect,
+  dropShadowEffect,
+  levelsEffect,
+
+  // Color & grading
+  sepiaEffect,
+  colorGradeEffect,
+  curvesEffect,
+  tonemapFilmicEffect,
+  bleachBypassEffect,
+  tealOrangeEffect,
+  dayForNightEffect,
+
+  // Stylize
+  bloomEffect,
+  filmGrainEffect,
+  vignetteEffect,
+  letterboxEffect,
+  halationEffect,
+  fogEffect,
+
+  // Lens & optics
+  lensFlareEffect,
+  anamorphicStreakEffect,
+  depthOfFieldEffect,
+
+  // Distort & motion
+  chromaticAberrationEffect,
+  glitchEffect,
+  cameraShakeEffect,
+  motionBlurEffect,
+  radialBlurEffect,
 ] as const;
 
 export const builtinTransitions = [
-  cutTransition, dipTransition, crossDissolveTransition,
-  slamTransition, whipPanTransition,
-  linearWipeTransition, radialWipeTransition, pushTransition,
+  cutTransition,
+  dipTransition,
+  crossDissolveTransition,
+  slamTransition,
+  whipPanTransition,
+  linearWipeTransition,
+  radialWipeTransition,
+  pushTransition,
 ] as const;
 
 export function registerBuiltinEffects(reg: EffectRegistry): void {
   for (const def of builtinEffects) reg.register(def);
 }
+
 export function registerBuiltinTransitions(reg: TransitionRegistry): void {
   for (const def of builtinTransitions) reg.register(def);
 }
