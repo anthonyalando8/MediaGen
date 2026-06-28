@@ -47,18 +47,47 @@ import { mirrorEffect }              from "./effects/mirror";
 import { kaleidoscopeEffect }        from "./effects/kaleidoscope";
 import { rippleEffect }              from "./effects/ripple";
 
+// ── Overlays (animated / atmospheric) ────────────────────────────────────────
+import { rainEffect }         from "./effects/rain";
+import { snowEffect }         from "./effects/snow";
+import { sparklesEffect }     from "./effects/sparkles";
+import { lightLeaksEffect }   from "./effects/light-leaks";
+import { waterDropletsEffect } from "./effects/water-droplets";
+import { embersEffect }       from "./effects/embers";
+import { bubblesEffect }      from "./effects/bubbles";
+import { dustEffect }         from "./effects/dust";
+
 // ── Transitions ───────────────────────────────────────────────────────────────
 import { cutTransition, dipTransition, crossDissolveTransition } from "./transitions/dip";
 import { slamTransition }      from "./transitions/slam";
 import { whipPanTransition }   from "./transitions/whip";
 import { linearWipeTransition, radialWipeTransition, pushTransition } from "./transitions/wipe";
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const builtinEffects = [
-  blurEffect, gradeEffect, glowEffect, rgbSplitEffect, displaceEffect, dropShadowEffect, levelsEffect,
-  sepiaEffect, colorGradeEffect, curvesEffect, tonemapFilmicEffect, bleachBypassEffect, tealOrangeEffect, dayForNightEffect, infraredEffect,
-  bloomEffect, filmGrainEffect, vignetteEffect, letterboxEffect, halationEffect, fogEffect, glassEffect, oldTvEffect, pixelateEffect, neonEffect,
+  // Pre-existing
+  blurEffect, gradeEffect, glowEffect, rgbSplitEffect,
+  displaceEffect, dropShadowEffect, levelsEffect,
+
+  // Color & grading
+  sepiaEffect, colorGradeEffect, curvesEffect, tonemapFilmicEffect,
+  bleachBypassEffect, tealOrangeEffect, dayForNightEffect, infraredEffect,
+
+  // Stylize
+  bloomEffect, filmGrainEffect, vignetteEffect, letterboxEffect,
+  halationEffect, fogEffect, glassEffect, oldTvEffect, pixelateEffect, neonEffect,
+
+  // Lens & optics
   lensFlareEffect, anamorphicStreakEffect, depthOfFieldEffect,
-  chromaticAberrationEffect, glitchEffect, cameraShakeEffect, motionBlurEffect, radialBlurEffect, mirrorEffect, kaleidoscopeEffect, rippleEffect,
+
+  // Distort & motion
+  chromaticAberrationEffect, glitchEffect, cameraShakeEffect,
+  motionBlurEffect, radialBlurEffect, mirrorEffect, kaleidoscopeEffect, rippleEffect,
+
+  // Overlays
+  rainEffect, snowEffect, sparklesEffect, lightLeaksEffect,
+  waterDropletsEffect, embersEffect, bubblesEffect, dustEffect,
 ] as const;
 
 export const builtinTransitions = [

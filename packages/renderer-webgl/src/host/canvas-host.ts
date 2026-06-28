@@ -11,6 +11,20 @@
 // — while `resize()` calls made before `init()` resolves are queued and
 // applied once it does. This is a deliberate Phase 1 deviation worth an ADR
 // entry: the literal Deliverable 08 signature predates Pixi v8's async init.
+//
+// RENDER LOOP OWNERSHIP
+// ---------------------
+// Pixi's Application ticker is DISABLED (`autoStart: false`). The editor's
+// own RAF loop (Viewport.tsx) owns the render cadence:
+//
+//   1. RAF fires → evaluator → adapter.reconcile(tree)   ← sets filter.padding
+//   2. renderer.render() → host.renderFrame()            ← Pixi reads padding
+//
+// If Pixi's ticker ran independently it would fire BEFORE our reconcile on
+// some frames (FIFO RAF registration order), rendering with stale
+// filter.padding = 0 — causing GLSL effects on images/shapes to only cover a
+// tiny region until a viewport resize forced a sync re-render. Owning the
+// loop guarantees reconcile always precedes the GPU draw call.
 
 import { Application, Container, Graphics } from "pixi.js";
 import type { Renderer } from "pixi.js";
@@ -46,19 +60,22 @@ export interface CanvasHost {
   readonly renderer: Renderer | undefined;
   /** Resolves once the GPU context is ready and the first resize has been applied. */
   readonly ready: Promise<void>;
+  /**
+   * Explicitly renders the stage to the canvas.
+   * MUST be called after adapter.reconcile() every frame — Pixi's own ticker
+   * is disabled (autoStart: false) so this is the only way pixels get drawn.
+   * No-ops before the GPU context is ready (same graceful-degrade pattern
+   * as transitionGroup).
+   */
+  renderFrame(): void;
   resize(width: number, height: number, dpr: number): void;
   /** Sets the canvas clear color (RenderTree.background, packed 0xRRGGBB) and alpha. */
   setBackground(color: number, alpha: number): void;
   /**
-   * Scales/positions `stage` so comp-space coordinates (Deliverable 09 §9.1,
-   * Week 7: "<Viewport> ... transform gizmos") map to canvas pixels — the
-   * same "contain, centered, zoom-scaled" transform `<TransformGizmo>`
-   * computes for its own overlay (apps/editor/src/viewport/geometry.ts).
-   * `stage` is a plain Container available immediately (Pixi v8 async-init
-   * note above), so unlike resize/setBackground this never needs queueing.
+   * Scales/positions `stage` so comp-space coordinates map to canvas pixels.
    */
   setViewport(scale: number, x: number, y: number): void;
-  /** Updates the rectangular clip mask to match the current composition dimensions. Call whenever comp size changes. */
+  /** Updates the rectangular clip mask to match the current composition dimensions. */
   setCompSize(width: number, height: number): void;
   destroy(): void;
 }
@@ -69,11 +86,6 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
   let pendingResize: { width: number; height: number; dpr: number } | null = null;
   let pendingBackground: { color: number; alpha: number } | null = null;
 
-  // Clip mask — a Graphics rect in comp-local coordinates (0,0,compW,compH).
-  // Since app.stage carries the viewport transform (scale + offset), the
-  // mask in stage-local space is always (0,0,compW,compH) regardless of zoom.
-  // This is the key: the mask travels with the stage transform, so content
-  // outside the comp rect is clipped in screen space correctly at any zoom.
   const clipMask = new Graphics();
   let _compWidth = options.compWidth ?? 1080;
   let _compHeight = options.compHeight ?? 1920;
@@ -104,10 +116,12 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
       autoDensity: true,
       antialias: true,
       backgroundAlpha: options.backgroundAlpha ?? 0,
+      // KEY FIX: disable Pixi's own ticker so we own the render loop.
+      // See module doc above for why this matters for filter.padding correctness.
+      autoStart: false,
     })
     .then(() => {
       isReady = true;
-      // Apply clip mask after stage exists
       app.stage.addChild(clipMask);
       app.stage.mask = clipMask;
       if (pendingResize) {
@@ -126,6 +140,10 @@ export function createCanvasHost(canvas: HTMLCanvasElement, options: CanvasHostO
       return isReady ? app.renderer : undefined;
     },
     ready,
+    renderFrame() {
+      if (!isReady) return;
+      app.renderer.render(app.stage);
+    },
     resize(width, height, dpr) {
       if (!isReady) {
         pendingResize = { width, height, dpr };

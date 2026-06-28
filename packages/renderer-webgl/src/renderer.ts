@@ -10,25 +10,11 @@ import { SceneGraphAdapter } from "./adapter/scene-graph";
 import { TextureManager } from "./textures/manager";
 import type { MediaService } from "./textures/manager";
 
-/**
- * Mirror this interface in `ui` for injection (Deliverable 08).
- *
- * ADDITIVE EXTENSION beyond the literal Deliverable 08 signature —
- * `setFps(fps)`: `RenderTree` (Deliverable 05.5) doesn't carry the
- * composition's fps, but the TextureManager needs it to convert a video
- * RenderNode's `tex.frame` into a seek time (`frame / fps`). The editor
- * calls `renderer.setFps(activeComp.fps)` once whenever the active
- * composition changes (Tier 2 derived state, Deliverable 09) — not every
- * frame. Defaults to 30 if never called. Worth folding `fps` into
- * `RenderTree` itself in a P1.5 ADR alongside the image/video "fit" box gap
- * (see scene-graph.ts).
- */
 export interface Renderer {
   render(tree: RenderTree, playing?: boolean): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
   setViewport(scale: number, x: number, y: number): void;
-  /** Updates the clip mask to match the current composition size. Call whenever comp dimensions change. */
   setCompSize(width: number, height: number): void;
   destroy(): void;
 }
@@ -38,17 +24,25 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
   const host = createCanvasHost(canvas, {
     width: canvas.width || 1,
     height: canvas.height || 1,
-    dpr: typeof globalThis.devicePixelRatio === "number" ? globalThis.devicePixelRatio : 1,
   });
+
   const adapter = new SceneGraphAdapter(textures, () => host.renderer);
   host.stage.addChild(adapter.root);
 
   return {
     render(tree, playing = false) {
+      // STEP 1: reconcile — updates the scene graph AND sets filter.padding
+      //         on all effectGroup filters for the current frame.
       adapter.reconcile(tree, playing);
       if (tree.background) {
         host.setBackground(oklchToHex(tree.background), tree.background.alpha ?? 1);
       }
+      // STEP 2: draw — Pixi reads filter.padding during this call.
+      // Because Pixi's own ticker is disabled (autoStart: false in canvas-host),
+      // this is the ONLY place pixels get drawn. Guarantees reconcile (which
+      // sets filter.padding) always precedes the GPU draw call, fixing the
+      // "effects only cover part of the image until viewport resize" bug.
+      host.renderFrame();
     },
     resize(width, height, dpr) {
       host.resize(width, height, dpr);
@@ -64,7 +58,6 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
     },
     destroy() {
       adapter.destroy();
-      textures.destroy();
       host.destroy();
     },
   };
