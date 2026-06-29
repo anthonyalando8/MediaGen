@@ -298,9 +298,15 @@ export function Viewport() {
     let raf = 0;
     let last: number | null = null;
     let fractional = 0; // sub-frame accumulator — elapsed is fractional at 60fps (~0.5 frames/tick at 30fps); discarding it every tick via Math.trunc meant the playhead never advanced past 0 until a GC pause caused a single long tick.
+    let wallSeconds = 0; // wall-clock seconds since mount — always advances regardless of play state, used by overlay effects so they animate even when paused.
 
     const tick = (now: number): void => {
       const comp = activeComp(store.getState());
+
+      // Advance wall clock — always, regardless of play state
+      if (last !== null) {
+        wallSeconds += (now - last) / 1000;
+      }
 
       if (store.getState().playing) {
         if (last !== null) {
@@ -362,7 +368,7 @@ export function Viewport() {
           }
 
           treeRef.current = tree;
-          renderer.render(tree, state.playing, state.playhead);
+          renderer.render(tree, state.playing, state.playhead, wallSeconds);
         } catch (err) {
           // A single bad frame (e.g. a transiently-invalid composition
           // mid-edit) must not silently kill this RAF loop — without this,

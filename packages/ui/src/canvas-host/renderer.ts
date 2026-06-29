@@ -13,7 +13,7 @@ export interface Renderer {
    * into every effect shader — overlay effects (rain, snow, sparkles etc.)
    * animate automatically without the user keyframing anything.
    */
-  render(tree: RenderTree, playing?: boolean, frame?: number): void;
+  render(tree: RenderTree, playing?: boolean, frame?: number, wallTime?: number): void;
   resize(width: number, height: number, dpr: number): void;
   setFps(fps: number): void;
   setViewport(scale: number, x: number, y: number): void;

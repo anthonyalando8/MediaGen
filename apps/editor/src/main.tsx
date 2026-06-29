@@ -19,6 +19,8 @@ import "./styles/span-anim.css"; // per-span text animation panel
 import "./styles/text-effects.css"; // per-span text visual effects panel
 // @ts-ignore
 import "./styles/range-slider.css"; // polished bounded numeric slider
+// @ts-ignore
+import "./styles/effects-panel.css";
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

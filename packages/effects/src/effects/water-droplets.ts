@@ -222,7 +222,7 @@ void main(void) {
     {
         float gScale = baseG * 1.3;
         float maxR   = baseR * 0.62;
-        float slideR = 0.12;
+        float slideR = 0.30;
         float lSeedX = 7.3; float lSeedY = 2.1;
         for (int nx = -1; nx <= 1; nx++) {
         for (int ny = -1; ny <= 1; ny++) {
@@ -233,8 +233,8 @@ void main(void) {
             float sv   = 0.4 + hash21(csd + vec2(1.7, 8.4)) * uSizeVariation * 0.6;
             float r    = maxR * sv;
             float ph   = hash21(csd + vec2(3.1, 6.9));
-            float sw   = (smoothNoise(uTime * 0.25 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.006;
-            float sY   = fract(uTime * slideR * uSlideSpeed * 0.04 + ph);
+            float sw   = (smoothNoise(uTime * 0.5 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.008;
+            float sY   = fract(uTime * slideR * uSlideSpeed * 0.5 + ph);
             vec2  cen  = vec2(fract((cell.x + jx) / gScale + sw),
                               fract((cell.y + jy) / gScale + sY));
             float tLen = uTrailLength * sv * slideR * 0.1;
@@ -250,7 +250,7 @@ void main(void) {
     {
         float gScale = baseG * 0.65;
         float maxR   = baseR * 1.0;
-        float slideR = 0.45;
+        float slideR = 0.65;
         float lSeedX = 3.7; float lSeedY = 9.5;
         for (int nx = -1; nx <= 1; nx++) {
         for (int ny = -1; ny <= 1; ny++) {
@@ -261,8 +261,8 @@ void main(void) {
             float sv   = 0.4 + hash21(csd + vec2(1.7, 8.4)) * uSizeVariation * 0.6;
             float r    = maxR * sv;
             float ph   = hash21(csd + vec2(3.1, 6.9));
-            float sw   = (smoothNoise(uTime * 0.3 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.009;
-            float sY   = fract(uTime * slideR * uSlideSpeed * 0.04 + ph);
+            float sw   = (smoothNoise(uTime * 0.5 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.01;
+            float sY   = fract(uTime * slideR * uSlideSpeed * 0.5 + ph);
             vec2  cen  = vec2(fract((cell.x + jx) / gScale + sw),
                               fract((cell.y + jy) / gScale + sY));
             float tLen = uTrailLength * sv * slideR * 0.11;
@@ -289,8 +289,8 @@ void main(void) {
             float sv   = 0.4 + hash21(csd + vec2(1.7, 8.4)) * uSizeVariation * 0.6;
             float r    = maxR * sv;
             float ph   = hash21(csd + vec2(3.1, 6.9));
-            float sw   = (smoothNoise(uTime * 0.35 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.012;
-            float sY   = fract(uTime * slideR * uSlideSpeed * 0.04 + ph);
+            float sw   = (smoothNoise(uTime * 0.5 * slideR + ph * 17.3) * 2.0 - 1.0) * 0.012;
+            float sY   = fract(uTime * slideR * uSlideSpeed * 0.5 + ph);
             vec2  cen  = vec2(fract((cell.x + jx) / gScale + sw),
                               fract((cell.y + jy) / gScale + sY));
             float tLen = uTrailLength * sv * slideR * 0.14;

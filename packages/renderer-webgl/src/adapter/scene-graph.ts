@@ -10,7 +10,7 @@ import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom,
 import { oklchToHex } from "../color";
 import { toPixiMatrix, inverseTransformRect } from "../matrix";
 import type { TextureManager } from "../textures/manager";
-import { resolvePass, setTimeContext } from "../passes/pass-resolver";
+import { resolvePass } from "../passes/pass-resolver";
 import { resolveTransitionFilter, destroyTransitionFilter } from "../passes/transition-resolver";
 import { buildMaskFilter } from "../passes/mask-pass";
 import type { MaskSpec } from "../passes/mask-pass";
@@ -120,9 +120,9 @@ export class SceneGraphAdapter {
   reconcile(tree: RenderTree, playing = false): void {
     this.compSize = tree.size;
     this.playing  = playing;
-    // Inject the current frame into the pass-resolver so overlay effects
-    // receive a live uTime = frame/fps without any user keyframing.
-    setTimeContext({ frame: tree.frame ?? 0, fps: this.fps });
+    // setTimeContext is called in renderer.ts BEFORE adapter.reconcile() —
+    // it carries wallTime (always-advancing clock) for overlay animation.
+    // This line is intentionally removed here — renderer.ts owns the call.
     this.reconcileChildren(this.root, tree.nodes, this.level);
   }
 

@@ -116,8 +116,8 @@ export function buildEffectUniforms(props: Record<string, Json>): Record<string,
 // ── Time context ──────────────────────────────────────────────────────────────
 // Set by SceneGraphAdapter.reconcile() before resolvePass is called each frame.
 
-export interface TimeContext { frame: number; fps: number; }
-let _time: TimeContext = { frame: 0, fps: 30 };
+export interface TimeContext { frame: number; fps: number; wallTime: number; }
+let _time: TimeContext = { frame: 0, fps: 30, wallTime: 0 };
 export function setTimeContext(ctx: TimeContext): void { _time = ctx; }
 
 function directionForPass(index: number, passCount: number): { value: [number, number]; type: string } {
@@ -139,7 +139,7 @@ function buildEffectFilters(pass: PassSpec): Filter[] {
 
   // Inject time uniforms — overlay effects use uTime for animation.
   // Effects that don't declare these uniforms in their GLSL ignore them safely.
-  const timeSeconds = _time.fps > 0 ? _time.frame / _time.fps : 0;
+  const timeSeconds = _time.wallTime; // wall-clock time — always advances, drives overlay animation
   baseUniforms.uTime  = { value: timeSeconds,  type: "f32" };
   baseUniforms.uFrame = { value: _time.frame,  type: "f32" };
 

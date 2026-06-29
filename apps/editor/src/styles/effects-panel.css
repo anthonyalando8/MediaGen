@@ -1,0 +1,373 @@
+/* apps/editor/src/styles/effects-panel.css
+ *
+ * Chrome for the redesigned Effects panel (EffectsBrowser + EffectStackPanel).
+ * Import AFTER theme.css so it shares the same tokens (--surface-*, --accent,
+ * --border, --radius-*, --font-*). Pure presentation; no behavior.
+ *
+ * The panel lives in the ~280–308px inspector sidebar, under the Style tab.
+ */
+
+/* ── Section header "Add" affordance ──────────────────────────────────── */
+.fx-section__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fx-addbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 11px 0 9px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.fx-addbtn:hover { background: var(--accent-strong); }
+.fx-addbtn--active { background: var(--surface-3); color: var(--text-0); }
+.fx-addbtn__icon { transition: transform 0.15s ease; }
+.fx-addbtn__icon--x { transform: rotate(45deg); }
+
+/* ── Browser ──────────────────────────────────────────────────────────── */
+.fx-browser {
+  margin: 2px 0 12px;
+  padding: 11px;
+  background: var(--surface-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  animation: fx-pop 0.14s ease;
+}
+@keyframes fx-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.fx-browser__search {
+  position: relative;
+  margin-bottom: 10px;
+  color: var(--text-2);
+}
+.fx-browser__search svg {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fx-browser__search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 30px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-0);
+  font-size: 12.5px;
+  outline: none;
+}
+.fx-browser__search input:focus { border-color: var(--accent); }
+.fx-browser__clear {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.fx-browser__clear:hover { color: var(--text-0); }
+
+.fx-browser__chips {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 9px;
+  scrollbar-width: none;
+}
+.fx-browser__chips::-webkit-scrollbar { display: none; }
+
+.fx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 25px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition), background var(--transition);
+}
+.fx-chip:hover { color: var(--text-0); }
+.fx-chip[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+.fx-chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.fx-browser__results {
+  max-height: 288px;
+  overflow-y: auto;
+  margin: 0 -3px;
+  padding: 0 3px;
+}
+.fx-browser__empty {
+  text-align: center;
+  padding: 24px 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.fx-browser__group { margin-bottom: 12px; }
+.fx-browser__grouphead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 2px 8px;
+}
+.fx-browser__groupdot { width: 7px; height: 7px; border-radius: 50%; }
+.fx-browser__grouplabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-1);
+}
+.fx-browser__groupcount {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-2);
+}
+.fx-browser__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+/* ── Effect card ──────────────────────────────────────────────────────── */
+.fx-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  transition: background var(--transition), border-color var(--transition);
+}
+.fx-card:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.fx-card__thumb {
+  position: relative;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter var(--transition);
+}
+.fx-card:hover .fx-card__thumb { filter: brightness(1.12) saturate(1.1); }
+.fx-card__abbr {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.45);
+}
+.fx-card__added {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fx-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+}
+.fx-card__dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.fx-card__name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Active stack ─────────────────────────────────────────────────────── */
+.fx-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.fx-stack__empty {
+  text-align: center;
+  padding: 18px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text-2);
+}
+.fx-stack__empty-title { font-size: 12.5px; color: var(--text-1); margin-bottom: 3px; }
+.fx-stack__empty-hint { font-size: 11px; }
+.fx-stack__empty-link {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.fx-entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.fx-entry--dragging { opacity: 0.5; }
+.fx-entry--over { border-color: var(--accent); box-shadow: 0 -2px 0 var(--accent) inset; }
+
+.fx-entry__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 9px;
+}
+.fx-entry__body { border-top: 1px solid var(--border); }
+.fx-entry:not(.fx-entry--off) .fx-entry__head + .fx-entry__body { /* keep border only when expanded */ }
+
+.fx-entry__grip {
+  display: flex;
+  align-items: center;
+  color: var(--text-2);
+  cursor: grab;
+  flex-shrink: 0;
+  transition: color var(--transition);
+}
+.fx-entry:hover .fx-entry__grip { color: var(--text-1); }
+.fx-entry__grip:active { cursor: grabbing; }
+
+.fx-entry__eye {
+  width: 24px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.fx-entry__eye.is-on { background: var(--accent-soft); color: var(--accent); }
+
+.fx-entry__bar {
+  width: 3px;
+  height: 15px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.fx-entry__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+.fx-entry__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fx-entry--off .fx-entry__name { color: var(--text-2); }
+.fx-entry__badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.fx-entry__chev {
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+.fx-entry__chev[data-open="true"] { transform: rotate(180deg); }
+
+.fx-entry__del {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.fx-entry__del:hover { background: rgba(240, 101, 74, 0.14); color: var(--danger); }
+
+/* Body: dim controls when the effect is disabled, but keep them readable. */
+.fx-entry__body {
+  padding: 7px 11px 11px;
+}
+.fx-entry--off .fx-entry__body {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* Tighten the shared RangeSlider for the narrow effect card. */
+.fx-entry__body .range-slider {
+  grid-template-columns: 70px 1fr auto;
+  gap: 8px;
+}
