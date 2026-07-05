@@ -1,0 +1,150 @@
+/* apps/editor/src/styles/viewport-backdrop.css
+ *
+ * Viewport atmosphere + empty-state hint + the relocated composition-setup
+ * panel + a couple of targeted fixes. Dark-theme only. Import after theme.css:
+ *     import "./styles/viewport-backdrop.css";
+ */
+
+/* ── Stacking: atmosphere (z0) · canvas stage (z1) · empty overlay (z2) ── */
+.app-shell__viewport { position: relative; background: var(--surface-0); }
+.app-shell__viewport > .viewport-stage { position: relative; z-index: 1; }
+
+/* FIX (mesh): the stage carried an opaque `background: var(--surface-0)`
+   (workspace.css), which painted OVER the atmosphere sitting at z-index:0 —
+   so the mesh/glow/vignette never showed. Make the stage transparent; the
+   WebGL canvas still draws opaque pixels once the comp has content, and the
+   backdrop shows through whenever the canvas is empty/transparent. */
+.app-shell__viewport > .viewport-stage { background: transparent; }
+
+/* ── Backdrop (behind the canvas) ──────────────────────────────────────── */
+.sb-vp-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.sb-vp-backdrop > * { position: absolute; }
+
+/* Empty overlay sits ABOVE the canvas; the hint is non-interactive. */
+.sb-vp-empty-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+.sb-vp-vignette {
+  inset: 0;
+  background: radial-gradient(130% 100% at 50% 36%, #141922 0%, #0d1015 48%, #08090c 100%);
+}
+.sb-vp-grid {
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 46px 46px;
+  -webkit-mask: radial-gradient(74% 68% at 50% 44%, #000 28%, transparent 86%);
+          mask: radial-gradient(74% 68% at 50% 44%, #000 28%, transparent 86%);
+}
+.sb-vp-mesh {
+  left: -30%; right: -30%; bottom: -14%; height: 64%;
+  background-image:
+    linear-gradient(rgba(53, 214, 193, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53, 214, 193, 0.06) 1px, transparent 1px);
+  background-size: 46px 46px;
+  transform: perspective(560px) rotateX(72deg);
+  transform-origin: bottom center;
+  -webkit-mask: linear-gradient(to top, #000, transparent 80%);
+          mask: linear-gradient(to top, #000, transparent 80%);
+  animation: sb-vp-meshpan 26s linear infinite;
+}
+.sb-vp-glow { filter: blur(48px); }
+.sb-vp-glow--a {
+  left: 12%; top: 13%; width: 52%; height: 52%;
+  background: radial-gradient(closest-side, rgba(53, 214, 193, 0.20), transparent 72%);
+  animation: sb-vp-drift-a 15s ease-in-out infinite;
+}
+.sb-vp-glow--b {
+  right: 8%; bottom: 11%; width: 50%; height: 50%;
+  background: radial-gradient(closest-side, rgba(224, 162, 58, 0.16), transparent 72%);
+  animation: sb-vp-drift-b 19s ease-in-out infinite;
+}
+
+@keyframes sb-vp-meshpan { from { background-position: 0 0, 0 0; } to { background-position: 0 46px, 46px 0; } }
+@keyframes sb-vp-drift-a { 0%,100% { transform: translate(0,0) scale(1); opacity: .9; } 50% { transform: translate(3%,-2%) scale(1.08); opacity: 1; } }
+@keyframes sb-vp-drift-b { 0%,100% { transform: translate(0,0) scale(1); opacity: .85; } 50% { transform: translate(-3%,2%) scale(1.1); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-vp-mesh, .sb-vp-glow--a, .sb-vp-glow--b { animation: none; }
+}
+
+/* ── Empty-project hint (light, no config) ─────────────────────────────── */
+.sb-vp-hint {
+  position: absolute; inset: 0; margin: auto;
+  width: max-content; max-width: 380px; height: max-content;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 24px; pointer-events: none;
+}
+.sb-vp-hint__frame {
+  width: 88px; height: 88px; margin-bottom: 18px; border-radius: 14px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+.sb-vp-hint__title { font-size: 15px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
+.sb-vp-hint__sub { font-size: 12.5px; color: var(--text-2); margin-top: 7px; line-height: 1.55; }
+
+/* ── Composition-setup panel (relocated to the right inspector) ────────── */
+.comp-setup { display: flex; flex-direction: column; padding: 16px 14px; gap: 0; }
+.comp-setup__lead { margin-bottom: 18px; }
+.comp-setup__title { font-size: 15px; font-weight: 700; color: var(--text-0); letter-spacing: -0.01em; }
+.comp-setup__sub { font-size: 12.5px; color: var(--text-1); margin-top: 6px; line-height: 1.5; }
+.comp-setup__group-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 8px;
+}
+.comp-setup__presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+.comp-setup__chip {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface-2); cursor: pointer; text-align: left;
+  transition: border-color var(--transition), background var(--transition);
+}
+.comp-setup__chip:hover { border-color: var(--accent); }
+.comp-setup__chip--active { border-color: var(--accent); background: var(--accent-soft); }
+.comp-setup__chip-label { font-size: 12.5px; font-weight: 600; color: var(--text-0); }
+.comp-setup__chip-sub { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
+.comp-setup__actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── FIX (audio inspector scroll) ──────────────────────────────────────── */
+/* AudioInspectorPanel is a direct child of `.panel--right` (overflow:hidden,
+   height:100%) with no scroller of its own, so long track settings were
+   clipped. Let it fill the panel and scroll. */
+.panel--right > .audio-inspector { flex: 1; min-height: 0; overflow-y: auto; }
+
+/* ── Composition-size picker (status bar) — unchanged ──────────────────── */
+.comp-size__button {
+  display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
+  border: none; border-radius: 6px; background: transparent;
+  color: var(--text-2); cursor: pointer; font-family: var(--font-mono); font-size: 11.5px;
+}
+.comp-size__button:hover { background: var(--surface-3); color: var(--text-0); }
+.comp-size__backdrop { position: fixed; inset: 0; z-index: 70; }
+.comp-size__menu {
+  position: absolute; bottom: calc(100% + 8px); left: 0; min-width: 232px; z-index: 200;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 11px; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5); padding: 8px;
+}
+.comp-size__menu-title {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-2); padding: 4px 8px 8px;
+}
+.comp-size__item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+  border: none; border-radius: 8px; background: transparent; color: var(--text-1);
+  cursor: pointer; text-align: left;
+}
+.comp-size__item:hover { background: var(--surface-3); color: var(--text-0); }
+.comp-size__item--active { background: var(--accent-soft); color: var(--accent); }
+.comp-size__item-label { flex: 1; font-size: 12.5px; }
+.comp-size__item-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-2); }
+.comp-size__divider { height: 1px; background: var(--border); margin: 6px 4px; }
+.comp-size__custom { display: flex; align-items: center; gap: 6px; padding: 4px 6px; color: var(--text-2); }
+.comp-size__custom input {
+  width: 64px; height: 28px; padding: 0 8px; text-align: right;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-0); font-family: var(--font-mono); font-size: 11.5px;
+}
+.comp-size__set {
+  margin-left: auto; height: 28px; padding: 0 12px; border: none; border-radius: 6px;
+  background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: 12px; cursor: pointer;
+}

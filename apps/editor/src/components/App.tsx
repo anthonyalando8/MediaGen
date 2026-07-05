@@ -18,6 +18,8 @@ import { TimelinePlaceholder } from "./TimelinePlaceholder";
 import { useUndoRedoShortcuts } from "../store/use-undo-redo-shortcuts";
 import { useDeleteShortcut } from "../store/use-delete-shortcut";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
+import { AudioSelectionProvider } from "./audio-selection";
+import { ViewportBackdrop, ViewportEmptyOverlay } from "./ViewportBackdrop";
 
 type Theme = "dark" | "light";
 
@@ -104,6 +106,7 @@ export function App() {
   const gridTemplateRows = `auto auto minmax(0, 1fr) ${timelineCollapsed ? 0 : DIVIDER}px ${timelineCollapsed ? 0 : timelineHeight}px`;
 
   return (
+    <AudioSelectionProvider>
     <div className="app-shell" data-theme={theme} style={{ gridTemplateColumns, gridTemplateRows }}>
       <div className="app-shell__span">
         <Menubar theme={theme} onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))} />
@@ -121,10 +124,12 @@ export function App() {
         onMouseDown={startVDrag("left")}
         onDoubleClick={() => store.getState().togglePanel("left")}
       />
-      <div className="app-shell__viewport">
+        <div className="app-shell__viewport">
+        <ViewportBackdrop />
         <div className="viewport-stage">
           <Viewport />
         </div>
+        <ViewportEmptyOverlay />
         <ViewportStatusBar />
       </div>
       <div
@@ -149,5 +154,6 @@ export function App() {
         <TimelinePlaceholder />
       </div>
     </div>
+    </AudioSelectionProvider>
   );
 }

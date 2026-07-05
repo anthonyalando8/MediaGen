@@ -20,7 +20,16 @@ import "./styles/text-effects.css"; // per-span text visual effects panel
 // @ts-ignore
 import "./styles/range-slider.css"; // polished bounded numeric slider
 // @ts-ignore
+import "./styles/audio.css"; // audio upload panel, timeline rows, inspector
+// @ts-ignore
+import "./styles/audio-timeline.css";
+// @ts-ignore
+import "./styles/viewport-backdrop.css";
+// @ts-ignore
 import "./styles/effects-panel.css";
+// @ts-ignore
+import "./styles/left-tabs.css";
+
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

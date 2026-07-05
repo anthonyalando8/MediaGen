@@ -1,0 +1,88 @@
+/* apps/editor/src/styles/left-tabs.css
+ *
+ * Tabbed left panel (Media / Layers / Audio). Import AFTER theme.css so these
+ * rules win where they overlap. Chrome only — no behavior.
+ *
+ *   import "./styles/left-tabs.css";
+ */
+
+/* ── Tab strip ────────────────────────────────────────────────────────── */
+.left-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 6px;
+  flex-shrink: 0;
+}
+
+.left-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.left-tab:hover {
+  color: var(--text-0);
+}
+
+.left-tab--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Panes ────────────────────────────────────────────────────────────── */
+/* Each pane owns the full height beneath the tab strip. */
+.left-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Media & Layers panes scroll their own body; Audio stacks two sections and
+   scrolls as one column. */
+.left-pane--audio {
+  overflow-y: auto;
+}
+
+.left-pane--audio > .audio-upload-panel,
+.left-pane--audio > .audio-tracklist {
+  flex-shrink: 0;
+}
+
+/* ── Neutralise the stacked-layout constraints of embedded sections ─────── */
+/* MediaPalette was a capped 46% band with a bottom rule when it sat above the
+   layer tree. In its own tab it fills the pane instead. */
+.left-pane--media .media-section {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  border-bottom: none;
+}
+
+.left-pane--media .media-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* AudioUploadPanel no longer needs a divider above it — the pane border and
+   the tracklist header provide the separation. */
+.left-pane--audio .audio-upload-panel {
+  border-top: none;
+}
+
+.audio-tracklist {
+  border-top: 1px solid var(--border);
+}

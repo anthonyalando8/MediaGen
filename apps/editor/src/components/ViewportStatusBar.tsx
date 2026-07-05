@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Maximize, Minus, Plus } from "lucide-react";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
+import { CompSizePicker } from "./CompSizePicker";
 
 const ICON = 14;
 const ZOOM_PRESETS = [0.25, 0.5, 1, 2, 4] as const;
@@ -60,9 +61,10 @@ export function ViewportStatusBar() {
     <div className="viewport-statusbar" role="group" aria-label="Viewport">
       <span className="viewport-statusbar__name">{compName}</span>
       <span className="viewport-statusbar__sep" />
-      <span className="viewport-statusbar__meta">
+      {/* <span className="viewport-statusbar__meta">
         {Math.round(comp.size.width)} × {Math.round(comp.size.height)}
-      </span>
+      </span> */}
+       <CompSizePicker />
       <span className="viewport-statusbar__sep" />
       <span className="viewport-statusbar__meta">{comp.fps} fps</span>
       <span className="viewport-statusbar__sep" />

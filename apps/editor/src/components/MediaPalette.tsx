@@ -1,4 +1,12 @@
 // apps/editor/src/components/MediaPalette.tsx
+//
+// MEDIA-ONLY palette (drop-in replacement).
+//
+// Identical to the original EXCEPT the embedded <AudioUploadPanel /> at the
+// bottom is removed — audio now lives in its own tab (see LayerPanel.tsx), so
+// this section is purely image/video assets + upload. Every store call and
+// command is unchanged.
+
 import { useState } from "react";
 import { Plus, Trash2, Upload } from "lucide-react";
 import type { Id } from "core";
@@ -10,16 +18,6 @@ import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { getKindColor, getKindIcon } from "./kind-icons";
 
-/**
- * The "add-media palette" (Deliverable 11 Week 7): an upload button (exit
- * criterion 02 — "User adds an image from upload; it appears in canvas +
- * layer tree") plus a list of `project.assets` (image/video) with a button
- * to (re-)add each as a node.
- *
- * UI/UX redesign: each asset now reads as a media card with a kind-colored
- * thumbnail tile, larger hit targets, and an explicit add/remove pair on the
- * right. All upload/add/remove logic below is unchanged.
- */
 export function MediaPalette() {
   const store = useEditorStoreApi();
   const registry = useRegistry();
@@ -35,7 +33,7 @@ export function MediaPalette() {
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file later
+    e.target.value = "";
     if (!file) return;
 
     setUploadProgress({ stage: "reading", fraction: 0 });

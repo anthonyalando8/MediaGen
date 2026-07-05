@@ -24,6 +24,7 @@ import { DrawOverlay } from "./DrawOverlay";
 import { DrawOptionsBar } from "./DrawOptionsBar";
 import { registerPathEditHandler } from "../store/path-edit-handle";
 import { setActiveEditor } from "../store/editor-handle";
+import { useAudioSync } from "../hooks/useAudioSync";
 
 /**
  * Builds the `MediaService` `createWebGLRenderer` needs (Deliverable 08:
@@ -148,6 +149,9 @@ export function handleViewportClick(state: EditorState, registry: NodeKindRegist
  */
 export function Viewport() {
   const store = useEditorStoreApi();
+
+  // Wire audio engine to playhead/playing state — runs once for session lifetime
+  useAudioSync();
   const registry = useRegistry();
   const rendererRef = useRef<Renderer | null>(null);
   const lastFpsRef = useRef<number | null>(null);

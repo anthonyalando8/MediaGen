@@ -47,6 +47,10 @@ import { FieldRow, Section } from "./inspector-fields";
 import { convertToPathOp } from "../commands/convert-to-path";
 import { enterPathEditMode } from "../store/path-edit-handle";
 export { FieldControl, FieldRow } from "./inspector-fields";
+import { AudioInspectorPanel } from "./AudioInspectorPanel";
+import { getAudioTracks } from "./audio-kinds";
+import { useAudioSelection, useSyncAudioWithNodeSelection } from "./audio-selection";
+import { CompSetupPanel } from "./CompSetupPanel";
 
 const TRANSFORM_PREFIX = "transform.";
 const GENERAL_PATHS = new Set(["opacity", "blend"]);
@@ -79,11 +83,22 @@ export function InspectorPanel() {
   const root = useEditorStore((s) => activeComp(s).root);
   const inspectorTab = useEditorStore((s) => s.inspectorTab);
 
-  if (selection.length === 0) {
+  const { selectedAudioId } = useAudioSelection();
+  useSyncAudioWithNodeSelection();               // selecting a node clears audio selection
+  const audioTrack = useEditorStore((s) =>
+    selectedAudioId ? getAudioTracks(activeComp(s)).find((t) => t.id === selectedAudioId) : undefined,
+  );
+  if (audioTrack) {
     return (
       <div className="panel panel--right">
-        <p className="panel__empty">Nothing selected.</p>
+        <AudioInspectorPanel track={audioTrack} />
       </div>
+    );
+  }
+
+  if (selection.length === 0) {
+    return (
+       <div className="panel panel--right"><CompSetupPanel /></div>
     );
   }
 

@@ -1,0 +1,476 @@
+/* apps/editor/src/styles/audio.css
+ *
+ * Styles for the full audio system:
+ *   • AudioUploadPanel (left media panel section)
+ *   • AudioTimelineSection (timeline audio rows)
+ *   • AudioInspectorPanel (inspector controls)
+ *
+ * Uses the same CSS variable tokens as theme.css throughout.
+ * Load order in main.tsx: after range-slider.css
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   UPLOAD PANEL (left media panel)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.audio-upload-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.audio-upload-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.audio-upload-panel__count {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface-3);
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: auto;
+}
+
+.audio-upload-panel__error {
+  font-size: 11px;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+}
+
+.audio-upload-panel__empty {
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: center;
+  padding: 8px 0 4px;
+  line-height: 1.5;
+}
+
+/* ── Drop zone ─────────────────────────────────────────────────────────────── */
+
+.audio-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 14px 10px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+}
+
+.audio-dropzone:hover,
+.audio-dropzone--active {
+  border-color: var(--accent);
+  background: rgba(53, 214, 193, 0.06);
+}
+
+.audio-dropzone svg {
+  color: var(--text-2);
+  transition: color 0.15s;
+}
+
+.audio-dropzone:hover svg,
+.audio-dropzone--active svg {
+  color: var(--accent);
+}
+
+.audio-dropzone__label {
+  font-size: 11px;
+  color: var(--text-1);
+  line-height: 1.5;
+}
+
+.audio-dropzone__hint {
+  color: var(--text-2);
+}
+
+.audio-dropzone__formats {
+  font-size: 9.5px;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+
+/* ── Asset list ────────────────────────────────────────────────────────────── */
+
+.audio-asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.audio-asset-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: background 0.1s;
+}
+
+.audio-asset-item:hover {
+  background: var(--surface-3);
+}
+
+/* Waveform thumbnail */
+.audio-asset-item__thumb {
+  width: 36px;
+  height: 28px;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.audio-asset-item__wave {
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 2px,
+      rgba(53, 214, 193, 0.25) 2px,
+      rgba(53, 214, 193, 0.25) 3px
+    );
+  /* Simple decorative wave bars */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='28'%3E%3Crect x='2' y='8' width='2' height='12' rx='1'/%3E%3Crect x='6' y='4' width='2' height='20' rx='1'/%3E%3Crect x='10' y='10' width='2' height='8' rx='1'/%3E%3Crect x='14' y='3' width='2' height='22' rx='1'/%3E%3Crect x='18' y='7' width='2' height='14' rx='1'/%3E%3Crect x='22' y='2' width='2' height='24' rx='1'/%3E%3Crect x='26' y='9' width='2' height='10' rx='1'/%3E%3Crect x='30' y='5' width='2' height='18' rx='1'/%3E%3C/svg%3E");
+  mask-size: 100% 100%;
+  background-color: var(--accent);
+  opacity: 0.6;
+}
+
+.audio-asset-item__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: audio-spin 0.8s linear infinite;
+}
+
+@keyframes audio-spin {
+  to { transform: rotate(360deg); }
+}
+
+.audio-asset-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.audio-asset-item__name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audio-asset-item__meta {
+  font-size: 10px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.audio-asset-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.audio-asset-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.audio-asset-btn:hover {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+
+.audio-asset-btn--added {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(53, 214, 193, 0.1);
+}
+
+.audio-asset-btn--danger:hover {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+
+.audio-asset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   TIMELINE — split into HEADER column and CLIP column
+   Render <AudioTrackHeaders /> inside the fixed left header column, and
+   <AudioTrackClips /> inside the scrollable right track column — same split
+   the layer tracks already use. Row heights MUST match (AUDIO_ROW_HEIGHT
+   exported from AudioPanel.tsx) or rows will visually overlap layer rows.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Header column rows ───────────────────────────────────────────────────── */
+
+.audio-headers {
+  display: flex;
+  flex-direction: column;
+}
+
+.audio-header-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.audio-header-row__icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.audio-header-row__name {
+  font-size: 11px;
+  color: var(--text-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.audio-header-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.audio-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-2);
+  border: none;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.audio-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-0);
+}
+
+.audio-btn--active {
+  color: var(--accent);
+}
+
+.audio-btn--solo.audio-btn--active {
+  color: #fbbf24;
+}
+
+.audio-btn--danger:hover {
+  color: #ef4444;
+}
+
+/* ── Clip column rows ─────────────────────────────────────────────────────── */
+
+.audio-clips {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.audio-clip-row {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  box-sizing: border-box;
+}
+
+.audio-clip {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 32px;
+  background: rgba(53, 214, 193, 0.15);
+  border: 1px solid rgba(53, 214, 193, 0.45);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 6px;
+  overflow: hidden;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.audio-clip:hover {
+  background: rgba(53, 214, 193, 0.22);
+}
+
+.audio-clip:active,
+.audio-clip--dragging {
+  cursor: grabbing;
+  border-color: var(--accent);
+  z-index: 2;
+}
+
+.audio-clip--muted {
+  background: rgba(100, 100, 100, 0.12);
+  border-color: var(--border);
+  opacity: 0.6;
+}
+
+/* Trim handles — thin grab strips on each edge, widen on hover */
+.audio-clip__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 3;
+}
+
+.audio-clip__handle--start { left: 0; }
+.audio-clip__handle--end   { right: 0; }
+
+.audio-clip__handle:hover {
+  background: rgba(53, 214, 193, 0.5);
+}
+
+.audio-clip__waveform {
+  flex: 1;
+  height: 60%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 3px,
+      rgba(53, 214, 193, 0.5) 3px,
+      rgba(53, 214, 193, 0.5) 4px
+    );
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='none' width='100' height='18'%3E%3Cpath d='M0 9 Q5 2 10 9 Q15 16 20 9 Q25 3 30 9 Q35 15 40 9 Q45 2 50 9 Q55 14 60 9 Q65 4 70 9 Q75 16 80 9 Q85 3 90 9 Q95 15 100 9' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E");
+  mask-size: 100% 100%;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.audio-clip__label {
+  font-size: 10px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INSPECTOR PANEL
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.audio-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 8px;
+}
+
+.audio-inspector__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px;
+}
+
+.audio-inspector__label {
+  font-size: 11px;
+  color: var(--text-2);
+  min-width: 64px;
+  flex-shrink: 0;
+}
+
+.audio-inspector__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 12px 2px;
+}
+
+.audio-inspector__toggles {
+  display: flex;
+  gap: 12px;
+  padding: 4px 12px 2px;
+}
+
+.audio-inspector__toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.audio-inspector__toggle input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}

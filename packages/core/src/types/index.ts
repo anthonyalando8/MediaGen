@@ -13,3 +13,4 @@ export * from "./node";
 export * from "./composition";
 export * from "./project";
 export * from "./text-span"
+export * from "./audio-track";
