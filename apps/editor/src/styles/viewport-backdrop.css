@@ -76,33 +76,61 @@
   padding: 24px; pointer-events: none;
 }
 .sb-vp-hint__frame {
-  width: 88px; height: 88px; margin-bottom: 18px; border-radius: 14px;
+  margin-bottom: 18px; border-radius: 12px;
   border: 1.5px dashed rgba(255, 255, 255, 0.16);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  transition: width var(--transition), height var(--transition);
 }
 .sb-vp-hint__title { font-size: 15px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
 .sb-vp-hint__sub { font-size: 12.5px; color: var(--text-2); margin-top: 7px; line-height: 1.55; }
 
 /* ── Composition-setup panel (relocated to the right inspector) ────────── */
-.comp-setup { display: flex; flex-direction: column; padding: 16px 14px; gap: 0; }
-.comp-setup__lead { margin-bottom: 18px; }
-.comp-setup__title { font-size: 15px; font-weight: 700; color: var(--text-0); letter-spacing: -0.01em; }
+.comp-setup { display: flex; flex-direction: column; padding: 20px 16px; gap: 0; }
+.comp-setup__lead { margin-bottom: 20px; }
+.comp-setup__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; margin-bottom: 14px; border-radius: 11px;
+  background: var(--accent-soft); color: var(--accent);
+  border: 1px solid rgba(53, 214, 193, 0.28);
+}
+.comp-setup__title { font-size: 16px; font-weight: 700; color: var(--text-0); letter-spacing: -0.01em; }
 .comp-setup__sub { font-size: 12.5px; color: var(--text-1); margin-top: 6px; line-height: 1.5; }
 .comp-setup__group-label {
   font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-2); margin-bottom: 8px;
+  color: var(--text-2); margin-bottom: 9px;
 }
-.comp-setup__presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+.comp-setup__presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .comp-setup__chip {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 10px 12px; border: 1px solid var(--border); border-radius: 9px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface-2); cursor: pointer; text-align: left;
-  transition: border-color var(--transition), background var(--transition);
+  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
 }
-.comp-setup__chip:hover { border-color: var(--accent); }
-.comp-setup__chip--active { border-color: var(--accent); background: var(--accent-soft); }
-.comp-setup__chip-label { font-size: 12.5px; font-weight: 600; color: var(--text-0); }
+.comp-setup__chip:hover { border-color: var(--accent); background: var(--surface-3); }
+.comp-setup__chip--active {
+  border-color: var(--accent); background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.comp-setup__chip-label { font-size: 13px; font-weight: 600; color: var(--text-0); }
 .comp-setup__chip-sub { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
+
+.comp-setup__custom { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.comp-setup__custom input {
+  width: 100%; min-width: 0; height: 32px; padding: 0 9px; text-align: center;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text-0); font-family: var(--font-mono); font-size: 11.5px;
+}
+.comp-setup__custom input:focus { outline: none; border-color: var(--accent); }
+.comp-setup__custom-x { color: var(--text-2); flex-shrink: 0; }
+.comp-setup__custom-set {
+  flex-shrink: 0; height: 32px; padding: 0 13px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface-2); color: var(--text-1); font-weight: 600; font-size: 12px; cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.comp-setup__custom-set:hover:not(:disabled) { border-color: var(--accent); color: var(--text-0); }
+.comp-setup__custom-set:disabled { opacity: 0.4; cursor: default; }
+
+.comp-setup__divider { height: 1px; background: var(--border); margin: 18px 0; }
 .comp-setup__actions { display: flex; flex-direction: column; gap: 8px; }
 
 /* ── FIX (audio inspector scroll) ──────────────────────────────────────── */

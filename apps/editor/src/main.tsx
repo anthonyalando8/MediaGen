@@ -29,7 +29,8 @@ import "./styles/viewport-backdrop.css";
 import "./styles/effects-panel.css";
 // @ts-ignore
 import "./styles/left-tabs.css";
-
+// @ts-ignore
+import "./styles/timeline-playhead.css";
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

@@ -1,10 +1,16 @@
 // apps/editor/src/components/TimelineRuler.tsx
 //
-// Frame ruler + playhead. Improvements:
-//  - Adaptive tick interval based on pixelsPerFrame so ticks never crowd or
-//    vanish at any zoom level.
-//  - Labels show MM:SS format at coarser intervals, frame number at finer ones.
-//  - Exposes a `scrollRef` so the parent can scroll the playhead into view.
+// Frame ruler + playhead. This revision upgrades the PLAYHEAD to a
+// production-grade marker:
+//   • A rounded "shield" head (rounded top corners → point) with a centered
+//     grip notch, instead of the flat 8px triangle — reads as a grabbable
+//     handle (cursor: grab) and is crisp at any zoom.
+//   • The head is interactive (not pointer-events:none), so grabbing it drags
+//     the playhead — the pointerdown bubbles to the ruler's existing
+//     scrub handler, which already captures the pointer and tracks the drag.
+//   • The through-line (full-height) is thinned/centered and its glow tamed in
+//     timeline-playhead.css so it stays a crisp 2px, not a fuzzy band.
+// Ticks / labels / adaptive interval / ruler-click scrub are all unchanged.
 
 import { useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -115,10 +121,27 @@ export function TimelineRuler({ pixelsPerFrame, scrollContainerRef, litFrame, ti
         style={{ left: (duration as number) * pixelsPerFrame }}
         title={`End: frame ${duration}`}
       />
+      {/* Playhead head — grabbable shield marker (drag scrubs via the ruler's
+          pointerdown handler that this bubbles to). */}
       <div
         className="timeline-ruler__playhead-head"
-        style={{ left: playheadPx }}
-      />
+        style={{
+          position: "absolute",
+          top: 2,
+          left: playheadPx,
+          transform: "translateX(-50%)",
+          zIndex: 6,
+          cursor: "grab",
+          lineHeight: 0,
+          filter: "drop-shadow(0 1px 2px rgba(0,0,0,.45))",
+        }}
+        title={`Frame ${playhead}`}
+      >
+        <svg width="15" height="19" viewBox="0 0 15 19" fill="none" style={{ display: "block" }}>
+          <path d="M1 3.2Q1 1 3.2 1L11.8 1Q14 1 14 3.2L14 10.5L7.5 18L1 10.5Z" fill="var(--accent)" />
+          <rect x="6" y="4.5" width="3" height="6" rx="1.5" fill="rgba(0,0,0,.28)" />
+        </svg>
+      </div>
     </div>
   );
 }

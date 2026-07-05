@@ -1,0 +1,36 @@
+/* apps/editor/src/styles/timeline-playhead.css
+ *
+ * Production-grade timeline playhead. Import AFTER theme.css and
+ * audio-timeline.css so these override the originals:
+ *     import "./styles/timeline-playhead.css";
+ *
+ * The head shape itself is inline SVG in TimelineRuler.tsx; this file only
+ * (1) neutralises the old CSS-triangle head, and (2) crisps the through-line.
+ */
+
+/* The old flat triangle is replaced by the inline SVG shield — drop the
+   border-triangle rule so nothing double-renders, and let the head be
+   interactive (grab to scrub) instead of pointer-events:none. */
+.timeline-ruler__playhead-head {
+  width: auto;
+  height: auto;
+  border: 0;
+  pointer-events: auto;
+}
+
+/* Full-height through-line (both Layers + Audio): a crisp centered 2px line,
+   subtle glow instead of the old 7px fuzzy band. */
+.sb-tl-playhead-full {
+  width: 2px;
+  margin-left: -1px;
+  background: var(--accent);
+  box-shadow: 0 0 4px rgba(53, 214, 193, 0.40);
+  z-index: 5;
+}
+
+/* Layer-only fallback line (non-unified timeline / graph mode), same treatment. */
+.timeline-track__playhead {
+  width: 2px;
+  margin-left: -1px;
+  box-shadow: 0 0 4px rgba(53, 214, 193, 0.40);
+}

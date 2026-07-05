@@ -38,12 +38,23 @@ export function ViewportEmptyOverlay() {
   const isEmpty = useEditorStore(
     (s) => activeComp(s).root.length === 0 && getAudioTracks(activeComp(s)).length === 0,
   );
+  // Mirror the chosen frame's aspect ratio in the placeholder, so picking 9:16
+  // shows a tall frame (not a fixed square) — clear feedback, always contained.
+  const size = useEditorStore((s) => {
+    const sz = (activeComp(s) as unknown as { size?: { width: number; height: number } }).size;
+    return { w: sz?.width ?? 1920, h: sz?.height ?? 1080 };
+  });
   if (!isEmpty) return null;
+
+  const ar = size.w / size.h;
+  const CAP = 150; // px — the longer edge of the placeholder frame
+  const frameW = ar >= 1 ? CAP : Math.round(CAP * ar);
+  const frameH = ar >= 1 ? Math.round(CAP / ar) : CAP;
 
   return (
     <div className="sb-vp-empty-overlay">
       <div className="sb-vp-hint">
-        <div className="sb-vp-hint__frame" aria-hidden="true" />
+        <div className="sb-vp-hint__frame" style={{ width: frameW, height: frameH }} aria-hidden="true" />
         <div className="sb-vp-hint__title">Empty composition</div>
         <div className="sb-vp-hint__sub">
           Drop media onto the canvas, add a layer from the toolbar,
