@@ -126,10 +126,20 @@ export function createDocumentSlice(initialProject: Project): StateCreator<Edito
 
     addAsset(asset) {
       const { project } = get().document;
+      // Upsert by id, not blind append. `AssetRef.id` is the collection's
+      // key (React renders asset lists keyed by it — see MediaPalette/
+      // AudioUploadPanel), so two entries sharing an id is an invariant
+      // violation, not just a cosmetic duplicate. This matters because
+      // Week 12's background transcode sync (AudioUploadPanel) calls
+      // addAsset a second time for the SAME id once the server-processed
+      // waveform/proxy/master are ready — that must replace the original
+      // entry in place, not push a second one next to it.
+      const existingIndex = project.assets.findIndex((a) => a.id === asset.id);
+      const assets = existingIndex === -1 ? [...project.assets, asset] : project.assets.map((a, i) => (i === existingIndex ? asset : a));
       set({
         document: {
           ...get().document,
-          project: { ...project, assets: [...project.assets, asset] },
+          project: { ...project, assets },
         },
       });
     },

@@ -81,6 +81,18 @@ export async function loadImageTexture(asset: MediaAssetRef): Promise<ImageTextu
 export async function createVideoTexture(asset: MediaAssetRef): Promise<VideoTextureSource> {
   const element = document.createElement("video");
 
+  // MUST be set before `src` — the browser decides whether a media
+  // element is "tainted" for canvas/WebGL reads at the moment `src` is
+  // assigned, based on `crossOrigin` as it stood at that instant. Setting
+  // it after has no effect. Previously every URL this function ever saw
+  // was same-origin (`blob:`/`data:`), so this was never needed; Week 12's
+  // server-hosted `asset.master`/`proxy` (`http://localhost:3001/...`) is
+  // genuinely cross-origin from the editor's `:5173`, so without this,
+  // `texImage2D` throws `SecurityError: ... contains cross-origin data`
+  // even though the server sends correct CORS headers on the bytes
+  // themselves — the video element's own flag is a separate gate.
+  element.crossOrigin = "anonymous";
+
   // `data:` URLs are what `AssetRef.master` persists for an uploaded asset
   // (asset-upload.ts — they survive JSON/localStorage round-trips, unlike
   // `blob:` URLs, satisfying exit criterion 10). But `<video src="data:...">`
