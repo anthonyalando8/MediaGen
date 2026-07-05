@@ -13,6 +13,14 @@
 // 3. Asset added to project.assets via store.addAsset({ id, kind:"audio", master: url, name })
 // 4. audioEngine.loadAsset() decodes in background → duration appears
 // 5. User clicks "+ Add" → addAudioTrackOp places track at current playhead
+// 6. (Week 12) In parallel with 3–4, the real file is also uploaded to
+//    apps/api's asset pipeline in the background. Once the transcode
+//    worker finishes, the SAME asset id is updated in place — hash becomes
+//    the real SHA-256, master swaps from a blob: URL (lost on reload) to a
+//    stable server URL, and a real waveform (ffmpeg peak data, not the
+//    decorative CSS mask) becomes available. If the backend is unreachable
+//    or the transcode fails, this step is swallowed — the local blob:
+//    asset from steps 2–4 keeps working exactly as it did in P1.
 //
 // SUPPORTED FORMATS: MP3, WAV, AAC, OGG, FLAC, M4A
 // (anything the browser AudioContext can decode)
@@ -23,6 +31,8 @@ import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { addAudioTrackOp, removeAudioTrackOp } from "../commands/audio-ops";
 import { audioEngine } from "../audio/audio-engine";
+import { uploadAssetToServer } from "../persistence/asset-upload";
+import { API_BASE_URL } from "../config/api";
 import type { AudioTrack } from "core";
 import { createId } from "core";
 
@@ -84,6 +94,10 @@ export function AudioUploadPanel() {
   const [loading,    setLoading]    = useState<Set<string>>(new Set());
   const [dragging,   setDragging]   = useState(false);
   const [error,      setError]      = useState<string | null>(null);
+  // Ids whose server-side transcode (real waveform, stable master URL) has
+  // completed — see FLOW step 6. Purely informational (small UI affordance
+  // below); playback/scheduling works identically before and after.
+  const [synced,     setSynced]     = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const audioTracks = useEditorStore((s) =>
@@ -129,6 +143,25 @@ export function AudioUploadPanel() {
         if (dur !== undefined) setDurations((prev) => ({ ...prev, [id]: dur }));
         setLoading((prev) => { const n = new Set(prev); n.delete(id); return n; });
       });
+
+      // Step 6: real upload + transcode in the background, reconciled onto
+      // this same local `id` once ready — see this file's FLOW comment.
+      // Fire-and-forget from handleFiles' perspective: failures here just
+      // mean the asset stays on its local blob: URL, exactly as before
+      // Week 12 existed.
+      uploadAssetToServer(file, { apiBaseUrl: API_BASE_URL })
+        .then((ready) => {
+          const state = store.getState();
+          const current = state.document?.project?.assets?.find((a) => a.id === id);
+          if (!current) return; // asset (or whole project) was removed while the upload was in flight
+          state.addAsset({ ...current, hash: ready.hash, master: ready.master, proxy: ready.proxy, waveform: ready.waveform });
+          if (url.startsWith("blob:")) URL.revokeObjectURL(url); // decoded buffer is already in memory; the blob: URL served its purpose
+          setSynced((prev) => new Set(prev).add(id));
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.warn(`[AudioUploadPanel] server-side transcode unavailable for asset ${id}, staying on local blob: URL:`, err);
+        });
     }
   }, [store]);
 
@@ -169,6 +202,7 @@ export function AudioUploadPanel() {
     if (asset?.master?.startsWith("blob:")) URL.revokeObjectURL(asset.master);
     setDurations((p) => { const n = { ...p }; delete n[assetId]; return n; });
     setFileSizes((p)  => { const n = { ...p }; delete n[assetId]; return n; });
+    setSynced((p) => { const n = new Set(p); n.delete(assetId); return n; });
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -228,7 +262,7 @@ export function AudioUploadPanel() {
                 <div className="audio-asset-item__thumb">
                   {isLoading
                     ? <div className="audio-asset-item__spinner" />
-                    : <div className="audio-asset-item__wave" />
+                    : <div className="audio-asset-item__wave" title={synced.has(asset.id) ? "Real waveform (server-processed)" : "Placeholder — syncing with server…"} />
                   }
                 </div>
 

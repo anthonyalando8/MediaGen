@@ -4,8 +4,11 @@
 // project's empty state (relocated out of the viewport). Production wiring:
 //   • Frame size  → setCompSizeOp (presets + custom W×H); the active size is
 //                   highlighted, so this doubles as a size switcher.
-//   • Import Media → real file import (fileToAssetRef → addAsset → addMediaNode
-//                   → select), the same flow as MediaPalette's Upload.
+//   • Import Media → real file import (fileToAssetRefViaServerOrLocal →
+//                   addAsset → addMediaNode → select) — tries apps/api's
+//                   upload+transcode pipeline first, falls back to the
+//                   local data: URL path if the backend is unreachable.
+//                   Same flow as MediaPalette's Upload.
 //   • New Composition → seeds the canvas with a full-frame background layer so
 //                   the empty state clears and there's something to build on.
 
@@ -13,8 +16,9 @@ import { useRef, useState } from "react";
 import { Plus, Upload, ImagePlus } from "lucide-react";
 import type { Id } from "core";
 import { useRegistry } from "../bootstrap/registry-context";
-import { fileToAssetRef } from "../persistence/asset-upload";
-import type { UploadProgress } from "../persistence/asset-upload";
+import { fileToAssetRefViaServerOrLocal } from "../persistence/asset-upload";
+import type { ServerUploadProgress, UploadProgress } from "../persistence/asset-upload";
+import { API_BASE_URL } from "../config/api";
 import { addMediaNode } from "../commands/add-media";
 import { appendNodeOp } from "../commands/add-node";
 import { setCompSizeOp } from "../commands/comp-size-ops";
@@ -38,7 +42,7 @@ export function CompSetupPanel() {
   });
 
   const [custom, setCustom] = useState<{ w: string; h: string }>({ w: "", h: "" });
-  const [uploading, setUploading] = useState<UploadProgress | null>(null);
+  const [uploading, setUploading] = useState<UploadProgress | ServerUploadProgress | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function setSize(w: number, h: number) {
@@ -60,14 +64,14 @@ export function CompSetupPanel() {
     if (node?.id) state.select([node.id]);
   }
 
-  // ── Import Media: real upload + place on canvas ────────────────────────
+  // ── Import Media: real upload (server pipeline, local fallback) + place on canvas ──────
   async function importMedia(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setUploading({ stage: "reading", fraction: 0 });
     try {
-      const asset = await fileToAssetRef(file, setUploading);
+      const asset = await fileToAssetRefViaServerOrLocal(file, API_BASE_URL, setUploading);
       setUploading({ stage: "saving" });
       const state = store.getState();
       state.addAsset(asset);

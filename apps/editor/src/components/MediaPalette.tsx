@@ -12,8 +12,9 @@ import { Plus, Trash2, Upload } from "lucide-react";
 import type { Id } from "core";
 import { addMediaNode } from "../commands/add-media";
 import { useRegistry } from "../bootstrap/registry-context";
-import { fileToAssetRef } from "../persistence/asset-upload";
-import type { UploadProgress } from "../persistence/asset-upload";
+import { fileToAssetRefViaServerOrLocal } from "../persistence/asset-upload";
+import type { ServerUploadProgress, UploadProgress } from "../persistence/asset-upload";
+import { API_BASE_URL } from "../config/api";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { getKindColor, getKindIcon } from "./kind-icons";
@@ -24,7 +25,7 @@ export function MediaPalette() {
   const assets = useEditorStore((s) => s.document.project.assets);
   const media = assets.filter((a) => a.kind === "image" || a.kind === "video");
 
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | ServerUploadProgress | null>(null);
 
   function handleAdd(assetIndex: number): void {
     const state = store.getState();
@@ -38,7 +39,12 @@ export function MediaPalette() {
 
     setUploadProgress({ stage: "reading", fraction: 0 });
     try {
-      const asset = await fileToAssetRef(file, setUploadProgress);
+      // Tries apps/api's real upload+transcode pipeline (Week 12) first —
+      // real content-addressed storage, proxy/poster derivatives — and
+      // falls back to the local data: URL path only if the backend is
+      // unreachable (see fileToAssetRefViaServerOrLocal's doc for exactly
+      // which failures do/don't fall back).
+      const asset = await fileToAssetRefViaServerOrLocal(file, API_BASE_URL, setUploadProgress);
 
       setUploadProgress({ stage: "saving" });
       const state = store.getState();
@@ -86,7 +92,13 @@ export function MediaPalette() {
               ? `Reading file: ${Math.round(uploadProgress.fraction * 100)}%`
               : uploadProgress.stage === "detecting-dimensions"
                 ? "Reading media info…"
-                : "Saving…"
+                : uploadProgress.stage === "uploading"
+                  ? "Uploading to server…"
+                  : uploadProgress.stage === "transcoding"
+                    ? "Processing (generating proxy/poster)…"
+                    : uploadProgress.stage === "ready"
+                      ? "Ready"
+                      : "Saving…"
           }
         >
           <div

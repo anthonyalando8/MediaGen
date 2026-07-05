@@ -7,15 +7,20 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
     "core": "workspace:*",
     "schema": "workspace:*",
-    "fastify": "^4.28.0"
+    "fastify": "^4.28.0",
+    "@fastify/multipart": "^8.3.0",
+    "@fastify/cors": "^9.0.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
   }
 }

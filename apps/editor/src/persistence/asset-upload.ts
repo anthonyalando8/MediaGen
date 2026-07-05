@@ -96,6 +96,111 @@ function djb2(data: string): string {
   return (hash >>> 0).toString(16);
 }
 
+/**
+ * Week 12 (Asset Pipeline) — real server-backed upload, as an alternative
+ * to `fileToAssetRef`'s local `data:` URL path below. POSTs the raw file
+ * to `apps/api`'s `POST /assets/upload` (Deliverable 05 §5.1.2), then polls
+ * `GET /assets/:id` until the transcode worker flips it from `"pending"` to
+ * `"ready"` (or `"failed"`) — see `apps/api/src/transcode/worker.ts` for
+ * what populates `proxy`/`poster`/`waveform` along the way.
+ *
+ * This function is intentionally NOT wired into `fileToAssetRef` itself:
+ * that function's `data:` URL behavior is depended on directly by existing
+ * tests and by every current call site (`MediaPalette`, `AudioUploadPanel`,
+ * `CompSetupPanel`), and it's the correct fallback when no backend is
+ * reachable at all (see `fileToAssetRefViaServerOrLocal` below, which picks
+ * between the two). Callers that specifically want real content-addressed
+ * storage + ffmpeg derivatives (proxy/poster/waveform, not the fake CSS
+ * waveform mask) should call this directly once their panel is ready to
+ * handle a `"pending" -> "ready"` transition in the UI.
+ */
+export type ServerUploadProgress = { stage: "uploading" } | { stage: "transcoding" } | { stage: "ready" };
+
+export interface UploadToServerOptions {
+  /** Base URL of `apps/api`, e.g. `"http://localhost:3001"`. No trailing slash. */
+  apiBaseUrl: string;
+  onProgress?: (progress: ServerUploadProgress) => void;
+  /** Poll interval while waiting for the transcode job, in ms. Default 500. */
+  pollIntervalMs?: number;
+  /** Give up waiting for "ready" after this many ms and throw — default 60s, generous for a single-worker in-process queue (see `transcode/queue.ts`) under load. */
+  timeoutMs?: number;
+}
+
+/** Thrown when the transcode worker marks the asset `"failed"` — `err.message` is `AssetRef.meta.error` from `transcodeAsset()`'s catch block. */
+export class AssetTranscodeError extends Error {}
+
+/**
+ * `apps/api`'s responses use paths relative to the API's own origin
+ * (`/assets/:id/object/:variant`) — correct for the API to emit, since it
+ * doesn't know what origin the editor is served from, but wrong for the
+ * editor to use directly: a bare `/assets/...` resolves against the
+ * editor's own origin (e.g. Vite's `:5173`), not the API's (e.g. `:3001`),
+ * which are different origins in normal local dev. Rewritten once here so
+ * every downstream consumer (the store, the renderer's TexRef resolution,
+ * `AudioEngine`) can treat `master`/`proxy`/`poster`/`waveform` as ordinary
+ * fetchable URLs without needing to know `apiBaseUrl` itself.
+ */
+function resolveAssetUrls(asset: AssetRef, apiBaseUrl: string): AssetRef {
+  const resolve = (url: string | undefined): string | undefined => (url?.startsWith("/") ? `${apiBaseUrl}${url}` : url);
+  return { ...asset, master: resolve(asset.master) ?? asset.master, proxy: resolve(asset.proxy), poster: resolve(asset.poster), waveform: resolve(asset.waveform) };
+}
+
+/** Uploads `file`'s real bytes to `apps/api` and waits for derivatives. Returns the `"ready"` `AssetRef` (with `proxy`/`poster`/`waveform` populated where applicable, and every URL absolute) — not a `data:` URL. */
+export async function uploadAssetToServer(file: File, options: UploadToServerOptions): Promise<AssetRef> {
+  const { apiBaseUrl, onProgress, pollIntervalMs = 500, timeoutMs = 60_000 } = options;
+
+  onProgress?.({ stage: "uploading" });
+  const body = new FormData();
+  body.append("file", file, file.name);
+
+  const uploadRes = await fetch(`${apiBaseUrl}/assets/upload`, { method: "POST", body });
+  if (!uploadRes.ok) {
+    const detail = await uploadRes.text().catch(() => "");
+    throw new Error(`uploadAssetToServer: upload failed (${uploadRes.status}) ${detail}`);
+  }
+  const pending = (await uploadRes.json()) as AssetRef;
+
+  onProgress?.({ stage: "transcoding" });
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const statusRes = await fetch(`${apiBaseUrl}/assets/${pending.id}`);
+    if (!statusRes.ok) throw new Error(`uploadAssetToServer: polling failed (${statusRes.status})`);
+    const asset = (await statusRes.json()) as AssetRef;
+    const status = asset.meta?.status;
+
+    if (status === "ready") {
+      onProgress?.({ stage: "ready" });
+      return resolveAssetUrls(asset, apiBaseUrl);
+    }
+    if (status === "failed") {
+      throw new AssetTranscodeError(typeof asset.meta?.error === "string" ? asset.meta.error : "transcode failed");
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`uploadAssetToServer: timed out waiting for asset "${pending.id}" to finish transcoding`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+}
+
+/**
+ * Tries the real server upload first, falls back to the local `data:` URL
+ * path (`fileToAssetRef`) if the backend isn't reachable at all (network
+ * error — e.g. `apps/api` isn't running, which is still the common case
+ * during editor-only local dev). Does NOT fall back on a slow/failed
+ * transcode once the upload itself succeeded — a `"failed"` status or
+ * timeout is a real error the caller should surface, not silently swallow
+ * into a degraded local copy.
+ */
+export async function fileToAssetRefViaServerOrLocal(file: File, apiBaseUrl: string, onProgress?: (progress: UploadProgress | ServerUploadProgress) => void): Promise<AssetRef> {
+  try {
+    return await uploadAssetToServer(file, { apiBaseUrl, onProgress });
+  } catch (err) {
+    if (err instanceof AssetTranscodeError) throw err; // real backend error — don't mask it with a degraded local copy
+    if (err instanceof Error && err.message.startsWith("uploadAssetToServer: upload failed")) throw err; // backend reachable but rejected the file — surface it
+    return fileToAssetRef(file, onProgress); // backend unreachable — fall back to local-only P1 behavior
+  }
+}
+
 /** Builds an `AssetRef` from an uploaded `File` — MediaPalette's file input calls this, then `store.addAsset(...)`. */
 export async function fileToAssetRef(file: File, onProgress?: (progress: UploadProgress) => void): Promise<AssetRef> {
   const kind = assetKindForFile(file);
