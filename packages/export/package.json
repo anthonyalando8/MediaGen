@@ -10,10 +10,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "core": "workspace:*",
     "contract": "workspace:*",
-    "renderer-webgl": "workspace:*",
-    "media": "workspace:*"
+    "core": "workspace:*",
+    "media": "workspace:*",
+    "mediabunny": "^1.50.6",
+    "renderer-webgl": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

@@ -82,6 +82,13 @@ export class AudioEngine {
   private playing      = false;
   private currentFrame = 0;
   private currentFps   = 30;
+  // Anchor recorded at the moment scheduleAll() last ran, in AudioContext's
+  // own high-precision clock — lets seek() compute where playback SHOULD be
+  // right now if nothing has disturbed it, so a normal per-frame playhead
+  // tick during ordinary playback doesn't get treated as a scrub. See
+  // seek()'s doc for why this distinction is the whole fix.
+  private scheduledAtAudioTime = 0;
+  private scheduledAtFrame     = 0;
 
   // ── Context ───────────────────────────────────────────────────────────────
 
@@ -143,16 +150,45 @@ export class AudioEngine {
   }
 
   /**
-   * Move the playhead. If currently playing, reschedules from the new position.
-   * If paused, just records the new position.
+   * Move the playhead. If paused, just records the new position (no audio
+   * is playing, nothing to reschedule). If playing, this is called on
+   * EVERY playhead tick during ordinary playback too (useAudioSync.ts
+   * subscribes to the whole store and calls this whenever `state.playhead`
+   * changes, which is continuous while playing) — NOT just on a genuine
+   * scrub/loop/click-to-seek. Rescheduling unconditionally here (the
+   * previous behavior: `stopAll(); scheduleAll();` every single call) means
+   * every normal playback tick abruptly stops the in-flight
+   * AudioBufferSourceNode (an un-faded stop — an audible click) and starts
+   * a brand new one a few milliseconds later — repeated 30-60x/second,
+   * which is audible as constant clicking/noise on top of the real audio,
+   * not silence-clean playback. (This is why exported audio always sounded
+   * clean: `packages/export/src/audio-render.ts` schedules everything ONCE
+   * in a single offline pass, with no incremental rescheduling to go wrong.)
+   *
+   * Fix: compute what frame the CURRENTLY SCHEDULED playback should be at
+   * right now, purely from elapsed AudioContext time since it was last
+   * scheduled (`scheduledAtAudioTime`/`scheduledAtFrame`). If the incoming
+   * `frame` matches that within a small tolerance, playback is proceeding
+   * normally and already correct — do nothing. Only reschedule when they
+   * diverge by more than the tolerance, which only happens on an actual
+   * scrub, loop restart, or timeline click.
    */
   seek(frame: number, fps: number): void {
+    const fpsChanged = fps !== this.currentFps;
     this.currentFrame = frame;
     this.currentFps   = fps;
-    if (this.playing) {
-      this.stopAll();
-      this.scheduleAll();
+
+    if (!this.playing) return; // paused — nothing scheduled, nothing to do beyond recording position
+
+    if (!fpsChanged && this.scheduled.length > 0 && this.ctx) {
+      const elapsedSec = this.ctx.currentTime - this.scheduledAtAudioTime;
+      const expectedFrame = this.scheduledAtFrame + elapsedSec * fps;
+      const toleranceFrames = 2; // generous enough to absorb RAF jitter, tight enough to still catch a real scrub of even a few frames
+      if (Math.abs(frame - expectedFrame) <= toleranceFrames) return; // natural playback advance — already correct, don't touch it
     }
+
+    this.stopAll();
+    this.scheduleAll();
   }
 
   /**
@@ -187,6 +223,9 @@ export class AudioEngine {
     const frame   = this.currentFrame;
     const now     = ctx.currentTime;
     const hasSolo = this._tracks.some((t) => t.solo && !t.muted);
+
+    this.scheduledAtAudioTime = now;
+    this.scheduledAtFrame     = frame;
 
     for (const track of this._tracks) {
       const buffer = this.buffers.get(track.assetId);

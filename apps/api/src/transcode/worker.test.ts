@@ -32,6 +32,20 @@ async function generateFixture(kind: "video" | "audio" | "image", outPath: strin
   }
 }
 
+/** An MP3 with an embedded cover image, exactly like a real music download (e.g. from a browser extension or "download as MP3" tool) — reproduces a real transcode failure reported against this worker (ffmpeg auto-mapping the attached-picture stream into an incompatible codec/container combo). */
+async function generateFixtureWithAlbumArt(outPath: string): Promise<void> {
+  await run("ffmpeg", [
+    "-y",
+    "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+    "-f", "lavfi", "-i", "color=c=blue:s=64x64:d=1",
+    "-map", "0:a", "-map", "1:v",
+    "-c:a", "libmp3lame",
+    "-c:v", "png",
+    "-disposition:v", "attached_pic",
+    outPath,
+  ]);
+}
+
 describe("transcodeAsset", () => {
   let root: string;
   let objectStore: ObjectStore;
@@ -107,6 +121,30 @@ describe("transcodeAsset", () => {
     // A 440Hz sine tone should produce non-zero peaks, not a silent/flat waveform.
     expect(Math.max(...waveform.peaks)).toBeGreaterThan(0);
     expect(waveform.peaks.every((p: number) => p >= 0 && p <= 1)).toBe(true);
+
+    await rm(fixtureDir, { recursive: true, force: true });
+  }, 30000);
+
+  it("transcodes an MP3 with embedded album art (attached-picture stream) without failing — regression for a real ffmpeg failure", async () => {
+    // Real-world repro: ffmpeg auto-maps a cover-art stream alongside the
+    // audio unless told not to (-vn), then tries to encode it using
+    // whatever OTHER codec flags the command has (here, -c:a aac meant for
+    // the audio track) — which fails outright for the image stream.
+    const fixtureDir = await mkdtemp(join(tmpdir(), "seabytes-fixture-"));
+    const fixturePath = join(fixtureDir, "in.mp3");
+    await generateFixtureWithAlbumArt(fixturePath);
+
+    const assetId = await putPendingAsset("audio", fixturePath, "audio/mpeg");
+    await transcodeAsset(assetId, assetStore, objectStore);
+
+    const asset = assetStore.get(assetId)!;
+    expect(asset.meta?.status).toBe("ready");
+    expect(asset.proxy).toBe(`/assets/${assetId}/object/proxy`);
+    expect(asset.waveform).toBe(`/assets/${assetId}/object/waveform`);
+
+    const objects = asset.meta?.objects as Record<string, { hash: string; mime: string }>;
+    const proxyBytes = await objectStore.get(objects.proxy.hash);
+    expect(proxyBytes.length).toBeGreaterThan(0); // the real bug produced a 0-byte file here
 
     await rm(fixtureDir, { recursive: true, force: true });
   }, 30000);

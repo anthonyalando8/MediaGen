@@ -197,6 +197,23 @@ export const PropBindingSchema = z.object({
   type: z.enum(["scalar", "color", "text", "asset"]),
 });
 
+export const AudioTrackSchema = z.object({
+  id: z.string(),
+  assetId: z.string(),
+  name: z.string(),
+  startFrame: z.number(),
+  endFrame: z.number().optional(),
+  trimIn: z.number(),
+  trimOut: z.number().optional(),
+  volume: z.number(),
+  fadeIn: z.number(),
+  fadeOut: z.number(),
+  loop: z.boolean(),
+  muted: z.boolean(),
+  solo: z.boolean(),
+  lane: z.number(),
+});
+
 export const CompositionSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -206,6 +223,16 @@ export const CompositionSchema = z.object({
   background: ColorOKLCHSchema.optional(),
   root: z.array(NodeSchema),
   exposed: z.array(PropBindingSchema).optional(),
+  // Bug fix: this field existed on core's `Composition` TypeScript type and
+  // was written correctly by addAudioTrackOp (audio-ops.ts, `/audioTracks`
+  // op path) the whole time, but was never added HERE. Zod's `z.object()`
+  // strips unrecognized keys by default — so `ProjectSchema.safeParse()`
+  // on load silently dropped every composition's audioTracks, even though
+  // `JSON.stringify` on save wrote them out fine. Net effect: add an audio
+  // track, refresh, and it vanishes from the timeline (the underlying
+  // audio ASSET survived, since AssetRefSchema below was correctly kept in
+  // sync with core's AssetRef — this field just never was).
+  audioTracks: z.array(AudioTrackSchema).optional(),
 });
 
 export const AssetRefSchema = z.object({

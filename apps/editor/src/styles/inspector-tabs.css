@@ -307,3 +307,12 @@
   font-size: 12px;
   color: var(--text-0);
 }
+
+/* ── Generic spin utility (export button's busy icon, etc.) ────────────── */
+.spin {
+  animation: menubar-spin 0.8s linear infinite;
+}
+
+@keyframes menubar-spin {
+  to { transform: rotate(360deg); }
+}

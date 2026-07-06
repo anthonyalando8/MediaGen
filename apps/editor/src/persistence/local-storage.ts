@@ -50,7 +50,23 @@ export function loadProject(storage: KeyValueStorage | undefined = defaultStorag
   }
 
   const result = ProjectSchema.safeParse(parsed);
-  return result.success ? (result.data as Project) : undefined;
+  if (!result.success) return undefined;
+  return dedupeAssetsById(result.data as Project);
+}
+
+/**
+ * Collapses duplicate-id entries in `project.assets` to the LAST one for
+ * each id (same "most recent write wins" semantics as `document.ts`'s
+ * `addAsset` upsert). Belt-and-suspenders: `addAsset` itself no longer
+ * produces duplicates, but this heals any project that was saved to
+ * localStorage BEFORE that fix landed — without this, a project corrupted
+ * once keeps replaying the same React "duplicate key" warning and doubled
+ * list entry on every load, forever, with no way to self-correct.
+ */
+function dedupeAssetsById(project: Project): Project {
+  const byId = new Map(project.assets.map((asset) => [asset.id, asset]));
+  if (byId.size === project.assets.length) return project; // fast path: nothing to heal
+  return { ...project, assets: [...byId.values()] };
 }
 
 export function clearProject(storage: KeyValueStorage | undefined = defaultStorage()): void {

@@ -33,7 +33,6 @@ import { addAudioTrackOp, removeAudioTrackOp } from "../commands/audio-ops";
 import { audioEngine } from "../audio/audio-engine";
 import { uploadAssetToServer } from "../persistence/asset-upload";
 import { API_BASE_URL } from "../config/api";
-import type { AudioTrack } from "core";
 import { createId } from "core";
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -101,7 +100,7 @@ export function AudioUploadPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const audioTracks = useEditorStore((s) =>
-    ((activeComp(s) as unknown as { audioTracks?: AudioTrack[] }).audioTracks ?? [])
+    (activeComp(s).audioTracks ?? [])
   );
   const trackAssetIds = new Set(audioTracks.map((t) => t.assetId));
 
@@ -187,7 +186,7 @@ export function AudioUploadPanel() {
   function deleteAsset(assetId: string) {
     const state  = store.getState();
     const comp   = activeComp(state);
-    const tracks = (comp as unknown as { audioTracks?: AudioTrack[] }).audioTracks ?? [];
+    const tracks = comp.audioTracks ?? [];
 
     // Remove any timeline tracks using this asset first
     for (const t of tracks) {

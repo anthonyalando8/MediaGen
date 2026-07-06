@@ -51,6 +51,7 @@ interface CacheEntry {
 export class TextureManager {
   private cache = new Map<string, CacheEntry>();
   private pending = new Set<string>();
+  private pendingLoads = new Map<string, Promise<void>>();
   private failed = new Set<string>();
   private clock = 0;
   private readonly maxEntries: number;
@@ -107,7 +108,7 @@ export class TextureManager {
         // SEQUENTIAL PLAYBACK: element is already close to the right position —
         // let it play naturally, just push the decoded frame to the GPU.
         if (delta <= halfFrame * 4) {
-          if (playing && el.paused) void el.play();
+          if (playing && el.paused) void el.play().catch(() => {}); // AbortError when pause() interrupts an in-flight play() is expected during loop restarts/scrubbing, not a real failure
           else if (!playing && !el.paused) el.pause();
           entry.texture.source.update();
         } else {
@@ -117,7 +118,7 @@ export class TextureManager {
           el.pause();
           void entry.source.seek(tex.frame, fps).then(() => {
             entry.texture.source.update();
-            if (playing) void el.play();
+            if (playing) void el.play().catch(() => {}); // same benign AbortError as above
           });
         }
       }
@@ -127,15 +128,64 @@ export class TextureManager {
     if (this.failed.has(tex.assetId)) return Texture.EMPTY;
 
     if (!this.pending.has(tex.assetId)) {
-      this.pending.add(tex.assetId);
-      void this.load(tex.assetId)
-        .catch((err) => {
-          this.failed.add(tex.assetId);
-          console.error(`TextureManager: failed to load asset "${tex.assetId}":`, err);
-        })
-        .finally(() => this.pending.delete(tex.assetId));
+      void this.ensureLoadStarted(tex.assetId).catch((err) => {
+        console.error(`TextureManager: failed to load asset "${tex.assetId}":`, err);
+      });
     }
     return Texture.EMPTY;
+  }
+
+  /** Starts (or returns the already in-flight) load for `assetId`, deduped and shared between `get()`'s fire-and-forget path and `prepare()`'s awaited path — so an export calling `prepare()` for an asset the live preview already started loading doesn't kick off a second redundant fetch/decode. */
+  private ensureLoadStarted(assetId: string): Promise<void> {
+    if (this.cache.has(assetId)) return Promise.resolve();
+    let promise = this.pendingLoads.get(assetId);
+    if (!promise) {
+      this.pending.add(assetId);
+      promise = this.load(assetId)
+        .catch((err) => {
+          this.failed.add(assetId);
+          throw err;
+        })
+        .finally(() => {
+          this.pending.delete(assetId);
+          this.pendingLoads.delete(assetId);
+        });
+      this.pendingLoads.set(assetId, promise);
+    }
+    return promise;
+  }
+
+  /**
+   * Ensures `tex`'s asset is loaded, AWAITING the load if not yet cached,
+   * and — for a video asset with `tex.frame` set — seeks it PRECISELY to
+   * that exact frame before resolving, always performing the seek (unlike
+   * `get()`'s live-playback fast path, which skips seeking when the
+   * element is already "close enough" to avoid stacking up seeks at 60fps
+   * — see `get()`'s own doc). That fast path is exactly wrong for a
+   * caller that renders ONE frame at a time with no chance for playback
+   * to naturally catch up between calls (a client export's frame-pump,
+   * `packages/export`) — without this, the video element's fire-and-forget
+   * seek from `get()` almost never finishes before the canvas is captured,
+   * so an export shows the same stale frame for its entire duration.
+   *
+   * Callers should call this BEFORE `render()` for the same frame — by the
+   * time `render()`'s own internal `get()` call runs, the element is
+   * already at the target time, so `get()` takes its normal synchronous
+   * "sequential playback" branch (a plain `texture.source.update()`, no
+   * async gap) instead of re-seeking.
+   */
+  async prepare(tex: TexRef, fps: number): Promise<void> {
+    try {
+      await this.ensureLoadStarted(tex.assetId);
+    } catch {
+      return; // load failed — get() will surface Texture.EMPTY for this asset, same as any other failed load
+    }
+    const entry = this.cache.get(tex.assetId);
+    if (!entry) return;
+    if (entry.source.kind === "video" && tex.frame !== undefined) {
+      await entry.source.seek(tex.frame, fps);
+      entry.texture.source.update();
+    }
   }
 
   private async load(assetId: string): Promise<void> {
@@ -176,6 +226,7 @@ export class TextureManager {
   destroy(): void {
     for (const assetId of [...this.cache.keys()]) this.evict(assetId);
     this.pending.clear();
+    this.pendingLoads.clear();
     this.failed.clear();
   }
 }

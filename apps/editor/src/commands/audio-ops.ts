@@ -28,14 +28,14 @@ import type { Op } from "core";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function findTrackIndex(comp: Composition, trackId: Id): number {
-  const tracks = (comp as unknown as { audioTracks?: AudioTrack[] }).audioTracks ?? [];
+  const tracks = comp.audioTracks ?? [];
   const idx = tracks.findIndex((t) => t.id === trackId);
   if (idx < 0) throw new Error(`AudioTrack ${trackId} not found`);
   return idx;
 }
 
 function getTracks(comp: Composition): AudioTrack[] {
-  return (comp as unknown as { audioTracks?: AudioTrack[] }).audioTracks ?? [];
+  return comp.audioTracks ?? [];
 }
 
 // ── Add audio track ───────────────────────────────────────────────────────────

@@ -219,4 +219,60 @@ describe("TextureManager", () => {
 
     errorSpy.mockRestore();
   });
+
+  describe("prepare()", () => {
+    it("awaits the load before resolving, unlike get() which returns Texture.EMPTY immediately", async () => {
+      const asset: MediaAssetRef = { id: "a1", kind: "image", url: "blob:a1" };
+      const source = makeImageSource("a1");
+      const manager = new TextureManager({ resolveAsset: () => asset }, { loadTexture: async () => source, createTexture: makeTexture });
+
+      await manager.prepare({ assetId: "a1" }, 30);
+
+      // No flush() needed — prepare() only resolves once the load is actually done.
+      expect(manager.get({ assetId: "a1" }, 30)).not.toBe(Texture.EMPTY);
+    });
+
+    it("ALWAYS seeks a video to the exact requested frame, even when 'close enough' (unlike get()'s live-playback fast path)", async () => {
+      const asset: MediaAssetRef = { id: "v1", kind: "video", url: "blob:v1" };
+      const seek = vi.fn(async () => {});
+      const source = makeVideoSource("v1", seek);
+      (source as unknown as { element: { currentTime: number } }).element.currentTime = 1 / 30; // already "close enough" to frame 1 by get()'s tolerance
+      let texture: Texture | undefined;
+
+      const manager = new TextureManager(
+        { resolveAsset: () => asset },
+        { loadTexture: async () => source, createTexture: () => (texture = makeTexture()) }
+      );
+
+      await manager.prepare({ assetId: "v1", frame: 1 }, 30);
+
+      expect(seek).toHaveBeenCalledWith(1, 30);
+      expect(texture).toBeDefined();
+    });
+
+    it("shares an in-flight load with get() rather than starting a second fetch/decode", async () => {
+      const asset: MediaAssetRef = { id: "a1", kind: "image", url: "blob:a1" };
+      const source = makeImageSource("a1");
+      const loadTexture = vi.fn(async () => {
+        await flush();
+        return source;
+      });
+      const manager = new TextureManager({ resolveAsset: () => asset }, { loadTexture, createTexture: makeTexture });
+
+      manager.get({ assetId: "a1" }, 30); // kicks off the fire-and-forget load
+      await manager.prepare({ assetId: "a1" }, 30); // should await the SAME load, not start another
+
+      expect(loadTexture).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves without throwing when the asset can't be resolved (get() will surface Texture.EMPTY as usual)", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const manager = new TextureManager({ resolveAsset: () => undefined }, { createTexture: makeTexture });
+
+      await expect(manager.prepare({ assetId: "missing" }, 30)).resolves.toBeUndefined();
+      expect(manager.get({ assetId: "missing" }, 30)).toBe(Texture.EMPTY);
+
+      errorSpy.mockRestore();
+    });
+  });
 });

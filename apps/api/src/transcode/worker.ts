@@ -63,7 +63,15 @@ export async function transcodeAsset(assetId: string, store: AssetStore, objects
       objectsOut.poster = await ffmpegToObject(inputPath, workdir, "poster.jpg", ["-ss", "00:00:00.5", "-frames:v", "1"], "image/jpeg", objects);
     } else if (asset.kind === "audio") {
       objectsOut.master = originalMeta;
-      objectsOut.proxy = await ffmpegToObject(inputPath, workdir, "proxy.m4a", ["-ar", "22050", "-c:a", "aac", "-b:a", "96k"], "audio/mp4", objects);
+      // "-vn": many MP3s carry an embedded cover image as an attached-picture
+      // video stream (ffprobe reports it as a real Stream #0:1). Without
+      // "-vn", ffmpeg auto-maps that stream too and tries to encode it into
+      // the M4A container per this command's OTHER flags (-c:a aac), which
+      // fails outright ("Could not find tag for codec h264 in stream #0,
+      // codec not currently supported in container") because there's no
+      // matching video codec/container configuration for it — this command
+      // only ever wanted the audio.
+      objectsOut.proxy = await ffmpegToObject(inputPath, workdir, "proxy.m4a", ["-vn", "-ar", "22050", "-c:a", "aac", "-b:a", "96k"], "audio/mp4", objects);
       objectsOut.waveform = await waveformToObject(inputPath, workdir, objects);
     } else if (asset.kind === "image") {
       objectsOut.master = originalMeta;
@@ -103,7 +111,7 @@ async function ffmpegToObject(inputPath: string, workdir: string, outputName: st
 async function waveformToObject(inputPath: string, workdir: string, objects: ObjectStore): Promise<ObjectRecord> {
   const pcmPath = join(workdir, "waveform.pcm");
   const sampleRate = 3000; // low enough that decoding+peak-picking is cheap, high enough for a reasonable-looking waveform
-  await run("ffmpeg", ["-y", "-i", inputPath, "-f", "s16le", "-ac", "1", "-ar", String(sampleRate), pcmPath]);
+  await run("ffmpeg", ["-y", "-i", inputPath, "-vn", "-f", "s16le", "-ac", "1", "-ar", String(sampleRate), pcmPath]);
 
   const pcm = await readFile(pcmPath);
   const sampleCount = pcm.length / 2;

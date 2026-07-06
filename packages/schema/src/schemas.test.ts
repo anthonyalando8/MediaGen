@@ -68,6 +68,42 @@ describe("schemas", () => {
     expect(result.success).toBe(true);
   });
 
+  it("round-trips audioTracks through CompositionSchema instead of silently stripping them", () => {
+    // Regression test: CompositionSchema didn't declare `audioTracks` at
+    // all, and Zod's z.object() strips unrecognized keys by default —
+    // audioTracks were written correctly (audio-ops.ts) and saved to
+    // localStorage correctly (raw JSON.stringify), but vanished on the
+    // very next load, once safeParse() ran. AssetRefSchema never had this
+    // gap, which is why the audio ASSET itself always survived while the
+    // TRACK placing it on the timeline silently didn't.
+    const comp = {
+      ...sampleComposition(),
+      audioTracks: [
+        {
+          id: "track_1",
+          assetId: "asset_1",
+          name: "Voiceover",
+          startFrame: 0,
+          trimIn: 0,
+          volume: 1,
+          fadeIn: 0,
+          fadeOut: 0,
+          loop: false,
+          muted: false,
+          solo: false,
+          lane: 0,
+        },
+      ],
+    };
+
+    const result = CompositionSchema.safeParse(comp);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.audioTracks).toHaveLength(1);
+      expect(result.data.audioTracks?.[0]?.assetId).toBe("asset_1");
+    }
+  });
+
   it("round-trips a project through ProjectSchema", () => {
     const result = ProjectSchema.safeParse(sampleProject());
     expect(result.success).toBe(true);

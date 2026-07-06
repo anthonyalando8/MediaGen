@@ -15,6 +15,7 @@
     "contract": "workspace:*",
     "core": "workspace:*",
     "effects": "workspace:*",
+    "export": "workspace:*",
     "motion": "workspace:*",
     "immer": "^10.1.0",
     "lucide-react": "^1.18.0",
