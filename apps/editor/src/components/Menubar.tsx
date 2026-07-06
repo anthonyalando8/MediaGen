@@ -127,6 +127,7 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
   async function handleExportVideo(): Promise<void> {
     if (exportState?.inProgress) return;
     setExportState({ inProgress: true, progress: 0 });
+    store.getState().setIsExporting(true);
 
     try {
       const state = store.getState();
@@ -142,15 +143,20 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
       };
       const resolveAudioUrl = (assetId: string): string | undefined => assets.find((a) => a.id === assetId)?.master;
 
-      const blob = await exportToMp4(
-        {
-          comp,
-          registry,
-          resolveAudioUrl,
-          onProgress: (done, total) => setExportState({ inProgress: true, progress: done / total }),
-        },
-        defaultExportDeps(media)
-      );
+      const blob = await Promise.race([
+        exportToMp4(
+          {
+            comp,
+            registry,
+            resolveAudioUrl,
+            onProgress: (done, total) => setExportState({ inProgress: true, progress: done / total }),
+          },
+          defaultExportDeps(media)
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Export timed out after 5 minutes — this usually means the encoder stalled. Try a shorter composition or check the browser console for a WebGL/WebCodecs error.")), 5 * 60 * 1000)
+        ),
+      ]);
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -164,6 +170,7 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
       window.alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setExportState(null);
+      store.getState().setIsExporting(false);
     }
   }
 

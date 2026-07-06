@@ -330,7 +330,12 @@ export function Viewport() {
       }
 
       const renderer = rendererRef.current;
-      if (renderer) {
+      // Skip entirely during export — see PlaybackSlice.isExporting's doc
+      // for why two simultaneous active WebGL contexts (this viewport's +
+      // export's own hidden-canvas renderer) risk a browser-initiated
+      // context loss. The user isn't watching this canvas during an
+      // export anyway (the whole tab is busy), so pausing costs nothing.
+      if (renderer && !store.getState().isExporting) {
         try {
           if (lastFpsRef.current !== comp.fps) {
             renderer.setFps(comp.fps);

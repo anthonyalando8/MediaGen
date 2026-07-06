@@ -234,11 +234,21 @@ export function Section({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="insp-section">
-      <button type="button" className="insp-section__head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <ChevronRight className="insp-section__chev" data-open={open} size={13} />
-        <span className="insp-section__title">{title}</span>
+      {/* `meta` is a SIBLING of the toggle button, not nested inside it —
+          EffectStackPanel passes an "Add" <button> as part of `meta`, and
+          button-inside-button is invalid HTML (React warns:
+          "validateDOMNesting: <button> cannot appear as a descendant of
+          <button>") in addition to being unreachable/broken for click
+          delegation and screen readers. The clickable disclosure toggle is
+          now just the chevron+title; `insp-section__head` stays on this
+          wrapping div purely for the row's flex layout, not as a button. */}
+      <div className="insp-section__head">
+        <button type="button" className="insp-section__toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <ChevronRight className="insp-section__chev" data-open={open} size={13} />
+          <span className="insp-section__title">{title}</span>
+        </button>
         {meta != null && <span className="insp-section__meta">{meta}</span>}
-      </button>
+      </div>
       {open && <div className="insp-section__body">{children}</div>}
     </div>
   );
