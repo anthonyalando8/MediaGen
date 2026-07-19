@@ -180,11 +180,23 @@ export function Viewport() {
 
   const fit = computeFitTransform(compSize, canvasSize, zoom, 32, panX, panY);
 
-  const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
-    const renderer = createWebGLRenderer(canvas, createMediaService(store));
-    rendererRef.current = renderer;
-    return renderer;
-  }, [store]);
+const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
+  const renderer = createWebGLRenderer(canvas, createMediaService(store));
+  rendererRef.current = renderer;
+  // A fresh renderer starts UNCONFIGURED. CanvasHost hands us a brand-new
+  // renderer on the initial mount, on the `active` remount after an export
+  // (it unmounts/remounts the <canvas> — see CanvasHost's module doc), and
+  // on context-loss recovery. The RAF loop below only pushes
+  // setFps/setCompSize/setViewport when these trackers change, and they
+  // survive the remount — so without resetting them here the new renderer
+  // never receives its comp-size clip mask or viewport transform and the
+  // canvas renders blank (while the playhead/audio keep running). Null them
+  // so the next tick reconfigures whichever renderer is now current.
+  lastFpsRef.current = null;
+  lastCompSizeRef.current = null;
+  lastViewportRef.current = null;
+  return renderer;
+}, [store]);
 
   // Context-loss recovery (CanvasHost.tsx owns the actual rebuild — see its
   // module doc). `onContextLost` MUST null the ref immediately: without
