@@ -1,0 +1,437 @@
+Write a SHORT-FORM HIGH-RETENTION vertical video script for TikTok/Reels/Shorts.
+
+TOPIC: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 5 words, creator-style",
+  "thumbnail": "2-4 word emotionally charged phrase",
+  "style": "contrarian | builder | intense | cinematic | calm | analytical | humorous",
+
+  "global": {{
+    "theme":        "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white | tech_blue | cyber_noir",
+    "music_mood":   "tense | cinematic | ambient | dark | aggressive | suspense | minimal | emotional | playful | upbeat",
+    "voice_style":  "calm_intense | storyteller | aggressive | documentary | dramatic | analytical | comedic",
+    "camera_style": "static | dynamic | handheld",
+    "subject":      "1-3 word concrete photographable noun describing the topic's literal on-screen world (e.g. 'laptop code', 'gym weights', 'cash money', 'car engine'). Used to anchor every visual_query."
+  }},
+
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook | insight | tension | truth | flip | climax | payoff | cta",
+      "keyword":          "2-4 WORD PHRASE",
+      "text":             "spoken sentence, 15-25 words, with ONE *emphasis word* per sentence",
+      "energy":           "high | mid | low",
+      "emotion":          "urgent | tense | hopeful | melancholic | angry | cold | confident | anxious | serious | playful | amused | surprised",
+      "pace":             "slow | mid | fast | explosive",
+      "visual_intent":    "confrontational | mysterious | clean | chaotic | cinematic | minimal | aggressive | documentary | absurd | quirky",
+      "camera":           "static | push_in | pull_out | handheld | snap_zoom | micro_shake | tilt_up",
+      "transition":       "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
+      "background":       "solid | gradient | noise | grid | glow | lines | abstract",
+      "layout":           "left | center | right | full",
+      "visual_query":     "2-4 word LITERAL image search. Lead with a concrete photographable subject from the topic domain. No mood/emotion words. See VISUAL QUERY rules.",
+      "intensity":        0.55,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STYLE GUIDE — pick style based on topic:
+──────────────────────────────────────────────────────────────────────
+- contrarian: tech, career, productivity — left-anchored, punchy, blue accent
+- builder:    side projects, indie hacking — left-anchored, direct, blue accent
+- intense:    psychology, dark truths, shocking facts — full-bleed, no margins, kinetic red
+- cinematic:  money, ambition, culture — right-anchored, amber accent
+- calm:       health, habits, philosophy — centered, light type weight, neutral
+- analytical: data, finance, systems — centered, considered, neutral
+- humorous:   fun facts, comedy, absurd observations — centered, warm amber accent;
+              keywords are punchlines not statements; body text lands the joke
+
+──────────────────────────────────────────────────────────────────────
+STRICT RULES
+──────────────────────────────────────────────────────────────────────
+
+BEAT COUNT: vary between 4 and 8 depending on what the topic needs. Do NOT always use 5.
+
+TEXT: every beat text must be 15-25 words. No exceptions.
+Total words across ALL beats: 90-130 words.
+
+KEYWORD: 2-4 words uppercase. Emotionally loaded. Scroll-stopping.
+  Good: "NO ONE CARES" / "YOU'RE WRONG" / "THEY LIED"
+  Bad:  "CONSISTENCY" / "PRODUCTIVITY" / "THE TRUTH"
+
+TONE: speak as a creator with a real opinion. Use "you". Be direct. Be specific.
+For humorous style: write like a stand-up bit. Keyword is setup or punchline. Body lands the absurdity straight-faced. Never explain the joke.
+
+BANNED PHRASES: "here's the thing" / "the truth is" / "most people" / "in today's world"
+                "have you ever" / "let's talk about" / "follow for more"
+
+HOOK: first sentence must create immediate tension, contradiction, or emotional recognition.
+
+ENDING: end with a challenge, sharp question, or unresolved thought. Not a follow CTA.
+
+──────────────────────────────────────────────────────────────────────
+GLOBAL FIELDS — pick one value per field based on what fits the topic.
+──────────────────────────────────────────────────────────────────────
+- theme:        the visual world that matches the emotional register
+- music_mood:   what would play under this script
+- voice_style:  how this would be narrated
+- camera_style: static=considered/calm, dynamic=intense/contrarian, handheld=raw/documentary
+- subject:      the literal, photographable noun at the centre of the topic. This is
+                the anchor every visual_query must build on. Pick the most common,
+                concrete object a viewer would SEE if filming this topic. Not a
+                feeling, not an abstraction. Programming → "laptop code". Money →
+                "cash banknotes". Fitness → "gym weights". Sleep → "bed dark room".
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT VARIETY — MANDATORY
+──────────────────────────────────────────────────────────────────────
+⚠ A stiff, repetitive render is a failure. Across the full script you MUST:
+   1. Use at least 3 different `camera` values total
+   2. Use at least 2 different `pace` values total
+   3. Use at least 2 different `layout` values total
+   4. Use at least 2 different `background` values total
+   5. Never repeat the same `camera` for 3 consecutive beats
+   6. Never repeat the same `layout` for 3 consecutive beats
+   If your script doesn't satisfy ALL of these, rewrite before outputting.
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT FIELD GUIDANCE
+──────────────────────────────────────────────────────────────────────
+- emotion:       what the audience should feel during this beat
+- pace:          slow=weight, mid=normal, fast=urgency, explosive=impact
+- visual_intent: the aesthetic register of this moment
+- camera:        hook=push_in, climax=snap_zoom, tension=tilt_up,
+                 payoff=pull_out, flip=micro_shake — but vary within reason.
+- transition:    slam_cut for climax, dip_black for tension, fade for payoff,
+                 whip_pan between high-energy beats, cut as neutral default.
+- background:    hook=glow, climax=abstract, tension=lines, insight=grid/solid. Rotate.
+- layout:        left=editorial, center=calm, right=cinematic, full=intense/climax.
+                 Alternate. Two consecutive same-layout is okay; three is monotony.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL. It does not understand emotion or metaphor. A query made
+of mood words ("dark solitude atmospheric") returns generic landscape stock —
+nature dominates the image pool, so you get mountains, skies, and fog instead of
+your topic. A query that is too niche returns ZERO results and the API falls back
+to a random unrelated photo. Both are why a coding video shows a mountain.
+
+RULES (all mandatory):
+1. SUBJECT FIRST. Every visual_query MUST begin with the global `subject` (or a
+   concrete photographable noun from the same topic domain) — the literal thing on
+   screen, not the feeling. The topic subject must be present in EVERY beat.
+2. Then add AT MOST 1-2 VISUAL modifiers only: lighting, angle, or setting
+   ("night", "close up", "macro", "blue light", "office", "screen glow", "overhead").
+3. BANNED in queries — emotions and abstractions: "solitude", "struggle", "journey",
+   "atmospheric", "powerful", "freedom", "mind", "soul", "abstract", "chaos", "alone",
+   and ANY feeling word. These return nature/abstract stock, never your topic.
+4. Use COMMON stock subjects that exist in quantity. If the literal subject is rare,
+   use the nearest common, photographable proxy.
+5. 2-4 words. Concrete + visual. No mood.
+
+Template:  [subject] + [setting or lighting]
+
+For a PROGRAMMING topic (subject "laptop code"):
+  Good: "laptop code screen night" / "developer dark office" / "server room blue"
+        / "keyboard macro close up" / "terminal screen glow" / "monitor code dark"
+  Bad:  "dark solitude" / "mountain journey" / "abstract struggle" / "deep focus"
+        / "mind racing" / "digital freedom"   ← all return landscapes/abstract
+
+Every beat, regardless of emotion, stays ON the topic subject. Emotion is carried by
+the MOTION system (camera, intensity, grain, tint) — NOT by the photo. The photo's
+only job is to keep the viewer inside the topic's world. If you cannot write a
+concrete on-topic query for a beat, reuse the subject with a different setting/angle.
+
+──────────────────────────────────────────────────────────────────────
+INTENSITY — 0.0 to 1.0, REQUIRED on every beat
+──────────────────────────────────────────────────────────────────────
+This is retention pressure. It drives camera magnitude, particle density,
+vignette darkness, scale-slam strength.
+
+Per scene type:
+  hook:        0.90 - 0.95   immediate impact
+  climax:      0.95 - 1.00   peak
+  cta:         0.80 - 0.90   sustain
+  flip:        0.75 - 0.85   reframe pressure
+  tension:     0.65 - 0.75   creeping
+  truth:       0.65 - 0.75
+  payoff:      0.70 - 0.85
+  insight:     0.50 - 0.65   establish
+  BREATH beat: 0.40 - 0.55   one mandatory low beat at ~30% mark
+
+⚠ At least ONE beat in the script must have intensity ≤ 0.55.
+   That's the breath beat. Without it, the climax doesn't hit. Pick a
+   non-critical insight or truth scene around the 30-40% mark.
+
+──────────────────────────────────────────────────────────────────────
+PATTERN INTERRUPT — optional per beat, leave "" to auto-pick
+──────────────────────────────────────────────────────────────────────
+A 150-300ms frame-level disruption. Use sparingly — one max per beat,
+and never two consecutive beats with interrupts.
+
+  ""        → no interrupt (default for most beats)
+  "slam"    → keyword scale-punch (climax, cta)
+  "chroma"  → RGB split flash (climax, slam_cut)
+  "iris"    → vignette tightens (truth, tension)
+  "tilt"    → 1.5° rotation jitter (climax, slam_cut)
+  "flash"   → over-exposed frame (payoff, scene transition)
+  "freeze"  → motion pauses mid-beat (truth, climax setup)
+  "invert"  → 80ms colour invert (flip — use ONCE per video max)
+
+Only use when intensity ≥ 0.80. Leave "" otherwise — visuals.py will
+auto-pick if needed. Don't over-trigger.
+
+──────────────────────────────────────────────────────────────────────
+COMPOSITION — optional, leave "" usually
+──────────────────────────────────────────────────────────────────────
+Off-grid composition override. Use at most ONCE per script, on a
+non-critical (insight/truth/flip) beat for variety.
+
+  ""         → standard composition (use this on every beat unless calling)
+  "crop-low" → text sits at bottom 30% of frame
+  "tilt"     → whole frame rotates -2° (dutch angle)
+  "corner"   → text in bottom-right, max negative space
+  "sparse"   → keyword takes 35% width, rest is empty
+
+──────────────────────────────────────────────────────────────────────
+EMPHASIS WORDS — REQUIRED, one per body sentence
+──────────────────────────────────────────────────────────────────────
+In each beat's "text" field, wrap ONE word (or short phrase) per sentence
+in *asterisks*. This is the word the audience should land on.
+
+Pick the word that:
+  • carries the line's meaning if removed
+  • aligns with an audible stress in the spoken sentence
+  • is 1-3 words max
+
+Examples:
+  "Most of what reaches you is *not for you*."
+  "Your attention is the only *currency* you can't earn back."
+  "Build the *filter* before you scale the inputs."
+  "They told you to *grind*. They lied about the *cost*."
+
+⚠ NEVER mark more than one word per sentence.
+⚠ NEVER omit asterisks — every text field must contain at least one *…*.
+
+──────────────────────────────────────────────────────────────────────
+ANALYTICAL EXAMPLE (5 beats — subject "bed dark room")
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Sleep Kills Performance",
+  "thumbnail": "You're Already Broken",
+  "style": "analytical",
+  "global": {{
+    "theme":        "clean_modern",
+    "music_mood":   "minimal",
+    "voice_style":  "analytical",
+    "camera_style": "static",
+    "subject":      "bed dark room"
+  }},
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook",
+      "keyword":          "YOU'RE LOSING",
+      "text":             "Every night you stay up late, you're making a *compounding* decision that costs you three full days of output.",
+      "energy":           "high",
+      "emotion":          "urgent",
+      "pace":             "fast",
+      "visual_intent":    "confrontational",
+      "camera":           "push_in",
+      "transition":       "slam_cut",
+      "background":       "glow",
+      "layout":           "left",
+      "visual_query":     "bedroom phone screen night",
+      "intensity":        0.93,
+      "pattern_interrupt":"slam",
+      "composition":      ""
+    }},
+    {{
+      "id":               "beat_02",
+      "type":             "insight",
+      "keyword":          "THE SCIENCE",
+      "text":             "Six hours of sleep produces the same cognitive impairment as being *legally drunk* the next morning.",
+      "energy":           "low",
+      "emotion":          "serious",
+      "pace":             "slow",
+      "visual_intent":    "documentary",
+      "camera":           "static",
+      "transition":       "cut",
+      "background":       "gradient",
+      "layout":           "center",
+      "visual_query":     "alarm clock bedside dark",
+      "intensity":        0.50,
+      "pattern_interrupt":"",
+      "composition":      "sparse"
+    }},
+    {{
+      "id":               "beat_03",
+      "type":             "truth",
+      "keyword":          "THE REAL COST",
+      "text":             "Sleep deprivation doesn't feel like failure. It feels exactly like *grinding* — which is why nobody catches it.",
+      "energy":           "mid",
+      "emotion":          "cold",
+      "pace":             "mid",
+      "visual_intent":    "documentary",
+      "camera":           "handheld",
+      "transition":       "cut",
+      "background":       "lines",
+      "layout":           "right",
+      "visual_query":     "tired person desk morning",
+      "intensity":        0.72,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }},
+    {{
+      "id":               "beat_04",
+      "type":             "climax",
+      "keyword":          "ONE MORE HOUR",
+      "text":             "A single extra hour outperforms every *supplement*, every morning routine, and every productivity system you've tried.",
+      "energy":           "high",
+      "emotion":          "confident",
+      "pace":             "explosive",
+      "visual_intent":    "cinematic",
+      "camera":           "snap_zoom",
+      "transition":       "slam_cut",
+      "background":       "abstract",
+      "layout":           "full",
+      "visual_query":     "alarm clock close up macro",
+      "intensity":        1.00,
+      "pattern_interrupt":"chroma",
+      "composition":      ""
+    }},
+    {{
+      "id":               "beat_05",
+      "type":             "cta",
+      "keyword":          "WHAT WILL YOU CUT",
+      "text":             "If sleep is the highest-leverage thing tonight, what are you actually *willing to stop* to protect it?",
+      "energy":           "mid",
+      "emotion":          "serious",
+      "pace":             "slow",
+      "visual_intent":    "minimal",
+      "camera":           "pull_out",
+      "transition":       "dip_black",
+      "background":       "solid",
+      "layout":           "center",
+      "visual_query":     "bedroom window night dark",
+      "intensity":        0.85,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+HUMOROUS EXAMPLE (4 beats — subject "laptop screens", varied cameras/layouts)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "You Are Not Multitasking",
+  "thumbnail": "Your Brain Is Lying",
+  "style": "humorous",
+  "global": {{
+    "theme":        "warm_amber",
+    "music_mood":   "playful",
+    "voice_style":  "comedic",
+    "camera_style": "static",
+    "subject":      "laptop screens"
+  }},
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook",
+      "keyword":          "YOU CANNOT MULTITASK",
+      "text":             "Your brain is not multitasking right now. It is just switching tasks very fast and *lying* to you about it.",
+      "energy":           "high",
+      "emotion":          "amused",
+      "pace":             "fast",
+      "visual_intent":    "absurd",
+      "camera":           "push_in",
+      "transition":       "slam_cut",
+      "background":       "glow",
+      "layout":           "center",
+      "visual_query":     "desk multiple monitors screens",
+      "intensity":        0.92,
+      "pattern_interrupt":"slam",
+      "composition":      ""
+    }},
+    {{
+      "id":               "beat_02",
+      "type":             "insight",
+      "keyword":          "SCIENCE AGREES",
+      "text":             "Neuroscience confirmed this in 1999. Nobody changed their behaviour. Everyone just started calling it *parallel processing* instead.",
+      "energy":           "low",
+      "emotion":          "playful",
+      "pace":             "slow",
+      "visual_intent":    "quirky",
+      "camera":           "static",
+      "transition":       "cut",
+      "background":       "gradient",
+      "layout":           "left",
+      "visual_query":     "laptop desk overhead flatlay",
+      "intensity":        0.48,
+      "pattern_interrupt":"",
+      "composition":      "tilt"
+    }},
+    {{
+      "id":               "beat_03",
+      "type":             "flip",
+      "keyword":          "THE REAL YOU",
+      "text":             "What you are actually doing is ignoring two things slightly less *efficiently* than if you had just done one.",
+      "energy":           "mid",
+      "emotion":          "amused",
+      "pace":             "mid",
+      "visual_intent":    "clean",
+      "camera":           "pull_out",
+      "transition":       "blur_wipe",
+      "background":       "solid",
+      "layout":           "right",
+      "visual_query":     "single laptop clean desk",
+      "intensity":        0.78,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }},
+    {{
+      "id":               "beat_04",
+      "type":             "cta",
+      "keyword":          "PICK ONE THING",
+      "text":             "You now have permission to stop pretending. Pick one tab. One task. One *crisis* at a time. You're welcome.",
+      "energy":           "mid",
+      "emotion":          "playful",
+      "pace":             "fast",
+      "visual_intent":    "minimal",
+      "camera":           "snap_zoom",
+      "transition":       "dip_black",
+      "background":       "solid",
+      "layout":           "full",
+      "visual_query":     "laptop single screen dark",
+      "intensity":        0.86,
+      "pattern_interrupt":"flash",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST before outputting (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. Word count: total 90-130, each beat 15-25 words. Trim/expand if off.
+2. Variety: ≥3 cameras, ≥2 paces, ≥2 layouts, ≥2 backgrounds across the script.
+3. No 3+ consecutive beats with the same camera or layout.
+4. Every text field has EXACTLY one *emphasis word* per sentence.
+5. Every beat has a numeric intensity ∈ [0.0, 1.0].
+6. At least one beat has intensity ≤ 0.55 (breath beat).
+7. Climax beat has intensity ≥ 0.95.
+8. pattern_interrupt only set on beats with intensity ≥ 0.80 (or "").
+9. At most ONE beat has a non-empty composition value.
+10. Every per-beat field present and from the allowed vocabulary.
+11. global.subject is a concrete photographable noun (not a feeling).
+12. EVERY visual_query leads with that subject (or a same-domain concrete noun)
+    and contains NO mood/emotion/abstraction words.
+
+Output the JSON only.

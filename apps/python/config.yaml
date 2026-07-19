@@ -1,0 +1,64 @@
+llm:
+  model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b qwen3-vl:235b-cloud
+
+tts:
+  voice: "auto"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
+  speed: 1.05                  # slightly faster reads punchier on tiktok
+  sample_rate: 24000
+
+render:
+  concurrency: 2
+
+subs:
+  whisper_model: "base"        # tiny | base | small — base is the sweet spot
+  language: "en"
+  font_size: 58
+  font_size_active: 64         # active (highlighted) word is slightly bigger
+
+  # Caption visual style — choose one:
+  #   karaoke     White text, yellow active word, semi-transparent box (classic TikTok)
+  #   glow        White text, light-blue/cyan glowing halo on active word — no box
+  #   neon        Dark box, electric cyan active word with aggressive glow radius
+  #   minimal     Clean white text, no box, subtle cyan shift on active word
+  #   bold_drop   Large bold text, heavy drop shadow, bright yellow active word
+  style: "auto"
+
+  # Legacy colour overrides — only used by the karaoke style.
+  primary_color: "&H00FFFFFF"  # white base text
+  highlight_color: "&H0000FFFF" # yellow on active word (karaoke only)
+  outline_color: "&H00000000"  # black outline (karaoke only)
+  back_color: "&H60000000"     # semi-transparent box (karaoke only)
+
+video:
+  width: 1080
+  height: 1920
+  fps: 30
+  crf: 22
+  preset: "veryfast"
+  bgm_volume: 0.10             # BGM at 10% — audible but not fighting voice
+
+brand:
+  name: "SeaBytes"
+  accent_color: [255, 200, 50]
+
+paths:
+  workspace: "workspace/runs"
+  bgm: "assets/bgm"
+  prompts: "prompts"
+  sources_dir: "data/topics"   # subject files: data/topics/{subject}.txt
+
+# Palette in CSS oklch for HTML renderer
+palette:
+  accent: "oklch(0.78 0.19 230)"   # electric blue
+  spike:  "oklch(0.78 0.19 30)"    # coral spike
+  bg:     "oklch(0.12 0.02 250)"
+  fg:     "oklch(0.97 0.005 250)"
+
+theme: "tech_blue"   # maps to renderer/themes/tech_blue.css
+# Frame cleanup
+# true  = delete the frames/ directory after assembly completes (saves ~200-400MB per run)
+# false = keep frames on disk (useful for debugging or re-exporting)
+cleanup_frames: true
+
+character:
+  enabled: false
