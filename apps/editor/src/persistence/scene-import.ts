@@ -112,10 +112,32 @@ export function hexToOklch(hex: string, fallback: ColorOKLCH = WHITE): ColorOKLC
 
 // ── Text helpers ────────────────────────────────────────────────────────────
 
-/** Rough advance width of `text` at `fontSize` — used only for wrap/centering; the renderer re-measures for display. */
-function approxWidth(text: string, fontSize: number, weight: number): number {
-  const per = fontSize * (weight >= 600 ? 0.56 : 0.52);
-  return text.length * per;
+/**
+ * Real glyph-advance width via an offscreen canvas — matches what the Pixi
+ * text renderer actually draws (same font + weight), so a word placed at
+ * `x + measuredWidth` never overlaps the next one. Falls back to a rough
+ * per-char estimate only when no canvas is available (SSR/tests). Inter is
+ * loaded by the editor's theme.css by import time.
+ */
+let _measureCtx: CanvasRenderingContext2D | null | undefined;
+function measureCtx(): CanvasRenderingContext2D | null {
+  if (_measureCtx !== undefined) return _measureCtx;
+  try {
+    _measureCtx = document.createElement("canvas").getContext("2d");
+  } catch {
+    _measureCtx = null;
+  }
+  return _measureCtx;
+}
+function measureText(text: string, fontSize: number, weight: number): number {
+  const ctx = measureCtx();
+  if (!ctx) return text.length * fontSize * (weight >= 600 ? 0.56 : 0.52);
+  ctx.font = `${weight} ${fontSize}px Inter, system-ui, sans-serif`;
+  return ctx.measureText(text).width;
+}
+/** Width of a single space in the given font (measured, not guessed). */
+function spaceWidth(fontSize: number, weight: number): number {
+  return Math.max(fontSize * 0.22, measureText("a a", fontSize, weight) - measureText("aa", fontSize, weight));
 }
 
 /** Normalize a token for matching body words against word_times (lowercase, strip non-alphanumerics). */
@@ -214,7 +236,7 @@ function buildBeatGroup(
   // HUD tag (top)
   if (beat.hud_tag) {
     const fs = Math.round(W * 0.032);
-    const w = approxWidth(beat.hud_tag, fs, 700);
+    const w = measureText(beat.hud_tag, fs, 700);
     children.push(
       textNode({
         name: `${beat.id ?? "beat"} · hud`,
@@ -234,9 +256,14 @@ function buildBeatGroup(
 
   // Keyword (large display)
   if (beat.keyword) {
-    const fs = Math.round(W * 0.092);
+    let fs = Math.round(W * 0.092);
     const keywordFill = beat.accent_override === "spike" ? palette.spike : palette.fg;
-    const w = approxWidth(beat.keyword, fs, 800);
+    // Shrink to fit the column width if the keyword would overflow.
+    let w = measureText(beat.keyword, fs, 800);
+    if (w > colWidth) {
+      fs = Math.max(Math.round(W * 0.04), Math.floor((fs * colWidth) / w));
+      w = measureText(beat.keyword, fs, 800);
+    }
     children.push(
       textNode({
         name: `${beat.id ?? "beat"} · keyword`,
@@ -257,8 +284,8 @@ function buildBeatGroup(
   if (beat.body) {
     const words = parseBody(beat.body);
     const fs = Math.round(W * 0.05);
-    const space = fs * 0.28;
-    const lineH = fs * 1.2;
+    const space = spaceWidth(fs, 600);
+    const lineH = fs * 1.35;
     const bodyTop = Math.round(size.height * 0.6);
 
     // Match display words to word_times (advance a pointer, skipping spillover).
@@ -272,7 +299,7 @@ function buildBeatGroup(
     let line: WordBox[] = [];
     let lineWidth = 0;
     for (const dw of words) {
-      const wWidth = approxWidth(dw.text, fs, dw.emphasis ? 700 : 600);
+      const wWidth = measureText(dw.text, fs, dw.emphasis ? 700 : 600);
       if (line.length > 0 && lineWidth + space + wWidth > colWidth) {
         lines.push(line);
         line = [];
