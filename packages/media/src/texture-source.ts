@@ -140,16 +140,48 @@ export async function createVideoTexture(asset: MediaAssetRef): Promise<VideoTex
     async seek(frame, fps) {
       await ready;
       const time = frame / fps;
-      const halfFrame = 1 / (fps * 2);
-      if (Math.abs(element.currentTime - time) < halfFrame) return; // already at/near this frame
-      await new Promise<void>((resolve) => {
-        const onSeeked = () => {
-          element.removeEventListener("seeked", onSeeked);
-          resolve();
-        };
-        element.addEventListener("seeked", onSeeked);
-        element.currentTime = time;
-      });
+
+      // Deliberately NO "already close enough, skip the seek" early-return
+      // here. That optimization belongs ONLY to live playback's
+      // fire-and-forget path in TextureManager.get() (which calls the video
+      // element directly, not this method, during sequential playback).
+      // When something AWAITS this seek() — i.e. a client export preparing
+      // one exact frame at a time — it needs the element genuinely parked on
+      // `time`, every time. The old tolerance check read the post-seek
+      // `currentTime` (which lands slightly off the requested time due to
+      // keyframe snapping + float imprecision), so two consecutive export
+      // frames 1/fps apart could fall within half-a-frame tolerance and the
+      // second seek was silently skipped — capturing the SAME frame twice,
+      // or freezing on one frame for the whole export.
+      if (element.currentTime !== time) {
+        await new Promise<void>((resolve) => {
+          const onSeeked = (): void => {
+            element.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          element.addEventListener("seeked", onSeeked);
+          element.currentTime = time;
+        });
+      }
+
+      // The "seeked" event fires when the seek POSITION is set — NOT when
+      // the frame at that position has been decoded and is ready to sample
+      // into a texture. Uploading right after "seeked" can grab the
+      // PREVIOUS frame's pixels. `requestVideoFrameCallback` resolves only
+      // once a new frame has actually been presented, closing that gap.
+      // Not universally available (Firefox lacks it as of writing), so fall
+      // back to a microtask+rAF settle, which is empirically enough for the
+      // decode to land in Chromium/Edge/WebKit where it IS the export target.
+      const el = element as HTMLVideoElement & {
+        requestVideoFrameCallback?: (cb: () => void) => number;
+      };
+      if (typeof el.requestVideoFrameCallback === "function") {
+        await new Promise<void>((resolve) => {
+          el.requestVideoFrameCallback!(() => resolve());
+        });
+      } else {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      }
     },
     currentFrame() {
       return element;

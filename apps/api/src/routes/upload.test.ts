@@ -94,6 +94,70 @@ describe("upload routes", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("serves HTTP Range requests (206 + slice) and advertises accept-ranges — required for <video> seeking, without which exported video freezes on one frame", async () => {
+    // Regression test for a real report: exported video was frozen on a
+    // single frame whenever the asset's `master` was a server URL. Browsers
+    // seek media by issuing `Range: bytes=start-` requests; this route
+    // previously ignored Range entirely (always 200 + full body), so
+    // `video.currentTime = t` never actually moved for unbuffered positions.
+    const assetStore = createInMemoryAssetStore();
+    const objectStore = createDiskObjectStore(root);
+    const app = buildApp({ assetStore, objectStore, queue: { enqueue: () => {}, drain: async () => {} } });
+
+    // Seed a "ready" asset with exactly-known bytes directly (no ffmpeg
+    // needed — Range slicing is byte-level, content-agnostic).
+    const content = Buffer.from("0123456789abcdefghij"); // 20 bytes
+    const hash = await objectStore.put(content);
+    const id = "range-test-asset";
+    assetStore.put({
+      id,
+      hash,
+      kind: "video",
+      master: `/assets/${id}/object/master`,
+      meta: { status: "ready", objects: { master: { hash, mime: "video/mp4" } } },
+    } as never);
+
+    // No Range: plain 200, full body, but MUST advertise accept-ranges.
+    const full = await app.inject({ method: "GET", url: `/assets/${id}/object/master` });
+    expect(full.statusCode).toBe(200);
+    expect(full.headers["accept-ranges"]).toBe("bytes");
+    expect(full.rawPayload.toString()).toBe("0123456789abcdefghij");
+
+    // bytes=5-9: a bounded middle slice.
+    const middle = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "bytes=5-9" } });
+    expect(middle.statusCode).toBe(206);
+    expect(middle.headers["content-range"]).toBe("bytes 5-9/20");
+    expect(middle.rawPayload.toString()).toBe("56789");
+
+    // bytes=15-: open-ended (THE form browsers use when seeking video).
+    const openEnded = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "bytes=15-" } });
+    expect(openEnded.statusCode).toBe(206);
+    expect(openEnded.headers["content-range"]).toBe("bytes 15-19/20");
+    expect(openEnded.rawPayload.toString()).toBe("fghij");
+
+    // bytes=-4: suffix form, the LAST 4 bytes.
+    const suffix = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "bytes=-4" } });
+    expect(suffix.statusCode).toBe(206);
+    expect(suffix.headers["content-range"]).toBe("bytes 16-19/20");
+    expect(suffix.rawPayload.toString()).toBe("ghij");
+
+    // An end past the file is clamped, not an error.
+    const clamped = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "bytes=18-500" } });
+    expect(clamped.statusCode).toBe(206);
+    expect(clamped.headers["content-range"]).toBe("bytes 18-19/20");
+    expect(clamped.rawPayload.toString()).toBe("ij");
+
+    // A start past the end of the file is unsatisfiable: 416.
+    const unsatisfiable = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "bytes=100-" } });
+    expect(unsatisfiable.statusCode).toBe(416);
+    expect(unsatisfiable.headers["content-range"]).toBe("bytes */20");
+
+    // A malformed Range header is ignored per RFC 7233 — plain 200 full body.
+    const malformed = await app.inject({ method: "GET", url: `/assets/${id}/object/master`, headers: { range: "frames=1-2" } });
+    expect(malformed.statusCode).toBe(200);
+    expect(malformed.rawPayload.toString()).toBe("0123456789abcdefghij");
+  });
+
   it("404s when requesting a variant that isn't ready yet", async () => {
     const assetStore = createInMemoryAssetStore();
     const objectStore = createDiskObjectStore(root);

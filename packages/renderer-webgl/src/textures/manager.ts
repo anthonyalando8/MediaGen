@@ -105,20 +105,34 @@ export class TextureManager {
         const targetTime = tex.frame / fps;
         const halfFrame = 1 / (fps * 2);
         const delta = Math.abs(el.currentTime - targetTime);
-        // SEQUENTIAL PLAYBACK: element is already close to the right position —
-        // let it play naturally, just push the decoded frame to the GPU.
-        if (delta <= halfFrame * 4) {
-          if (playing && el.paused) void el.play().catch(() => {}); // AbortError when pause() interrupts an in-flight play() is expected during loop restarts/scrubbing, not a real failure
-          else if (!playing && !el.paused) el.pause();
+
+        if (!playing) {
+          // PAUSED / EXPORT: the caller drives exact seeking through the
+          // awaited prepare() path (see prepare()'s doc), which parks the
+          // element on the precise frame AND waits for it to be decode-ready
+          // BEFORE render()/get() runs. get() must therefore NEVER launch its
+          // own seek here — the old code did (fire-and-forget
+          // `void seek().then(...)`), and because an export captures the
+          // canvas synchronously the instant render() returns, that async
+          // seek resolved too late and CLOBBERED the frame prepare() had set
+          // up with the previous frame's pixels (or left it frozen). So just
+          // ensure the element is parked and upload whatever frame it's on.
+          if (!el.paused) el.pause();
+          entry.texture.source.update();
+        } else if (delta <= halfFrame * 4) {
+          // SEQUENTIAL PLAYBACK: element is already close to the right
+          // position — let it play naturally, just push the decoded frame.
+          if (el.paused) void el.play().catch(() => {}); // AbortError when pause() interrupts an in-flight play() is expected during loop restarts, not a real failure
           entry.texture.source.update();
         } else {
-          // LARGE JUMP (scrubbing/loop/skip): pause first so the browser isn't
-          // fighting between the seek and its own natural playback advance, then
-          // seek, then resume if the timeline is playing.
+          // LARGE JUMP DURING PLAYBACK (loop restart, clip skip): pause,
+          // seek, resume. Fire-and-forget is acceptable ONLY here because
+          // live playback re-renders continuously and catches up over the
+          // next frames — unlike export, which gets exactly one shot per frame.
           el.pause();
           void entry.source.seek(tex.frame, fps).then(() => {
             entry.texture.source.update();
-            if (playing) void el.play().catch(() => {}); // same benign AbortError as above
+            void el.play().catch(() => {});
           });
         }
       }

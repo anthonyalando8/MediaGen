@@ -95,7 +95,7 @@ describe("TextureManager", () => {
     expect(dispose3).not.toHaveBeenCalled();
   });
 
-  it("seeks (via seek()) when the requested frame is far from the element's current position — scrubbing, loop, clip skip", async () => {
+  it("fire-and-forget seeks on a large jump ONLY while playing (loop/clip-skip) — never when paused, so it can't race an export's prepare()", async () => {
     const asset: MediaAssetRef = { id: "v1", kind: "video", url: "blob:v1" };
     const seek = vi.fn(async () => {});
     const source = makeVideoSource("v1", seek);
@@ -113,16 +113,46 @@ describe("TextureManager", () => {
     );
 
     // First call to populate the cache (frame 0, element also at 0 — no seek expected here)
-    manager.get({ assetId: "v1", frame: 0 }, 30);
+    manager.get({ assetId: "v1", frame: 0 }, 30, true);
     await flush();
 
     const updateSpy = vi.spyOn(texture!.source, "update");
-    // Large jump: element.currentTime=0, requesting frame 30 (1s away) — seek should fire
-    manager.get({ assetId: "v1", frame: 30 }, 30);
+    // Large jump WHILE PLAYING: element.currentTime=0, requesting frame 30 (1s away) — seek should fire.
+    manager.get({ assetId: "v1", frame: 30 }, 30, true);
     await flush();
 
     expect(seek).toHaveBeenCalledWith(30, 30);
     expect(updateSpy).toHaveBeenCalled();
+  });
+
+  it("does NOT launch its own seek when paused/exporting, even on a large jump — the caller owns exact seeking via prepare()", async () => {
+    const asset: MediaAssetRef = { id: "v1b", kind: "video", url: "blob:v1b" };
+    const seek = vi.fn(async () => {});
+    const source = makeVideoSource("v1b", seek);
+    let texture: Texture | undefined;
+
+    const manager = new TextureManager(
+      { resolveAsset: () => asset },
+      {
+        loadTexture: async () => source,
+        createTexture: () => {
+          texture = makeTexture();
+          return texture;
+        },
+      }
+    );
+
+    manager.get({ assetId: "v1b", frame: 0 }, 30, false);
+    await flush();
+
+    const updateSpy = vi.spyOn(texture!.source, "update");
+    // Large jump but paused (playing=false, the export case): get() must NOT
+    // fire its own seek — that would race and clobber prepare()'s exact frame.
+    manager.get({ assetId: "v1b", frame: 30 }, 30, false);
+    await flush();
+
+    expect(seek).not.toHaveBeenCalled();
+    expect(updateSpy).toHaveBeenCalled(); // still uploads whatever frame the element is parked on
   });
 
   it("does NOT seek during sequential playback (element already close to target frame) — just updates the GPU texture", async () => {
@@ -144,12 +174,12 @@ describe("TextureManager", () => {
       }
     );
 
-    manager.get({ assetId: "v2", frame: 0 }, 30);
+    manager.get({ assetId: "v2", frame: 0 }, 30, true);
     await flush();
 
     const updateSpy = vi.spyOn(texture!.source, "update");
-    // Sequential: element.currentTime=1/30, requesting frame 1 — within tolerance, no seek
-    manager.get({ assetId: "v2", frame: 1 }, 30);
+    // Sequential playback (playing=true): element.currentTime=1/30, requesting frame 1 — within tolerance, no seek
+    manager.get({ assetId: "v2", frame: 1 }, 30, true);
     await flush();
 
     expect(seek).not.toHaveBeenCalled();

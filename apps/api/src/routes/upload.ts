@@ -97,6 +97,49 @@ export function registerUploadRoutes(app: FastifyInstance, deps: UploadRouteDeps
 
     const bytes = await objectStore.get(record.hash);
     reply.header("content-type", record.mime || defaultMimeFor(asset.kind));
+    // HTTP Range support is REQUIRED for <video>/<audio> seeking against
+    // these URLs. Browsers seek server-hosted media by issuing
+    // `Range: bytes=start-` requests for the target position; a server
+    // that ignores Range and always replies 200 + full body makes
+    // `element.currentTime = t` effectively a no-op for any not-yet-buffered
+    // position — the element keeps decoding the same frame. Observed as:
+    // exported video frozen on a single frame whenever the asset's `master`
+    // was a server URL (the export's frame-by-frame `prepare()` seek never
+    // actually moved), while the same export worked fine for videos on the
+    // local `data:`/`blob:` path (blob URLs seek without HTTP entirely).
+    reply.header("accept-ranges", "bytes");
+
+    const rangeHeader = req.headers.range;
+    if (rangeHeader) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+      const size = bytes.length;
+      if (match && (match[1] !== "" || match[2] !== "")) {
+        let start: number;
+        let end: number;
+        if (match[1] === "") {
+          // Suffix form "bytes=-N": the LAST N bytes.
+          const suffixLength = parseInt(match[2], 10);
+          start = Math.max(0, size - suffixLength);
+          end = size - 1;
+        } else {
+          start = parseInt(match[1], 10);
+          end = match[2] === "" ? size - 1 : Math.min(parseInt(match[2], 10), size - 1);
+        }
+
+        if (start >= size || start > end) {
+          reply.code(416); // Range Not Satisfiable
+          reply.header("content-range", `bytes */${size}`);
+          return reply.send();
+        }
+
+        reply.code(206);
+        reply.header("content-range", `bytes ${start}-${end}/${size}`);
+        return reply.send(bytes.subarray(start, end + 1));
+      }
+      // Malformed Range header — per RFC 7233 a server MAY ignore it; fall
+      // through to a plain 200 full response.
+    }
+
     return reply.send(bytes);
   });
 }

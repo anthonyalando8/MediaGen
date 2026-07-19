@@ -166,6 +166,12 @@ export function Viewport() {
   const zoom = useEditorStore((s) => s.zoom);
   const panX = useEditorStore((s) => s.panX);
   const panY = useEditorStore((s) => s.panY);
+  // Subscribed (not just read via store.getState() in the RAF loop) so this
+  // component re-renders and passes the current value as CanvasHost's
+  // `paused` prop — see that component's module doc for why export needs
+  // this viewport's GPU context/textures fully freed, not just its
+  // render() calls skipped.
+  const isExporting = useEditorStore((s) => s.isExporting);
   const compSize = useEditorStore((s) => activeComp(s).size);
   const selectedNode = useEditorStore((s) => {
     if (s.selection.length !== 1) return undefined;
@@ -179,6 +185,18 @@ export function Viewport() {
     rendererRef.current = renderer;
     return renderer;
   }, [store]);
+
+  // Context-loss recovery (CanvasHost.tsx owns the actual rebuild — see its
+  // module doc). `onContextLost` MUST null the ref immediately: without
+  // this, `rendererRef.current` still points at the just-destroyed renderer
+  // object for however long recovery takes (or forever, if the browser
+  // never fires "webglcontextrestored" at all — observed for a genuine GPU
+  // *process* crash, not just an ordinary reclaimed context), and the RAF
+  // loop's `if (renderer && ...)` guard below passes on that dead object,
+  // calling `.render()` on it every frame and crashing every time.
+  const handleContextLost = useCallback(() => {
+    rendererRef.current = null;
+  }, []);
 
   const handleResize = useCallback((size: Size) => {
     setCanvasSize(size);
@@ -435,7 +453,7 @@ export function Viewport() {
 
   return (
     <>
-      <CanvasHost createRenderer={createRenderer} onResize={handleResize} />
+      <CanvasHost createRenderer={createRenderer} onResize={handleResize} onContextLost={handleContextLost} active={!isExporting} />
       <ViewportFrame compSize={compSize} canvasSize={canvasSize} fit={fit} />
       <div
         ref={clickLayerRef}

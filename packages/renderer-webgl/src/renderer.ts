@@ -58,7 +58,19 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
   return {
     async prepareFrame(tree, fps) {
       const refs = collectTexRefs(tree.nodes);
-      await Promise.all(refs.map((ref) => textures.prepare(ref, fps)));
+      // Sequential, NOT Promise.all: multiple refs can point at the SAME
+      // video asset (one asset placed in two clips at different frames within
+      // this one output frame), and prepare() drives that asset's single
+      // shared <video> element's `currentTime`. Firing those seeks
+      // concurrently races them against each other, leaving the element on an
+      // indeterminate frame. Awaiting one at a time serializes the seeks; the
+      // cost is trivial (a handful of refs per frame) and it's the only way
+      // to guarantee each asset ends parked on the frame that's actually
+      // sampled during render(). Distinct assets don't contend, so the little
+      // parallelism lost here is on cheap already-loaded lookups anyway.
+      for (const ref of refs) {
+        await textures.prepare(ref, fps);
+      }
     },
     render(tree, playing = false, frame = 0, wallTime?: number) {
       const treeWithFrame: RenderTree = { ...tree, frame };
