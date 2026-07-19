@@ -3,6 +3,17 @@
 // Client-side MP4 export (Phase 2 blueprint, Deliverable 11.2 — the
 // CLIENT half only; see this file's own doc below for what's deferred).
 //
+// ┌─ CHANGES IN THIS REVISION (additive; nothing removed) ───────────────┐
+// │ 1. ExportOptions.outputSize — render/encode at an ARBITRARY output    │
+// │    resolution instead of always comp.size. Lets the export window     │
+// │    offer 1080p / 720p / 480p (scales the renderer viewport; the       │
+// │    composition itself is untouched).                                  │
+// │ 2. ExportOptions.signal (AbortSignal) — checked once per frame so the │
+// │    export window's Cancel button aborts a running export between      │
+// │    frames (rejects with an AbortError; the caller distinguishes it    │
+// │    via signal.aborted).                                               │
+// └──────────────────────────────────────────────────────────────────────┘
+//
 // PIPELINE
 // --------
 // virtual-clock (frame/time sequence) -> frame-pump (per-frame loop) ->
@@ -52,6 +63,24 @@ export interface ExportOptions {
   resolveAudioUrl?: (assetId: string) => string | undefined;
   /** Video bitrate in bits/sec, or a Mediabunny Quality constant. Default: QUALITY_HIGH. */
   videoBitrate?: number | Quality;
+  /**
+   * Output resolution in px. Defaults to `comp.size`. When smaller/larger,
+   * the renderer viewport is scaled so the full composition fills the
+   * output canvas (uniform scale = outputSize.width / comp.size.width — the
+   * caller is responsible for passing an output size with the SAME aspect
+   * ratio as the composition; a mismatched ratio just letterboxes/crops per
+   * the renderer's viewport behavior). H.264 requires even dimensions.
+   */
+  outputSize?: { width: number; height: number };
+  /**
+   * Optional cancellation. Checked once at the start of every output frame;
+   * if aborted, the export rejects (with an `AbortError` DOMException) and
+   * the renderer is torn down in the `finally`. The caller distinguishes a
+   * user-cancel from a real failure by testing `signal.aborted` in its
+   * catch. No effect on already-encoded frames — the muxer is simply never
+   * finalized, so no Blob is produced.
+   */
+  signal?: AbortSignal;
   onProgress?: (framesCompleted: number, frameCount: number) => void;
 }
 
@@ -153,13 +182,19 @@ export function defaultExportDeps(media: ExportMediaService): ExportDeps {
  * complete and ready to download.
  */
 export async function exportToMp4(options: ExportOptions, deps: ExportDeps): Promise<Blob> {
-  const { comp, registry, resolveAsset, resolveComp, resolveAudioUrl, videoBitrate = QUALITY_HIGH, onProgress } = options;
+  const { comp, registry, resolveAsset, resolveComp, resolveAudioUrl, videoBitrate = QUALITY_HIGH, outputSize, signal, onProgress } = options;
 
-  const canvas = deps.createCanvas(comp.size.width, comp.size.height);
+  // Output geometry: default to the composition's own size. When a smaller
+  // (or larger) outputSize is given, render at that pixel size and scale the
+  // renderer viewport so the whole comp fills the frame.
+  const out = outputSize ?? { width: comp.size.width, height: comp.size.height };
+  const viewportScale = out.width / comp.size.width;
+
+  const canvas = deps.createCanvas(out.width, out.height);
   const renderer = deps.createRenderer(canvas, deps.media);
   renderer.setFps(comp.fps);
   renderer.setCompSize(comp.size.width, comp.size.height);
-  renderer.setViewport(1, 0, 0);
+  renderer.setViewport(viewportScale, 0, 0);
 
   try {
     const hasAudio = (comp.audioTracks?.length ?? 0) > 0;
@@ -184,6 +219,9 @@ export async function exportToMp4(options: ExportOptions, deps: ExportDeps): Pro
       frameCount: clock.frameCount,
       onProgress,
       async onFrame(index) {
+        // Cancellation checkpoint — once per frame, before doing the work.
+        if (signal?.aborted) throw new DOMException("Export cancelled by user", "AbortError");
+
         const frame = clock.frameAt(index) as Frame;
         const tree = evaluateComposition(comp, frame, registry, resolveAsset, resolveComp);
         // MUST be awaited before render(): live playback's RAF loop can rely

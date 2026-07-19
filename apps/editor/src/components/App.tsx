@@ -1,11 +1,10 @@
 // apps/editor/src/components/App.tsx
 //
-// The editor shell. This revision swaps the old <Header> for the new
-// <Menubar> (File/Edit/View/Insert/Help + brand + Preview/Export). The grid
-// is UNCHANGED — the menubar occupies the same first "auto" row the header
-// did, so the shell stays at two chrome rows (menubar + toolbar) over the
-// middle band and timeline. All workspace drag/collapse logic, the viewport
-// stage + status bar, and theme persistence are untouched.
+// The editor shell. Only change vs. the version in the repo: mount
+// <ExportWindow /> once, as the last child of the shell, so the full-screen
+// export overlay renders above the whole editor when opened (it returns
+// null while closed). Everything else — grid, panels, dividers, viewport,
+// theme persistence — is untouched.
 
 import { useCallback, useEffect, useState } from "react";
 import { Menubar } from "./Menubar";
@@ -15,6 +14,7 @@ import { Viewport } from "./Viewport";
 import { ViewportStatusBar } from "./ViewportStatusBar";
 import { InspectorPanel } from "./InspectorPanel";
 import { TimelinePlaceholder } from "./TimelinePlaceholder";
+import { ExportWindow } from "./ExportWindow";
 import { useUndoRedoShortcuts } from "../store/use-undo-redo-shortcuts";
 import { useDeleteShortcut } from "../store/use-delete-shortcut";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -154,6 +154,9 @@ export function App() {
         <TimelinePlaceholder />
       </div>
     </div>
+
+    {/* Full-screen export "render page" — null while closed. */}
+    <ExportWindow />
     </AudioSelectionProvider>
   );
 }

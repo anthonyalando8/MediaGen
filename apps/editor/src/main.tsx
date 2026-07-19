@@ -31,6 +31,8 @@ import "./styles/effects-panel.css";
 import "./styles/left-tabs.css";
 // @ts-ignore
 import "./styles/timeline-playhead.css";
+// @ts-ignore
+import "./styles/export-window.css"; // full-screen export render page (load late)
 import { createBlankProject } from "./bootstrap/create-project";
 import { createRegistry } from "./bootstrap/register-kinds";
 import { RegistryProvider } from "./bootstrap/registry-context";

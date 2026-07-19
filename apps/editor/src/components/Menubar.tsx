@@ -1,20 +1,17 @@
 // apps/editor/src/components/Menubar.tsx
 //
-// Application menubar (UI/UX redesign). A thin bar that sits ABOVE the
-// toolbar and consolidates the standard menus — File / Edit / View / Insert /
-// Help — plus the brand mark, save indicator, theme toggle, and the headline
-// Preview / Export actions. It REPLACES the old <Header>: the brand identity
-// and Preview/Export affordances move here so the chrome stays two rows
-// (menubar + toolbar) instead of three.
+// Application menubar. UNCHANGED except that Export no longer runs inline:
+// the old `handleExportVideo` (build media service → exportToMp4 → auto-
+// download, with a local `exportState` progress spinner) is REMOVED, and
+// both the File ▸ "Export Video…" item and the headline Export button now
+// just `openExportWindow()` — the full-screen <ExportWindow> (mounted once
+// in App.tsx) owns settings, the live render preview, progress, cancel,
+// done/download and error. The button still reflects `isExporting` (read
+// from the store, which <ExportWindow> sets) so it disables + shows a
+// spinner while a render is in flight.
 //
-// Every menu item that has a backing command calls the SAME store/command
-// API the old Toolbar used (addNode / appendNodeOp / groupNodes /
-// ungroupNode / precompose / deleteSelection / undo / redo / setWorkspaceMode
-// / togglePanel / setZoom / resetView / select). Items without an existing
-// pipeline (Open / Save / Export / Cut / Copy / Paste / Duplicate / Keyboard
-// Shortcuts) are intentionally inert affordances — wire them to your
-// file/clipboard/export systems when they exist. No document/store logic is
-// changed here.
+// Everything else (File/Edit/View/Insert/Help menus, brand, save indicator,
+// theme toggle, Preview) is untouched.
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Download, Loader2, Moon, Play, Sun, Waves } from "lucide-react";
@@ -27,8 +24,7 @@ import { useRegistry } from "../bootstrap/registry-context";
 import { deleteSelection } from "../store/delete-selection";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
-import { exportToMp4, defaultExportDeps } from "export";
-import type { ExportMediaService } from "export";
+import { openExportWindow } from "../store/export-window-handle";
 
 interface MenubarProps {
   theme: "dark" | "light";
@@ -78,7 +74,10 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
   const registry = useRegistry();
   const [open, setOpen] = useState<MenuId | null>(null);
   const barRef = useRef<HTMLElement>(null);
-  const [exportState, setExportState] = useState<{ inProgress: boolean; progress: number } | null>(null);
+
+  // Export runs in <ExportWindow>; the menubar only reflects its in-flight
+  // flag (the window calls setIsExporting) to disable + spin the button.
+  const isExporting = useEditorStore((s) => s.isExporting);
 
   // Selection / history / panel state for enabled-states + checkmarks.
   const canUndo = useEditorStore((s) => s.canUndo());
@@ -115,63 +114,6 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
       fn();
       setOpen(null);
     };
-  }
-
-  // ── Export ──────────────────────────────────────────────────────────────
-  //
-  // Mirrors Viewport.tsx's `createMediaService` but INVERTS the proxy/master
-  // preference: preview wants `proxy` (fast, low-res) while export wants
-  // `master` (full quality) — see apps/api/src/transcode/worker.ts's own
-  // "master — full quality, used only at export time" note, and
-  // ExportMediaService's doc in the export package.
-  async function handleExportVideo(): Promise<void> {
-    if (exportState?.inProgress) return;
-    setExportState({ inProgress: true, progress: 0 });
-    store.getState().setIsExporting(true);
-
-    try {
-      const state = store.getState();
-      const comp = activeComp(state);
-      const assets = state.document.project.assets;
-
-      const media: ExportMediaService = {
-        resolveAsset(assetId) {
-          const asset = assets.find((a) => a.id === assetId);
-          if (!asset) return undefined;
-          return { id: asset.id, kind: asset.kind as "image" | "video" | "audio", url: asset.master ?? asset.proxy ?? "" };
-        },
-      };
-      const resolveAudioUrl = (assetId: string): string | undefined => assets.find((a) => a.id === assetId)?.master;
-
-      const blob = await Promise.race([
-        exportToMp4(
-          {
-            comp,
-            registry,
-            resolveAudioUrl,
-            onProgress: (done, total) => setExportState({ inProgress: true, progress: done / total }),
-          },
-          defaultExportDeps(media)
-        ),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Export timed out after 5 minutes — this usually means the encoder stalled. Try a shorter composition or check the browser console for a WebGL/WebCodecs error.")), 5 * 60 * 1000)
-        ),
-      ]);
-
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${comp.name || "export"}.mp4`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[Menubar] export failed:", err);
-      window.alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setExportState(null);
-      store.getState().setIsExporting(false);
-    }
   }
 
   // ── Command handlers (mirror the old Toolbar) ──────────────────────────
@@ -237,7 +179,7 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
               <Item label="Open…" shortcut="⌘O" onClick={run(noop)} />
               <Item label="Save" shortcut="⌘S" onClick={run(noop)} />
               <Sep />
-              <Item label="Export Video…" shortcut="⌘⇧E" onClick={run(() => { void handleExportVideo(); })} disabled={exportState?.inProgress} />
+              <Item label="Export Video…" shortcut="⌘⇧E" onClick={run(() => openExportWindow())} disabled={isExporting} />
               <Item label="Export Frame…" onClick={run(noop)} />
             </div>
           )}
@@ -362,12 +304,12 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
 
       <button
         className="btn btn-primary"
-        title={exportState?.inProgress ? `Exporting… ${Math.round((exportState.progress ?? 0) * 100)}%` : "Export / render"}
-        disabled={exportState?.inProgress}
-        onClick={() => void handleExportVideo()}
+        title={isExporting ? "Export in progress" : "Export / render"}
+        disabled={isExporting}
+        onClick={() => openExportWindow()}
       >
-        {exportState?.inProgress ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-        {exportState?.inProgress ? `Exporting… ${Math.round((exportState.progress ?? 0) * 100)}%` : "Export"}
+        {isExporting ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
+        {isExporting ? "Exporting…" : "Export"}
       </button>
     </header>
   );
