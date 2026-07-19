@@ -30,6 +30,7 @@ import { activeComp } from "../store/selectors";
 import { openExportWindow } from "../store/export-window-handle";
 import { createBlankProject } from "../bootstrap/create-project";
 import { downloadProjectFile, pickProjectFile, readProjectFile, ProjectFileError } from "../persistence/project-file";
+import { pickSceneFile, readSceneFile, SceneFileError } from "../persistence/scene-import";
 
 interface MenubarProps {
   theme: "dark" | "light";
@@ -177,6 +178,18 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
   function handleSaveProject(): void {
     downloadProjectFile(store.getState().document.project);
   }
+  async function handleImportScene(): Promise<void> {
+    const dirty = store.getState().canUndo();
+    if (dirty && !window.confirm("Import a scene? It builds a new project — unsaved changes to the current one will be lost.")) return;
+    const file = await pickSceneFile();
+    if (!file) return;
+    try {
+      const project = await readSceneFile(file);
+      store.getState().loadProjectDocument(project);
+    } catch (err) {
+      window.alert(err instanceof SceneFileError ? err.message : `Could not import scene: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   const noop = () => {};
 
@@ -205,6 +218,8 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
               <Item label="New Project" shortcut="⌘N" onClick={run(handleNewProject)} />
               <Item label="Open…" shortcut="⌘O" onClick={run(() => { void handleOpenProject(); })} />
               <Item label="Save" shortcut="⌘S" onClick={run(handleSaveProject)} />
+              <Sep />
+              <Item label="Import Scene…" onClick={run(() => { void handleImportScene(); })} />
               <Sep />
               <Item label="Export Video…" shortcut="⌘⇧E" onClick={run(() => openExportWindow())} disabled={isExporting} />
               <Item label="Export Frame…" onClick={run(noop)} />
