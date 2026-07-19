@@ -12,6 +12,27 @@
 // assetRef.master }`. Keeping this mapping in the editor (which already
 // depends on both `core` and `media`) keeps `media` decoupled from the
 // project document shape.
+//
+// ── FIX IN THIS REVISION: video seek can no longer DEADLOCK an export ────────
+// `seek()` previously had two UNBOUNDED awaits: the "seeked" event and
+// `requestVideoFrameCallback`. A client export (packages/export) awaits a
+// seek for EVERY output frame while the tab is saturated, and either await
+// could hang forever:
+//   • "seeked" only fires if the seek actually MOVES the position. The first
+//     frame of a video clip frequently maps to a time the element is already
+//     parked on (currentTime 0), so setting currentTime to (nearly) the same
+//     value fires NO "seeked" — and the await never resolves. That is the
+//     "freezes at ~49% the moment the video starts, can't even cancel"
+//     report: the frame-pump awaits this seek, so the next frame (where the
+//     export's cancel flag is checked) never runs.
+//   • `requestVideoFrameCallback` can stall for a paused, offscreen element
+//     under decoder pressure.
+// Both waits are now bounded (resolve-when-already-parked + a timeout race),
+// so a stalled seek degrades to a possibly-repeated frame instead of a hard
+// freeze, and Cancel takes effect on the following frame. Live playback is
+// unaffected — it uses TextureManager.get()'s fire-and-forget path, not this
+// awaited one, except for large-jump seeks which only benefit from the same
+// robustness.
 
 export interface MediaAssetRef {
   id: string;
@@ -41,7 +62,7 @@ export interface VideoTextureSource {
   readonly width: number;
   readonly height: number;
   element: HTMLVideoElement;
-  /** Seeks to `frame` (at `fps`) and resolves once that frame is decoded and ready to draw. */
+  /** Seeks to `frame` (at `fps`) and resolves once that frame is decoded and ready to draw — or once a short timeout elapses, so a stalled decode can never hang an awaiting caller (see module doc). */
   seek(frame: number, fps: number): Promise<void>;
   /** The currently-decoded frame as a drawable/uploadable image source. */
   currentFrame(): CanvasImageSource;
@@ -63,6 +84,67 @@ export async function loadImageTexture(asset: MediaAssetRef): Promise<ImageTextu
     bitmap,
     dispose: () => bitmap.close(),
   };
+}
+
+/** One frame's tolerance is `1/(fps)` seconds; "already parked" uses a fraction of that so genuinely distinct export frames are never collapsed, but a no-op re-seek to the current position doesn't wait for a "seeked" that will never fire. */
+const PARKED_EPSILON_SEC = 0.001;
+/** Upper bound on how long a single seek waits for "seeked" before giving up and proceeding with whatever frame is decoded. Generous enough for a real seek on a busy tab, short enough that a genuine stall doesn't look like a freeze. */
+const SEEK_TIMEOUT_MS = 3000;
+/** Upper bound on the wait for a freshly-decoded frame to be PRESENTED (rVFC) after the seek resolves. */
+const PRESENT_TIMEOUT_MS = 1000;
+
+/**
+ * Sets `el.currentTime = time` and resolves when the seek completes — but
+ * NEVER hangs. Resolves immediately when the element is already parked at
+ * `time` and not mid-seek (a no-op re-seek fires no "seeked" event), and
+ * races the "seeked" wait against a timeout for a decoder stall.
+ */
+function waitForSeek(el: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!el.seeking && Math.abs(el.currentTime - time) <= PARKED_EPSILON_SEC) {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      el.removeEventListener("seeked", finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, SEEK_TIMEOUT_MS);
+    el.addEventListener("seeked", finish);
+    try {
+      el.currentTime = time;
+    } catch {
+      finish();
+    }
+  });
+}
+
+/**
+ * Waits for a newly-decoded frame to be presented — `requestVideoFrameCallback`
+ * where available (resolves only once a new frame is actually on screen, so an
+ * upload right after "seeked" doesn't grab the PREVIOUS frame), else a single
+ * rAF settle. Bounded by a timeout so a stalled callback can't hang the caller.
+ */
+function waitForPresentedFrame(el: HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number }): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, PRESENT_TIMEOUT_MS);
+    if (typeof el.requestVideoFrameCallback === "function") {
+      el.requestVideoFrameCallback(() => finish());
+    } else {
+      requestAnimationFrame(() => finish());
+    }
+  });
 }
 
 /**
@@ -95,7 +177,7 @@ export async function createVideoTexture(asset: MediaAssetRef): Promise<VideoTex
 
   // `data:` URLs are what `AssetRef.master` persists for an uploaded asset
   // (asset-upload.ts — they survive JSON/localStorage round-trips, unlike
-  // `blob:` URLs, satisfying exit criterion 10). But `<video src="data:...">`
+  // `blob:` URLs, satisfying exit criterion 10). But `<video src="data:..."`
   // has poor cross-browser support for `currentTime` SEEKING — the
   // `seeked` event (which `seek()` below awaits) may never fire, leaving
   // the element's decoded frame black indefinitely. Re-wrap the SAME bytes
@@ -141,47 +223,13 @@ export async function createVideoTexture(asset: MediaAssetRef): Promise<VideoTex
       await ready;
       const time = frame / fps;
 
-      // Deliberately NO "already close enough, skip the seek" early-return
-      // here. That optimization belongs ONLY to live playback's
-      // fire-and-forget path in TextureManager.get() (which calls the video
-      // element directly, not this method, during sequential playback).
-      // When something AWAITS this seek() — i.e. a client export preparing
-      // one exact frame at a time — it needs the element genuinely parked on
-      // `time`, every time. The old tolerance check read the post-seek
-      // `currentTime` (which lands slightly off the requested time due to
-      // keyframe snapping + float imprecision), so two consecutive export
-      // frames 1/fps apart could fall within half-a-frame tolerance and the
-      // second seek was silently skipped — capturing the SAME frame twice,
-      // or freezing on one frame for the whole export.
-      if (element.currentTime !== time) {
-        await new Promise<void>((resolve) => {
-          const onSeeked = (): void => {
-            element.removeEventListener("seeked", onSeeked);
-            resolve();
-          };
-          element.addEventListener("seeked", onSeeked);
-          element.currentTime = time;
-        });
-      }
-
-      // The "seeked" event fires when the seek POSITION is set — NOT when
-      // the frame at that position has been decoded and is ready to sample
-      // into a texture. Uploading right after "seeked" can grab the
-      // PREVIOUS frame's pixels. `requestVideoFrameCallback` resolves only
-      // once a new frame has actually been presented, closing that gap.
-      // Not universally available (Firefox lacks it as of writing), so fall
-      // back to a microtask+rAF settle, which is empirically enough for the
-      // decode to land in Chromium/Edge/WebKit where it IS the export target.
-      const el = element as HTMLVideoElement & {
-        requestVideoFrameCallback?: (cb: () => void) => number;
-      };
-      if (typeof el.requestVideoFrameCallback === "function") {
-        await new Promise<void>((resolve) => {
-          el.requestVideoFrameCallback!(() => resolve());
-        });
-      } else {
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      }
+      // Park the element on `time` (bounded — never hangs; see waitForSeek's
+      // doc for why a strict "seeked"-only wait deadlocked exports on the
+      // first video frame), then wait for the decoded frame to be presented
+      // before returning so the caller uploads the RIGHT frame, not the
+      // previous one.
+      await waitForSeek(element, time);
+      await waitForPresentedFrame(element as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => number });
     },
     currentFrame() {
       return element;

@@ -4,16 +4,22 @@
 // a FIXED header column (<AudioTrackHeaderRows/>) and a SCROLLABLE clip column
 // (<AudioClipRows/>), both consuming getAudioTracks(comp) at AUDIO_ROW_HEIGHT.
 //
-// ── FIX IN THIS REVISION: clips can now be MOVED, not just resized ──────────
-// The drag `commit` used to loop the patch keys and fire ONE op PER key, all
-// computed from a single captured store snapshot. Since every op rewrites the
-// whole `/audioTracks` array from that (now stale) snapshot, the 2nd key
-// reverted the 1st. For a MOVE (startFrame + endFrame) startFrame snapped back
-// and only endFrame changed — the clip appeared to resize from the right edge
-// instead of moving. Now `commit` applies ONE combined op via
-// `setAudioTrackPropsOp`, so startFrame + endFrame land together (and each
-// drag tick is a single undo entry). Trim-start (startFrame + trimIn) is fixed
-// by the same change. All store/command calls are otherwise unchanged.
+// ── FIX IN THIS REVISION ────────────────────────────────────────────────────
+// Audio move/trim now AUTO-EXTENDS (or shrinks) the composition duration to
+// fit, on pointer-up — exactly like the layer timeline does for visual clips.
+// Before this, dragging an audio clip past the last visual clip widened the
+// lane but never changed `comp.duration`, so preview (playhead loops at
+// comp.duration) and export (frame clock + offline audio buffer both bounded
+// by comp.duration) dropped the audio-only tail. Now `calcCompDuration`
+// (audio-aware, see move-clip-time.ts) is recomputed on release and, if it
+// changed, committed via `setCompDurationOp` — one op = one undo step — so an
+// audio tail past the visuals plays as a blank screen + audio and exports the
+// same. The per-tick move/trim commit (setAudioTrackPropsOp) is unchanged.
+//
+// ── PRIOR REVISION: clips can be MOVED, not just resized ────────────────────
+// The drag `commit` applies ONE combined op via `setAudioTrackPropsOp`, so
+// startFrame + endFrame land together (move) and each drag tick is a single
+// undo entry, instead of the old per-key loop that reverted itself.
 
 import { useCallback, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -23,6 +29,7 @@ import type { AudioTrack } from "core";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { setAudioTrackPropOp, setAudioTrackPropsOp } from "../commands/audio-ops";
+import { calcCompDuration, setCompDurationOp } from "../commands/move-clip-time";
 import {
   audioKindMeta, getAudioTracks, trackDurationFrames, buildWaveformPoints, waveSeed,
 } from "./audio-kinds";
@@ -141,6 +148,16 @@ export function AudioClipRows({
     state.apply(setAudioTrackPropsOp(activeComp(state), id, patch));
   }, [store]);
 
+  // After a drag settles, fit the composition duration to all content (visual
+  // + audio). One op on release = one undo step, and it lets an audio tail
+  // past the last visual clip actually play/export (see module doc).
+  const fitDuration = useCallback(() => {
+    const state = store.getState();
+    const comp = activeComp(state);
+    const fit = calcCompDuration(comp);
+    if (fit !== (comp.duration as number)) state.apply(setCompDurationOp(comp, fit));
+  }, [store]);
+
   function startDrag(e: ReactPointerEvent, track: AudioTrack, mode: DragMode) {
     e.preventDefault();
     e.stopPropagation();
@@ -174,6 +191,8 @@ export function AudioClipRows({
     function onUp() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      // Auto-extend / shrink the sequence to fit content, incl. this audio tail.
+      fitDuration();
       setDragId(null);
     }
     window.addEventListener("pointermove", onMove);

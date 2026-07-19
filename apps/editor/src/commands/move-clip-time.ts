@@ -10,6 +10,18 @@
 // action / one undo step, same reasoning as scaleNode/rotateNode setting
 // the whole `transform` object when position changes alongside scale or
 // rotation).
+//
+// ── CHANGE IN THIS REVISION ────────────────────────────────────────────────
+// `calcCompDuration` is now AUDIO-AWARE. It previously derived the sequence
+// length from `comp.root` (visual clips) only, so audio tracks that ran past
+// the last visual clip were outside `comp.duration` — and since preview
+// (Viewport's playhead loop), the export frame clock, and the export offline
+// audio buffer are ALL bounded by `comp.duration`, that trailing audio was
+// silently dropped from both preview and export. Maxing audio-track ends into
+// the result makes the sequence always cover the furthest-right thing on the
+// timeline (visual OR audio), so an audio-only tail plays as a blank screen +
+// audio in preview and exports identically. Backward compatible: with no audio
+// tracks the result equals the old visual-only value.
 
 import { createId, createOp } from "core";
 import type { Composition, Id, Json, Op, TimeSpan } from "core";
@@ -46,13 +58,32 @@ export function trimClipOp(comp: Composition, nodeId: Id, newStart: number, newD
   });
 }
 
-/** The minimum `comp.duration` that covers all clips' end frames — used by TimelineTrack after a move/trim to auto-extend (or shrink) the composition's playback duration so it always matches the actual content. A composition with no clips returns `toFrame(1)` (never zero — the playback loop divides by duration). */
+/**
+ * The minimum `comp.duration` that covers all content — visual clips AND
+ * audio tracks — used by the timeline after a move/trim to auto-extend (or
+ * shrink) the composition's playback duration so it always matches what's on
+ * the timeline. Maxing in audio ends is what lets an audio-only tail past the
+ * last visual clip actually play (blank screen + audio) in both preview and
+ * export instead of being cut at the visual end. A composition with no content
+ * at all returns 1 (never zero — the playback loop and export clock divide by
+ * duration).
+ *
+ * An audio track's end is `endFrame` when set, else `startFrame + 150` — the
+ * same 150-frame fallback the audio timeline UI (`trackDurationFrames`) and
+ * the export audio scheduler use for an untrimmed clip.
+ */
 export function calcCompDuration(comp: Composition): number {
-  if (comp.root.length === 0) return 1;
-  return Math.max(
-    1,
-    ...comp.root.map((n) => (n.time.start as number) + (n.time.duration as number))
-  );
+  const audioTracks =
+    (comp as { audioTracks?: Array<{ startFrame: number; endFrame?: number }> }).audioTracks ?? [];
+
+  const visualEnd = comp.root.length
+    ? Math.max(...comp.root.map((n) => (n.time.start as number) + (n.time.duration as number)))
+    : 0;
+  const audioEnd = audioTracks.length
+    ? Math.max(...audioTracks.map((t) => t.endFrame ?? t.startFrame + 150))
+    : 0;
+
+  return Math.max(1, visualEnd, audioEnd);
 }
 
 /** Sets `comp.duration` directly — emitted after a move/trim op when the new clip end extends beyond (or allows shrinking of) the current comp duration. Fully undoable via the same op-log as every other change. */
