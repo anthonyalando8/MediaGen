@@ -1,8 +1,17 @@
 // apps/editor/src/store/document.ts
 //
 // Tier 1 · DOCUMENT (persisted, undoable) — Deliverable 09 §9.2.
+//
+// ── CHANGE IN THIS REVISION ────────────────────────────────────────────────
+// Added `loadProjectDocument(project)` — replaces the ENTIRE document with a
+// freshly loaded/created project (File ▸ Open a `.seabytes` file, or New
+// Project). It resets the op-log + redo cursor (an imported document starts a
+// clean undo history) and clears ephemeral state that referenced the OLD
+// document — selection ids and the playhead — so nothing dangles. main.tsx's
+// existing Tier-1 subscription persists the swapped-in project to localStorage
+// automatically, exactly as it does for any other document change.
 
-import { applyOp, invertOp } from "core";
+import { applyOp, invertOp, toFrame } from "core";
 import type { AssetRef, Composition, Id, Op, Project } from "core";
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
@@ -21,6 +30,16 @@ export interface DocumentSlice {
   redo(): void;
   canUndo(): boolean;
   canRedo(): boolean;
+  /**
+   * Replaces the whole document with `project` (File ▸ Open / New Project).
+   * Clears undo history (fresh op-log + cursor) and resets ephemeral state
+   * that pointed at the previous document: selection is cleared, playback is
+   * paused, and the playhead returns to frame 0 — otherwise a stale selected
+   * node id or an out-of-range playhead from the old project would linger.
+   * The Tier-1 persistence subscription (main.tsx) saves the new project to
+   * localStorage on the next tick, same as any edit.
+   */
+  loadProjectDocument(project: Project): void;
   /**
    * Appends `asset` to `project.assets` (core's `AssetRef`, project.ts) —
    * MediaPalette's upload handler (exit criterion 02), after building the
@@ -58,15 +77,6 @@ export interface DocumentSlice {
  * shape (log + cursor) but dispatches by `compId` across `project.comps`,
  * since a Project holds multiple compositions while `History<T>` is
  * per-state.
- *
- * DEVIATION from Deliverable 09's "Zustand+Immer store": `core`'s domain
- * types (`Composition`/`Node`/`Channel`/`Json`) are recursive enough that
- * Immer's `Draft<T>` mapped type triggers `TS2589: Type instantiation is
- * excessively deep` on assignment. Since `applyOp`/`invertOp` already
- * return fully-immutable results, this slice (and the rest of the store)
- * uses plain Zustand `set()` with manual immutable spreads instead —
- * `immer` remains available for a future slice that needs deep-mutation
- * ergonomics over a *non*-`core`-shaped sub-tree.
  */
 export function createDocumentSlice(initialProject: Project): StateCreator<EditorState, [], [], DocumentSlice> {
   return (set, get) => ({
@@ -122,6 +132,15 @@ export function createDocumentSlice(initialProject: Project): StateCreator<Edito
 
     canRedo() {
       return get().document.cursor < get().document.opLog.length;
+    },
+
+    loadProjectDocument(project) {
+      set({ document: { project, opLog: [], cursor: 0 } });
+      // Reset ephemeral state that referenced the previous document.
+      const s = get();
+      s.select([]);
+      s.pause();
+      s.setPlayhead(toFrame(0));
     },
 
     addAsset(asset) {

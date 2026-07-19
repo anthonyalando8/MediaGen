@@ -10,7 +10,10 @@
 // from the store, which <ExportWindow> sets) so it disables + shows a
 // spinner while a render is in flight.
 //
-// Everything else (File/Edit/View/Insert/Help menus, brand, save indicator,
+// File ▸ New / Open… / Save are now wired to project-file.ts (save the whole
+// document to an external `.seabytes` file; open one back and resume editing).
+//
+// Everything else (Edit/View/Insert/Help menus, brand, save indicator,
 // theme toggle, Preview) is untouched.
 
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +28,8 @@ import { deleteSelection } from "../store/delete-selection";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 import { openExportWindow } from "../store/export-window-handle";
+import { createBlankProject } from "../bootstrap/create-project";
+import { downloadProjectFile, pickProjectFile, readProjectFile, ProjectFileError } from "../persistence/project-file";
 
 interface MenubarProps {
   theme: "dark" | "light";
@@ -151,6 +156,28 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
     state.select(activeComp(state).root.map((n) => n.id));
   }
 
+  // ── File: New / Open / Save (project-file.ts) ──────────────────────────
+  function handleNewProject(): void {
+    const dirty = store.getState().canUndo();
+    if (dirty && !window.confirm("Start a new project? Unsaved changes to the current one will be lost.")) return;
+    store.getState().loadProjectDocument(createBlankProject());
+  }
+  async function handleOpenProject(): Promise<void> {
+    const dirty = store.getState().canUndo();
+    if (dirty && !window.confirm("Open another project? Unsaved changes to the current one will be lost.")) return;
+    const file = await pickProjectFile();
+    if (!file) return;
+    try {
+      const project = await readProjectFile(file);
+      store.getState().loadProjectDocument(project);
+    } catch (err) {
+      window.alert(err instanceof ProjectFileError ? err.message : `Could not open project: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  function handleSaveProject(): void {
+    downloadProjectFile(store.getState().document.project);
+  }
+
   const noop = () => {};
 
   return (
@@ -175,9 +202,9 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
           </button>
           {open === "file" && (
             <div className="menubar__dropdown" role="menu">
-              <Item label="New Project" shortcut="⌘N" onClick={run(noop)} />
-              <Item label="Open…" shortcut="⌘O" onClick={run(noop)} />
-              <Item label="Save" shortcut="⌘S" onClick={run(noop)} />
+              <Item label="New Project" shortcut="⌘N" onClick={run(handleNewProject)} />
+              <Item label="Open…" shortcut="⌘O" onClick={run(() => { void handleOpenProject(); })} />
+              <Item label="Save" shortcut="⌘S" onClick={run(handleSaveProject)} />
               <Sep />
               <Item label="Export Video…" shortcut="⌘⇧E" onClick={run(() => openExportWindow())} disabled={isExporting} />
               <Item label="Export Frame…" onClick={run(noop)} />
