@@ -37,10 +37,25 @@ def generate_captions(wav_path: pathlib.Path, out_dir: pathlib.Path, cfg: dict,
 # ─────────────────────────────────────────────────────────────────────────────
 # Transcription
 # ─────────────────────────────────────────────────────────────────────────────
+_WHISPER_CACHE: dict = {}
+
+
+def load_whisper(model_size: str):
+    """Load (and cache) a whisper-timestamped model, reused across calls so the
+    server warms it once at startup instead of reloading on every job."""
+    import whisper_timestamped as wt
+    model = _WHISPER_CACHE.get(model_size)
+    if model is None:
+        print(f"[captions] Loading whisper model '{model_size}' (once)…")
+        model = wt.load_model(model_size)
+        _WHISPER_CACHE[model_size] = model
+    return model
+
+
 def _transcribe(wav_path: pathlib.Path, model_size: str, language: str) -> dict:
     import whisper_timestamped as wt
-    print(f"[captions] Transcribing with whisper-timestamped (model={model_size})…")
-    model = wt.load_model(model_size)
+    model = load_whisper(model_size)
+    print(f"[captions] Transcribing (model={model_size})…")
     audio = wt.load_audio(str(wav_path))
     return wt.transcribe(model, audio, language=language,
                          detect_disfluencies=False, verbose=False)
