@@ -107,11 +107,18 @@ def build_timeline(
     #    and independent of ASR token drift. Assumes voice.wav is the per-beat
     #    WAVs concatenated (so cumulative durations = beat boundaries).
     all_tw = _flatten_transcript_words(transcript)
+    # voice.wav is the per-beat WAVs concatenated with a fixed silence gap
+    # between beats (tts.synthesize's silence_gap). whisper timed the words
+    # against voice.wav, so each beat's true start there includes the
+    # accumulated gaps. Omitting them made per-beat-relative word times drift
+    # LATE by gap*beat_index — captions lagging the narrator. gap_s MUST match
+    # tts.synthesize's silence gap (0.40s).
+    gap_s = float(cfg.get("tts", {}).get("gap_s", 0.40))
     starts = []
     acc = 0.0
     for d in durations_s:
         starts.append(acc)
-        acc += d
+        acc += d + gap_s
     n_beats_dur = len(durations_s)
 
     def _beat_of(t: float) -> int:

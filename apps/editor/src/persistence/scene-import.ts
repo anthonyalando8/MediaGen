@@ -64,6 +64,11 @@ interface SceneBeat {
   emphasis_times?: SceneWordTime[];
   visual?: SceneVisual;                 // NEW (v2): b-roll behind the text
   audio?: { asset_id?: string };        // NEW (v2): this beat's voiceover asset
+  transition?: string;                  // scene-motion: transition INTO this beat
+  entry_vector?: { x: number; y: number; scale: number };  // camera exit carry (whip angle)
+  camera?: string;                      // scene-motion: camera move (push_in/pull_out/tilt_up/…)
+  background?: string;                  // scene-motion: bg treatment (glow/noise/…)
+  pattern_interrupt?: string | null;    // scene-motion: punch effect (chroma/…)
 }
 interface SceneAsset {
   id: string;
@@ -98,6 +103,130 @@ interface ResolvedVisual {
   kind: "image" | "video";
   fit: "cover" | "contain" | "fill";
   opacity: number;
+}
+
+// ── Transitions (slice 2) ────────────────────────────────────────────────────
+
+interface TransitionDef { preset: string; props: Record<string, unknown>; }
+
+/** Whip-pan angle (radians) from the previous beat's camera exit vector. */
+function whipAngle(v?: { x: number; y: number }): number {
+  if (!v || (v.x === 0 && v.y === 0)) return 0;
+  return Math.atan2(v.y, v.x);
+}
+
+/**
+ * Map a scene `transition` name to a registered editor transition preset
+ * (packages/effects/src/transitions). Returns null for `cut`/unknown → a hard
+ * cut with no overlap. `bg` colours the dip; `entry` aims the whip.
+ */
+function mapTransition(name: string | undefined, bg: ColorOKLCH, entry?: { x: number; y: number }): TransitionDef | null {
+  switch ((name ?? "").toLowerCase()) {
+    case "slam_cut":
+    case "slam":
+      return { preset: "slam", props: { zoomStart: 1.4, flashIntensity: 0.8 } };
+    case "dip_black":
+    case "dip":
+      return { preset: "dip", props: { color: bg } };
+    case "flash":
+      return { preset: "dip", props: { color: { l: 1, c: 0, h: 0 } } }; // dip to white
+    case "whip_pan":
+    case "whip":
+      return { preset: "whip", props: { angle: whipAngle(entry), blurAmount: 0.06 } };
+    case "blur_wipe":
+    case "wipe":
+      return { preset: "wipe-linear", props: { angle: 0, feather: 0.09 } };
+    case "fade":
+      return { preset: "cross-dissolve", props: {} };
+    default:
+      return null; // cut / unknown → hard cut
+  }
+}
+
+// ── Camera moves + effects (slice 3) ─────────────────────────────────────────
+
+/**
+ * Camera move → group transform channels. Applied to the beat GROUP so the
+ * whole beat (text + b-roll) moves together. Uses the same proven keyframed
+ * `channels` mechanism as the word-sync/Ken Burns work — no effect uniforms.
+ */
+function cameraChannels(camera: string | undefined, start: number, dur: number, W: number, H: number): any[] {
+  const end = start + dur;
+  const scaleCh = (v0: number, v1: number, fast = false) => ({
+    id: createId(),
+    path: "transform.scale",
+    type: "vec2" as const,
+    keys: fast
+      ? [
+          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "linear" as const },
+          { frame: toFrame(start + Math.min(6, Math.floor(dur * 0.3))), value: { x: v1, y: v1 }, interp: "linear" as const },
+        ]
+      : [
+          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "linear" as const },
+          { frame: toFrame(end), value: { x: v1, y: v1 }, interp: "linear" as const },
+        ],
+  });
+  const posY = (y0: number, y1: number) => ({
+    id: createId(),
+    path: "transform.position",
+    type: "vec3" as const,
+    keys: [
+      { frame: toFrame(start), value: { x: 0, y: y0, z: 0 }, interp: "linear" as const },
+      { frame: toFrame(end), value: { x: 0, y: y1, z: 0 }, interp: "linear" as const },
+    ],
+  });
+  switch ((camera ?? "").toLowerCase()) {
+    case "push_in":
+      return [scaleCh(1.0, 1.05)];
+    case "pull_out":
+      return [scaleCh(1.06, 1.0)];
+    case "snap_zoom":
+      return [scaleCh(1.12, 1.0, true)];
+    case "tilt_up":
+      return [posY(Math.round(H * 0.03), 0)];
+    case "handheld":
+    case "micro_shake": {
+      const amp = Math.max(2, Math.round(W * 0.006));
+      const fr = [0, 0.14, 0.29, 0.43, 0.57, 0.71, 0.86, 1];
+      const pat = [[0, 0], [1, -1], [-1, 1], [1, 1], [-1, -1], [1, 0], [0, 1], [0, 0]];
+      return [
+        {
+          id: createId(),
+          path: "transform.position",
+          type: "vec3" as const,
+          keys: fr.map((f, i) => ({
+            frame: toFrame(start + Math.round(dur * f)),
+            value: { x: pat[i][0] * amp, y: pat[i][1] * amp, z: 0 },
+            interp: "linear" as const,
+          })),
+        },
+      ];
+    }
+    default:
+      return [];
+  }
+}
+
+/** Background treatment → a static effect on the b-roll media node (plain uniforms, no time animation needed). */
+function bgEffect(bg: string | undefined): any | null {
+  switch ((bg ?? "").toLowerCase()) {
+    case "glow":
+      return { id: createId(), effect: "glow", enabled: true, props: { threshold: 0.55, intensity: 0.35, radius: 5 } };
+    case "noise":
+      return { id: createId(), effect: "film-grain", enabled: true, props: { amount: 0.08, seed: 7 } };
+    default:
+      return null;
+  }
+}
+
+/** Pattern-interrupt → a stylistic effect on the beat group (static uniform). */
+function patternEffect(pi: string | null | undefined): any | null {
+  switch ((pi ?? "").toLowerCase()) {
+    case "chroma":
+      return { id: createId(), effect: "chromatic-aberration", enabled: true, props: { amount: 4 } };
+    default:
+      return null;
+  }
 }
 
 export class SceneFileError extends Error {
@@ -202,17 +331,36 @@ function textNode(opts: {
   duration: number;
   tracking?: number;
   fillChannel?: { keys: { frame: number; value: ColorOKLCH }[] };
+  /** Per-word opacity reveal (word-sync). scalar keys. */
+  opacityKeys?: { frame: number; value: number }[];
+  /** Emphasis scale pop. vec2 keys. */
+  scaleKeys?: { frame: number; value: { x: number; y: number } }[];
 }): Node {
-  const channels = opts.fillChannel
-    ? [
-        {
-          id: createId(),
-          path: "props.fill",
-          type: "color" as const,
-          keys: opts.fillChannel.keys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
-        },
-      ]
-    : [];
+  const channels: any[] = [];
+  if (opts.fillChannel) {
+    channels.push({
+      id: createId(),
+      path: "props.fill",
+      type: "color" as const,
+      keys: opts.fillChannel.keys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+    });
+  }
+  if (opts.opacityKeys) {
+    channels.push({
+      id: createId(),
+      path: "opacity",
+      type: "scalar" as const,
+      keys: opts.opacityKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+    });
+  }
+  if (opts.scaleKeys) {
+    channels.push({
+      id: createId(),
+      path: "transform.scale",
+      type: "vec2" as const,
+      keys: opts.scaleKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+    });
+  }
   return {
     id: createId(),
     kind: "text",
@@ -250,6 +398,10 @@ function mediaNode(opts: {
   opacity: number;
   start: number;
   duration: number;
+  /** Ken Burns / motion channels (scale vec2, position vec3). */
+  channels?: any[];
+  /** Static effects (background treatment). */
+  effects?: any[];
 }): Node {
   const props = opts.kind === "video" ? { fit: opts.fit, volume: 0 } : { fit: opts.fit };
   return {
@@ -262,7 +414,8 @@ function mediaNode(opts: {
     time: { start: toFrame(opts.start), duration: toFrame(opts.duration) },
     origin: "user",
     props,
-    channels: [],
+    channels: opts.channels ?? [],
+    ...(opts.effects && opts.effects.length ? { effects: opts.effects } : {}),
     source: { assetId: opts.assetId },
   } as unknown as Node;
 }
@@ -278,8 +431,15 @@ function buildBeatGroup(
   size: { width: number; height: number },
   palette: { accent: ColorOKLCH; spike: ColorOKLCH; fg: ColorOKLCH },
   brand: string,
-  visual?: ResolvedVisual
+  visual: ResolvedVisual | undefined,
+  lingerFrames: number,
+  transitionIn: { preset: string; durationF: Frame; props: Record<string, unknown> } | undefined
 ): Node {
+  // Extend the visual tail so this beat's timespan OVERLAPS the next one — the
+  // evaluator only renders a transition across an actual overlap window. Audio
+  // stays sequential (tracks aren't extended) and word-sync keyframes use
+  // absolute frames, so nothing desyncs.
+  durationFrames = durationFrames + lingerFrames;
   const W = size.width;
   const margin = Math.round(W * 0.08);
   const colWidth = W - margin * 2;
@@ -287,6 +447,33 @@ function buildBeatGroup(
 
   // B-roll visual behind the text (z-order 0 = bottom of the group).
   if (visual) {
+    // Ken Burns: slow zoom + drift, direction alternating per beat for variety.
+    const even = beatIndex % 2 === 0;
+    const s0 = even ? 1.06 : 1.16;
+    const s1 = even ? 1.16 : 1.06;
+    const dx = (even ? 1 : -1) * Math.round(W * 0.02);
+    const dy = (even ? 1 : -1) * Math.round(size.height * 0.012);
+    const end = startFrame + durationFrames;
+    const kenBurns = [
+      {
+        id: createId(),
+        path: "transform.scale",
+        type: "vec2" as const,
+        keys: [
+          { frame: toFrame(startFrame), value: { x: s0, y: s0 }, interp: "linear" as const },
+          { frame: toFrame(end), value: { x: s1, y: s1 }, interp: "linear" as const },
+        ],
+      },
+      {
+        id: createId(),
+        path: "transform.position",
+        type: "vec3" as const,
+        keys: [
+          { frame: toFrame(startFrame), value: { x: 0, y: 0, z: 0 }, interp: "linear" as const },
+          { frame: toFrame(end), value: { x: dx, y: dy, z: 0 }, interp: "linear" as const },
+        ],
+      },
+    ];
     children.push(
       mediaNode({
         assetId: visual.assetId,
@@ -295,6 +482,8 @@ function buildBeatGroup(
         opacity: visual.opacity,
         start: startFrame,
         duration: durationFrames,
+        channels: kenBurns,
+        effects: bgEffect(beat.background) ? [bgEffect(beat.background)] : undefined,
       })
     );
   }
@@ -400,7 +589,7 @@ function buildBeatGroup(
       const y = bodyTop + li * lineH;
       for (const w of ln) {
         const baseFill = w.emphasis ? palette.spike : palette.fg;
-        // Spoken-word highlight: fg → spike flash → fg, timed to the word.
+        // Spoken-word colour highlight: fg → spike flash → fg, timed to the word.
         const fillChannel =
           !w.emphasis && w.startAbs !== undefined && w.endAbs !== undefined
             ? {
@@ -410,6 +599,24 @@ function buildBeatGroup(
                   { frame: Math.max(w.startAbs + 3, w.endAbs), value: palette.fg },
                 ],
               }
+            : undefined;
+        // Word-sync reveal: dim until spoken, then full (past words stay readable).
+        const opacityKeys =
+          w.startAbs !== undefined
+            ? [
+                { frame: startFrame, value: 0.45 },
+                { frame: Math.max(startFrame, w.startAbs - 1), value: 0.45 },
+                { frame: w.startAbs + 2, value: 1 },
+              ]
+            : undefined;
+        // Emphasis words get a scale pop as they land.
+        const scaleKeys =
+          w.emphasis && w.startAbs !== undefined
+            ? [
+                { frame: w.startAbs, value: { x: 1, y: 1 } },
+                { frame: w.startAbs + 2, value: { x: 1.08, y: 1.08 } },
+                { frame: w.startAbs + 9, value: { x: 1, y: 1 } },
+              ]
             : undefined;
         children.push(
           textNode({
@@ -424,6 +631,8 @@ function buildBeatGroup(
             start: startFrame,
             duration: durationFrames,
             fillChannel,
+            opacityKeys,
+            scaleKeys,
           })
         );
         x += w.width + space;
@@ -451,6 +660,29 @@ function buildBeatGroup(
     );
   }
 
+  // Group fade-IN only, and ONLY when no real transition handles the entrance
+  // (a transitionIn already brings the beat on — a fade-in on top double-dips).
+  const fadeF = Math.min(6, Math.max(2, Math.round(durationFrames * 0.08)));
+  const groupChannels: any[] = [];
+  if (!transitionIn) {
+    groupChannels.push({
+      id: createId(),
+      path: "opacity",
+      type: "scalar" as const,
+      keys: [
+        { frame: toFrame(startFrame), value: 0, interp: "linear" as const },
+        { frame: toFrame(startFrame + fadeF), value: 1, interp: "linear" as const },
+      ],
+    });
+  }
+  // Camera move on the whole beat (text + b-roll move together).
+  groupChannels.push(...cameraChannels(beat.camera, startFrame, durationFrames, W, size.height));
+
+  // Pattern-interrupt stylistic effect on the beat group.
+  const groupEffects: any[] = [];
+  const pe = patternEffect(beat.pattern_interrupt);
+  if (pe) groupEffects.push(pe);
+
   return {
     id: createId(),
     kind: "group",
@@ -461,8 +693,10 @@ function buildBeatGroup(
     time: { start: toFrame(startFrame), duration: toFrame(durationFrames) },
     origin: "user",
     props: {},
-    channels: [],
+    channels: groupChannels,
     children,
+    ...(groupEffects.length ? { effects: groupEffects } : {}),
+    ...(transitionIn ? { transitionIn } : {}),
   } as Node;
 }
 
@@ -507,10 +741,21 @@ export function compileSceneToProject(scene: SceneDoc): Project {
 
   const root: Node[] = [];
   const audioTracks: AudioTrack[] = [];
+
+  // Pre-pass: per-beat frame durations, the transition INTO each beat, and the
+  // overlap window each boundary needs (transition length, clamped to half of
+  // the shorter neighbouring beat so it never swallows a whole beat).
+  const durs = beats.map((b) => Math.max(1, Math.round(((b.duration_ms ?? 4000) / 1000) * fps)));
+  const transDefs = beats.map((b, i) => (i === 0 ? null : mapTransition(b.transition, background, beats[i - 1].entry_vector)));
+  const overlaps = beats.map((b, i) => {
+    if (i === 0 || !transDefs[i]) return 0;
+    return Math.max(2, Math.min(Math.round(fps * 0.4), Math.floor(durs[i] * 0.5), Math.floor(durs[i - 1] * 0.5)));
+  });
+
   let cursor = 0;
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
-    const durFrames = Math.max(1, Math.round(((beat.duration_ms ?? 4000) / 1000) * fps));
+    const durFrames = durs[i];
 
     // Resolve this beat's visual against the asset library.
     let visual: ResolvedVisual | undefined;
@@ -525,11 +770,19 @@ export function compileSceneToProject(scene: SceneDoc): Project {
       };
     }
 
-    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual));
+    // Linger into the next beat by that boundary's overlap; transition in from
+    // the previous beat using this beat's own transition.
+    const linger = i < beats.length - 1 ? overlaps[i + 1] : 0;
+    const def = transDefs[i];
+    const transitionIn =
+      def && overlaps[i] > 0
+        ? { preset: def.preset, durationF: toFrame(overlaps[i]) as Frame, props: def.props }
+        : undefined;
 
-    // One voiceover AudioTrack per beat, placed at the beat's start (each beat's
-    // audio asset starts at 0 — no VO offset math needed since word_times are
-    // already beat-relative).
+    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, linger, transitionIn));
+
+    // One voiceover AudioTrack per beat, placed at the beat's start (sequential;
+    // NOT extended by linger, so voiceovers never overlap).
     const aid = beat.audio?.asset_id;
     if (aid && assetKind.get(aid) === "audio") {
       audioTracks.push({

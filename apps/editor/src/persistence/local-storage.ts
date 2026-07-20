@@ -10,6 +10,14 @@
 // `apps/api`'s project/asset routes (Week 8) are the multi-user/server-side
 // persistence path for a future P2 — this module is the P1 local path and
 // doesn't depend on it.
+//
+// QUOTA NOTE: an AI-generated / imported scene embeds its media (voiceover +
+// stock images) as data: URLs, so a single project can be several MB — well
+// past localStorage's ~5 MB budget. `saveProject` therefore treats a quota
+// failure as NON-FATAL: the project stays live in memory (the user can edit
+// and export normally), it just isn't auto-persisted across a reload. Without
+// this guard the setItem throw propagated out of the Tier-1 store subscription
+// and surfaced as a bogus unrelated error in the UI.
 
 import { ProjectSchema } from "schema";
 import type { Project } from "core";
@@ -27,9 +35,42 @@ function defaultStorage(): KeyValueStorage | undefined {
   return typeof globalThis.localStorage === "undefined" ? undefined : globalThis.localStorage;
 }
 
-/** Serializes `project` to JSON and writes it to `storage`. No-op if `storage` is unavailable (e.g. SSR/tests with no DOM and no fake provided). */
+function isQuotaError(e: unknown): boolean {
+  return (
+    e instanceof DOMException &&
+    (e.name === "QuotaExceededError" ||
+      e.name === "NS_ERROR_DOM_QUOTA_REACHED" || // Firefox
+      e.code === 22 ||
+      e.code === 1014)
+  );
+}
+
+let _warnedQuota = false;
+
+/**
+ * Serializes `project` to JSON and writes it to `storage`. No-op if `storage`
+ * is unavailable (SSR/tests). A quota overflow (large embedded-media project)
+ * is caught and logged once — the in-memory document is unaffected; only
+ * auto-persist-across-reload is skipped. Other errors are re-thrown.
+ */
 export function saveProject(project: Project, storage: KeyValueStorage | undefined = defaultStorage()): void {
-  storage?.setItem(STORAGE_KEY, JSON.stringify(project));
+  if (!storage) return;
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(project));
+  } catch (e) {
+    if (isQuotaError(e)) {
+      if (!_warnedQuota) {
+        _warnedQuota = true;
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[persistence] Project too large for localStorage (embedded media) — " +
+            "keeping it in memory but NOT auto-saving across reload. Use File ▸ Save to write a .seabytes file."
+        );
+      }
+      return;
+    }
+    throw e;
+  }
 }
 
 /**
@@ -57,15 +98,11 @@ export function loadProject(storage: KeyValueStorage | undefined = defaultStorag
 /**
  * Collapses duplicate-id entries in `project.assets` to the LAST one for
  * each id (same "most recent write wins" semantics as `document.ts`'s
- * `addAsset` upsert). Belt-and-suspenders: `addAsset` itself no longer
- * produces duplicates, but this heals any project that was saved to
- * localStorage BEFORE that fix landed — without this, a project corrupted
- * once keeps replaying the same React "duplicate key" warning and doubled
- * list entry on every load, forever, with no way to self-correct.
+ * `addAsset` upsert).
  */
 function dedupeAssetsById(project: Project): Project {
   const byId = new Map(project.assets.map((asset) => [asset.id, asset]));
-  if (byId.size === project.assets.length) return project; // fast path: nothing to heal
+  if (byId.size === project.assets.length) return project;
   return { ...project, assets: [...byId.values()] };
 }
 
