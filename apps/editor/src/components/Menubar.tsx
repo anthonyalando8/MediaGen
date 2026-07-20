@@ -31,6 +31,7 @@ import { openExportWindow } from "../store/export-window-handle";
 import { createBlankProject } from "../bootstrap/create-project";
 import { downloadProjectFile, pickProjectFile, readProjectFile, ProjectFileError } from "../persistence/project-file";
 import { pickSceneFile, readSceneFile, SceneFileError } from "../persistence/scene-import";
+import { openAIScene } from "../store/ai-scene-handle";
 
 interface MenubarProps {
   theme: "dark" | "light";
@@ -219,6 +220,7 @@ export function Menubar({ theme, onToggleTheme }: MenubarProps) {
               <Item label="Open…" shortcut="⌘O" onClick={run(() => { void handleOpenProject(); })} />
               <Item label="Save" shortcut="⌘S" onClick={run(handleSaveProject)} />
               <Sep />
+              <Item label="Generate AI Scene…" onClick={run(() => openAIScene())} />
               <Item label="Import Scene…" onClick={run(() => { void handleImportScene(); })} />
               <Sep />
               <Item label="Export Video…" shortcut="⌘⇧E" onClick={run(() => openExportWindow())} disabled={isExporting} />

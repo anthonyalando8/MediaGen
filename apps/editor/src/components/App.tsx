@@ -15,6 +15,7 @@ import { ViewportStatusBar } from "./ViewportStatusBar";
 import { InspectorPanel } from "./InspectorPanel";
 import { TimelinePlaceholder } from "./TimelinePlaceholder";
 import { ExportWindow } from "./ExportWindow";
+import { AISceneModal } from "./AISceneModal";
 import { useUndoRedoShortcuts } from "../store/use-undo-redo-shortcuts";
 import { useDeleteShortcut } from "../store/use-delete-shortcut";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -157,6 +158,9 @@ export function App() {
 
     {/* Full-screen export "render page" — null while closed. */}
     <ExportWindow />
+
+    {/* AI scene generator modal — null while closed. */}
+    <AISceneModal />
     </AudioSelectionProvider>
   );
 }

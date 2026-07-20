@@ -17,3 +17,5 @@ whisper-timestamped
 # openai-whisper is pulled in by whisper-timestamped, but pin it explicitly
 # in case you need to manage the version
 openai-whisper
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.27,<1.0
