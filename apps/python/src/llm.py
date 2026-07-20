@@ -89,6 +89,7 @@ def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
                 ["ollama", "run", model, prompt],
                 text=True,
                 stderr=subprocess.DEVNULL,
+                timeout=180,   # hard guard: a wedged model call fails → retry, not hang
             )
             data = _parse_json(raw.strip())
             _validate(data)

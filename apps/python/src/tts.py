@@ -143,6 +143,27 @@ def _speed_for_beat(beat: dict, base_speed: float) -> float:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Model cache — load Kokoro ONCE and reuse (server warms it at startup so the
+# first generate isn't cold; the CLI benefits across a --batch run too).
+# ─────────────────────────────────────────────────────────────────────────────
+
+_KOKORO = None
+
+
+def get_kokoro():
+    """Return a cached Kokoro instance, loading the model files on first use."""
+    global _KOKORO
+    if _KOKORO is None:
+        from kokoro_onnx import Kokoro
+        onnx_path, voices_path = _find_model_files()
+        print(f"[tts] Loading Kokoro (once)…")
+        print(f"[tts]   onnx:   {onnx_path}")
+        print(f"[tts]   voices: {voices_path}")
+        _KOKORO = Kokoro(str(onnx_path), str(voices_path))
+    return _KOKORO
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -159,17 +180,9 @@ def synthesize(
 
     Returns (voice_path, [beat_0.wav, beat_1.wav, …])
     """
-    from kokoro_onnx import Kokoro
-
-    onnx_path, voices_path = _find_model_files()
-
     chosen_voice, base_speed = _resolve_voice(script, voice, speed)
-
-    print(f"[tts] Loading Kokoro — voice='{chosen_voice}'  base_speed={base_speed}")
-    print(f"[tts]   onnx:   {onnx_path}")
-    print(f"[tts]   voices: {voices_path}")
-
-    kokoro = Kokoro(str(onnx_path), str(voices_path))
+    print(f"[tts] voice='{chosen_voice}'  base_speed={base_speed}")
+    kokoro = get_kokoro()
 
     silence_gap = np.zeros(int(sample_rate * 0.40), dtype=np.float32)  # 400 ms gap
     all_samples: list[np.ndarray] = []

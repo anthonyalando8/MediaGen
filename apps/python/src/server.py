@@ -39,6 +39,7 @@ import sys
 import pathlib
 import threading
 import uuid
+import logging
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 
@@ -73,6 +74,9 @@ def _load_cfg() -> dict:
 
 CFG = _load_cfg()
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+LOG = logging.getLogger("scene")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job registry (in-memory)
@@ -82,6 +86,11 @@ CFG = _load_cfg()
 _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
 _EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+# Bound the registry so finished jobs (each holding a multi-MB scene payload)
+# don't leak memory. When over capacity, evict the oldest non-running jobs.
+_MAX_JOBS = 40
+import time as _time
 
 _STEPS = [
     "Writing script",
@@ -99,17 +108,33 @@ def _set(job_id: str, **fields) -> None:
         job.update(fields)
 
 
+def _evict_if_needed() -> None:
+    """Drop oldest finished (done/error) jobs once over capacity. Caller holds no lock."""
+    with _JOBS_LOCK:
+        if len(_JOBS) <= _MAX_JOBS:
+            return
+        finished = sorted(
+            (jid for jid, j in _JOBS.items() if j.get("state") in ("done", "error")),
+            key=lambda jid: _JOBS[jid].get("created", 0.0),
+        )
+        for jid in finished[: len(_JOBS) - _MAX_JOBS]:
+            _JOBS.pop(jid, None)
+
+
 def _mark_step(job_id: str, step: int) -> None:
     """step is 1-based; pct spans 0..95 across steps (100 only when done)."""
     pct = int(round((step - 1) / _TOTAL * 95))
     _set(job_id, state="running", step=step, total_steps=_TOTAL,
-         label=_STEPS[step - 1], pct=pct)
+         label=_STEPS[step - 1], pct=pct, step_started=_time.time())
+    LOG.info("job %s · step %d/%d · %s", job_id[:8], step, _TOTAL, _STEPS[step - 1])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline worker
 # ─────────────────────────────────────────────────────────────────────────────
 def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
+    started = _time.time()
+    LOG.info("job %s · START topic=%r resolve_visuals=%s", job_id[:8], topic, resolve_visuals)
     try:
         run_id, run_dir = make_run_dir(CFG["paths"]["workspace"])
         _set(job_id, run_id=run_id, run_dir=str(run_dir))
@@ -153,10 +178,13 @@ def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 
+        elapsed = round(_time.time() - started, 1)
         _set(job_id, state="done", step=_TOTAL, total_steps=_TOTAL,
              label="Ready", pct=100, scene=scene,
-             title=script.get("title", topic))
+             title=script.get("title", topic), elapsed_s=elapsed)
+        LOG.info("job %s · DONE in %ss (%d beats)", job_id[:8], elapsed, len(scene.get("beats", [])))
     except Exception as e:
+        LOG.error("job %s · FAILED after %ss: %s", job_id[:8], round(_time.time() - started, 1), e)
         traceback.print_exc()
         _set(job_id, state="error", error=f"{type(e).__name__}: {e}", pct=0)
 
@@ -165,6 +193,25 @@ def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
 # API
 # ─────────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="MediaGen scene API")
+
+_MODELS_WARM = False
+
+
+@app.on_event("startup")
+def _warm_models() -> None:
+    """Load the heavy models once at boot so the first job isn't cold. If this
+    fails (missing model files), jobs still work — they load lazily on first use."""
+    global _MODELS_WARM
+    try:
+        from tts import get_kokoro
+        from captions.captions import load_whisper
+        print("[server] Warming models…")
+        get_kokoro()
+        load_whisper(CFG["subs"]["whisper_model"])
+        _MODELS_WARM = True
+        print("[server] Models warm.")
+    except Exception as e:
+        print(f"[server] Model warm failed (will load lazily per job): {e}")
 
 # The editor runs on a different origin (Vite dev server). Lock this down to
 # your real editor origin(s) in production.
@@ -183,7 +230,7 @@ class GenerateRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True}
+    return {"ok": True, "models_warm": _MODELS_WARM}
 
 
 @app.post("/api/scene/generate")
@@ -192,7 +239,9 @@ def generate(req: GenerateRequest) -> dict:
     if not topic:
         raise HTTPException(status_code=400, detail="topic is required")
     job_id = uuid.uuid4().hex
-    _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0)
+    _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0,
+         created=_time.time())
+    _evict_if_needed()
     _EXECUTOR.submit(_run_pipeline, job_id, topic, req.resolve_visuals)
     return {"job_id": job_id}
 
