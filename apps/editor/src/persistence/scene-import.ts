@@ -36,7 +36,7 @@
 // schema-valid and renders predictably.
 
 import { createId, toFrame } from "core";
-import type { ColorOKLCH, Composition, Frame, Node, Project } from "core";
+import type { AssetRef, AudioTrack, ColorOKLCH, Composition, Frame, Node, Project } from "core";
 import { CURRENT_SCHEMA_VERSION } from "schema";
 
 // ── scene.json shape (only the fields this compiler reads) ──────────────────
@@ -46,6 +46,11 @@ interface SceneWordTime {
   start_s: number;
   end_s: number;
   tier?: number;
+}
+interface SceneVisual {
+  asset_id?: string;
+  fit?: "cover" | "contain" | "fill";
+  opacity?: number;
 }
 interface SceneBeat {
   id?: string;
@@ -57,6 +62,17 @@ interface SceneBeat {
   layout?: string;
   word_times?: SceneWordTime[];
   emphasis_times?: SceneWordTime[];
+  visual?: SceneVisual;                 // NEW (v2): b-roll behind the text
+  audio?: { asset_id?: string };        // NEW (v2): this beat's voiceover asset
+}
+interface SceneAsset {
+  id: string;
+  kind: "image" | "video" | "audio";
+  url: string;
+  hash?: string;
+  poster?: string;
+  width?: number;
+  height?: number;
 }
 interface ScenePalette {
   accent?: string;
@@ -72,7 +88,16 @@ export interface SceneDoc {
   height?: number;
   palette?: ScenePalette;
   brand?: string;
+  assets?: SceneAsset[];                 // NEW (v2): resolved media library
   beats?: SceneBeat[];
+}
+
+/** A beat's visual after its asset kind has been resolved against `assets[]`. */
+interface ResolvedVisual {
+  assetId: string;
+  kind: "image" | "video";
+  fit: "cover" | "contain" | "fill";
+  opacity: number;
 }
 
 export class SceneFileError extends Error {
@@ -211,6 +236,37 @@ function textNode(opts: {
   } as Node;
 }
 
+/**
+ * Full-bleed b-roll node (image or video) placed behind a beat's text.
+ * Asset dimensions are intentionally omitted upstream so the renderer's
+ * `imageBox` returns the whole comp frame; with `fit: "cover"` the media
+ * fills the vertical frame (letterbox-free) — the right default for TikTok-
+ * style backgrounds.
+ */
+function mediaNode(opts: {
+  assetId: string;
+  kind: "image" | "video";
+  fit: "cover" | "contain" | "fill";
+  opacity: number;
+  start: number;
+  duration: number;
+}): Node {
+  const props = opts.kind === "video" ? { fit: opts.fit, volume: 0 } : { fit: opts.fit };
+  return {
+    id: createId(),
+    kind: opts.kind,
+    name: opts.kind === "video" ? "B-roll (video)" : "B-roll (image)",
+    transform: { position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
+    opacity: opts.opacity,
+    blend: "normal",
+    time: { start: toFrame(opts.start), duration: toFrame(opts.duration) },
+    origin: "user",
+    props,
+    channels: [],
+    source: { assetId: opts.assetId },
+  } as unknown as Node;
+}
+
 // ── Beat → layer group ──────────────────────────────────────────────────────
 
 function buildBeatGroup(
@@ -221,12 +277,27 @@ function buildBeatGroup(
   fps: number,
   size: { width: number; height: number },
   palette: { accent: ColorOKLCH; spike: ColorOKLCH; fg: ColorOKLCH },
-  brand: string
+  brand: string,
+  visual?: ResolvedVisual
 ): Node {
   const W = size.width;
   const margin = Math.round(W * 0.08);
   const colWidth = W - margin * 2;
   const children: Node[] = [];
+
+  // B-roll visual behind the text (z-order 0 = bottom of the group).
+  if (visual) {
+    children.push(
+      mediaNode({
+        assetId: visual.assetId,
+        kind: visual.kind,
+        fit: visual.fit,
+        opacity: visual.opacity,
+        start: startFrame,
+        duration: durationFrames,
+      })
+    );
+  }
 
   const align: "left" | "center" | "right" =
     beat.layout === "center" || beat.layout === "full" ? "center" : beat.layout === "right" ? "right" : "left";
@@ -411,12 +482,74 @@ export function compileSceneToProject(scene: SceneDoc): Project {
   const brand = scene.brand ?? "";
   const beats = scene.beats ?? [];
 
+  // Resolved media library (dedup by id) + a kind lookup for beat visuals/audio.
+  const sceneAssets = scene.assets ?? [];
+  const assetKind = new Map<string, SceneAsset["kind"]>();
+  const projectAssets: AssetRef[] = [];
+  const seenAsset = new Set<string>();
+  for (const a of sceneAssets) {
+    if (!a.id || !a.url || seenAsset.has(a.id)) continue;
+    seenAsset.add(a.id);
+    assetKind.set(a.id, a.kind);
+    projectAssets.push({
+      id: a.id,
+      hash: a.hash ?? a.id,
+      kind: a.kind,
+      master: a.url,
+      proxy: a.url,
+      poster: a.poster,
+      // width/height intentionally omitted so image/video boxes fill the frame
+      // (full-bleed b-roll); include them upstream only if you want true aspect.
+      ...(a.width && a.height ? { width: a.width, height: a.height } : {}),
+      provenance: "stock",
+    } as unknown as AssetRef);
+  }
+
   const root: Node[] = [];
+  const audioTracks: AudioTrack[] = [];
   let cursor = 0;
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     const durFrames = Math.max(1, Math.round(((beat.duration_ms ?? 4000) / 1000) * fps));
-    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand));
+
+    // Resolve this beat's visual against the asset library.
+    let visual: ResolvedVisual | undefined;
+    const vid = beat.visual?.asset_id;
+    const vkind = vid ? assetKind.get(vid) : undefined;
+    if (vid && (vkind === "image" || vkind === "video")) {
+      visual = {
+        assetId: vid,
+        kind: vkind,
+        fit: beat.visual?.fit ?? "cover",
+        opacity: beat.visual?.opacity ?? 1,
+      };
+    }
+
+    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual));
+
+    // One voiceover AudioTrack per beat, placed at the beat's start (each beat's
+    // audio asset starts at 0 — no VO offset math needed since word_times are
+    // already beat-relative).
+    const aid = beat.audio?.asset_id;
+    if (aid && assetKind.get(aid) === "audio") {
+      audioTracks.push({
+        id: createId(),
+        assetId: aid,
+        name: `VO ${i + 1}`,
+        startFrame: cursor,
+        endFrame: cursor + durFrames,
+        trimIn: 0,
+        trimOut: undefined,
+        volume: 1,
+        fadeIn: 0,
+        fadeOut: 0,
+        loop: false,
+        muted: false,
+        solo: false,
+        lane: 0,
+      });
+    }
+
     cursor += durFrames;
   }
   const totalFrames = Math.max(1, cursor);
@@ -429,7 +562,7 @@ export function compileSceneToProject(scene: SceneDoc): Project {
     duration: toFrame(totalFrames) as Frame,
     background,
     root,
-    audioTracks: [],
+    audioTracks,
   };
 
   return {
@@ -438,7 +571,7 @@ export function compileSceneToProject(scene: SceneDoc): Project {
     name: scene.video_id ? `Scene ${scene.video_id}` : "Imported Scene",
     comps: { [comp.id]: comp },
     rootCompId: comp.id,
-    assets: [],
+    assets: projectAssets,
     opLog: [],
   };
 }

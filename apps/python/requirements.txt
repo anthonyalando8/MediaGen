@@ -1,4 +1,3 @@
-pydub
 openai
 #faster-whisper
 

@@ -104,11 +104,6 @@ def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
     )
 
 
-def spoken_text(script: dict) -> str:
-    """Return all beat text joined for TTS (double-space = natural pause between beats)."""
-    return "  ".join(b["text"].strip() for b in script["beats"])
-
-
 # ---------------------------------------------------------------------------
 # Internals — text cleanup
 # ---------------------------------------------------------------------------
