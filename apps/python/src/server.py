@@ -125,8 +125,17 @@ def _mark_step(job_id: str, step: int) -> None:
     """step is 1-based; pct spans 0..95 across steps (100 only when done)."""
     pct = int(round((step - 1) / _TOTAL * 95))
     _set(job_id, state="running", step=step, total_steps=_TOTAL,
-         label=_STEPS[step - 1], pct=pct, step_started=_time.time())
+         label=_STEPS[step - 1], pct=pct, detail="", step_started=_time.time())
     LOG.info("job %s · step %d/%d · %s", job_id[:8], step, _TOTAL, _STEPS[step - 1])
+
+
+def _sub(job_id: str, step: int, frac: float, detail: str) -> None:
+    """Fractional progress WITHIN a step (0..1) + a human detail string, so the
+    long loops (per-beat voice, per-visual fetch) advance the bar in real time
+    instead of jumping at step boundaries."""
+    frac = max(0.0, min(1.0, frac))
+    pct = int(round(((step - 1) + frac) / _TOTAL * 95))
+    _set(job_id, pct=pct, detail=detail)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +161,7 @@ def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
             script, run_dir,
             voice=CFG["tts"]["voice"], speed=CFG["tts"]["speed"],
             sample_rate=CFG["tts"]["sample_rate"],
+            progress=lambda i, n: _sub(job_id, 2, (i + 1) / n, f"voice {i + 1}/{n}"),
         )
         durations = beat_durations(beat_wavs)
 
@@ -175,6 +185,7 @@ def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
             script, run_dir, CFG,
             beat_durations_ms=durations_ms, beat_wavs=beat_wavs,
             timeline=timeline, resolve_visuals=resolve_visuals,
+            progress=lambda i, n, d: _sub(job_id, 5, (i + 1) / n, d),
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 

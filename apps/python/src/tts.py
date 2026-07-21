@@ -173,6 +173,7 @@ def synthesize(
     voice:       str   = "auto",   # use "auto" to enable voice_style → voice mapping
     speed:       float = 1.05,     # base speed override; ignored if voice="auto"
     sample_rate: int   = 24000,
+    progress=None,                 # optional callback(i, n) after each beat wav
 ) -> tuple[pathlib.Path, list[pathlib.Path]]:
     """
     Synthesise each beat with the script's voice_style → Kokoro voice mapping,
@@ -204,6 +205,8 @@ def synthesize(
         beat_path = out_dir / f"beat_{i}.wav"
         sf.write(str(beat_path), samples, sr)
         beat_paths.append(beat_path)
+        if progress:
+            progress(i, len(script["beats"]))
 
         all_samples.append(samples)
         if i < len(script["beats"]) - 1:

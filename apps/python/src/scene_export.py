@@ -47,6 +47,7 @@ def build_scene(
     beat_wavs: list[pathlib.Path],
     timeline: dict | None = None,
     resolve_visuals: bool = True,
+    progress=None,
 ) -> pathlib.Path:
     """
     Assemble scene.json (v2) and write it to out_dir. Returns the path.
@@ -81,6 +82,8 @@ def build_scene(
     # ── Visuals: resolve + embed a stock image per beat ──────────────────────
     if resolve_visuals:
         for i, c in enumerate(contracts):
+            if progress:
+                progress(i, len(contracts), f"visuals {i + 1}/{len(contracts)}")
             q = (c.get("visual_query") or "").strip()
             if not q:
                 continue

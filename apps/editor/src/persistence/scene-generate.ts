@@ -1,12 +1,11 @@
 // apps/editor/src/persistence/scene-generate.ts
 //
 // Client for the Python scene API (server.py). Kicks off AI scene generation,
-// polls progress, fetches the finished self-contained scene.json, and hands it
-// to the SAME compiler the manual "Import Scene…" path uses — so a generated
-// scene and an imported one become the identical editable project.
-//
-// The scene the server returns is self-contained (voiceover + stock images
-// embedded as data: URLs), so there's nothing else to fetch or re-link.
+// polls progress (with per-step detail), and returns the finished
+// self-contained scene.json RAW — so the modal can show a storyboard preview
+// BEFORE committing. Importing is a separate, synchronous step
+// (`compileGeneratedScene`) the caller runs on user confirm, using the SAME
+// compiler as manual Import Scene… / Open….
 
 import { compileSceneToProject } from "./scene-import";
 import type { Project } from "core";
@@ -20,6 +19,8 @@ export interface GenerateProgress {
   step: number;
   total_steps: number;
   label: string;
+  /** Human sub-detail within a step, e.g. "voice 3/6", "visuals 2/6". */
+  detail?: string;
   pct: number;
   error?: string;
   title?: string;
@@ -50,10 +51,11 @@ async function j<T>(res: Response): Promise<T> {
 }
 
 /**
- * Runs the full generate → poll → fetch flow and returns a ready-to-load
- * `Project`. Reject reasons: server error, job error, or abort.
+ * Runs generate → poll → fetch and resolves with the RAW scene document (not
+ * yet compiled). The caller previews it, then calls `compileGeneratedScene`
+ * on confirm. Rejects on server error, job error, or abort.
  */
-export async function generateScene(opts: GenerateOptions): Promise<{ project: Project; title?: string }> {
+export async function generateScene(opts: GenerateOptions): Promise<{ scene: any; title?: string }> {
   const { topic, resolveVisuals = true, onProgress, signal, pollMs = 1200 } = opts;
 
   const { job_id } = await j<{ job_id: string }>(
@@ -65,7 +67,6 @@ export async function generateScene(opts: GenerateOptions): Promise<{ project: P
     })
   );
 
-  // Poll until done / error / abort.
   let title: string | undefined;
   for (;;) {
     if (signal?.aborted) throw new DOMException("Generation cancelled", "AbortError");
@@ -82,7 +83,10 @@ export async function generateScene(opts: GenerateOptions): Promise<{ project: P
   const scene = await j<Record<string, unknown>>(
     await fetch(`${SCENE_API_BASE}/api/scene/result/${job_id}`, { signal })
   );
+  return { scene, title };
+}
 
-  const project = compileSceneToProject(scene as any);
-  return { project, title };
+/** Compile a previously-generated raw scene into a ready-to-load Project (same compiler as Import Scene…). */
+export function compileGeneratedScene(scene: any): Project {
+  return compileSceneToProject(scene);
 }

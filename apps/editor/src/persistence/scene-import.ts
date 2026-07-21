@@ -69,6 +69,7 @@ interface SceneBeat {
   camera?: string;                      // scene-motion: camera move (push_in/pull_out/tilt_up/…)
   background?: string;                  // scene-motion: bg treatment (glow/noise/…)
   pattern_interrupt?: string | null;    // scene-motion: punch effect (chroma/…)
+  intensity?: number;                   // 0..1 master magnitude for moves/effects
 }
 interface SceneAsset {
   id: string;
@@ -150,7 +151,7 @@ function mapTransition(name: string | undefined, bg: ColorOKLCH, entry?: { x: nu
  * whole beat (text + b-roll) moves together. Uses the same proven keyframed
  * `channels` mechanism as the word-sync/Ken Burns work — no effect uniforms.
  */
-function cameraChannels(camera: string | undefined, start: number, dur: number, W: number, H: number): any[] {
+function cameraChannels(camera: string | undefined, start: number, dur: number, W: number, H: number, k: number): any[] {
   const end = start + dur;
   const scaleCh = (v0: number, v1: number, fast = false) => ({
     id: createId(),
@@ -177,16 +178,16 @@ function cameraChannels(camera: string | undefined, start: number, dur: number, 
   });
   switch ((camera ?? "").toLowerCase()) {
     case "push_in":
-      return [scaleCh(1.0, 1.05)];
+      return [scaleCh(1.0, 1.0 + 0.05 * k)];
     case "pull_out":
-      return [scaleCh(1.06, 1.0)];
+      return [scaleCh(1.0 + 0.06 * k, 1.0)];
     case "snap_zoom":
-      return [scaleCh(1.12, 1.0, true)];
+      return [scaleCh(1.0 + 0.12 * k, 1.0, true)];
     case "tilt_up":
-      return [posY(Math.round(H * 0.03), 0)];
+      return [posY(Math.round(H * 0.03 * k), 0)];
     case "handheld":
     case "micro_shake": {
-      const amp = Math.max(2, Math.round(W * 0.006));
+      const amp = Math.max(2, Math.round(W * 0.006 * k));
       const fr = [0, 0.14, 0.29, 0.43, 0.57, 0.71, 0.86, 1];
       const pat = [[0, 0], [1, -1], [-1, 1], [1, 1], [-1, -1], [1, 0], [0, 1], [0, 0]];
       return [
@@ -219,11 +220,75 @@ function bgEffect(bg: string | undefined): any | null {
   }
 }
 
-/** Pattern-interrupt → a stylistic effect on the beat group (static uniform). */
-function patternEffect(pi: string | null | undefined): any | null {
-  switch ((pi ?? "").toLowerCase()) {
+/** Background types that get a synthesized full-bleed pattern (when the beat has no photo b-roll). */
+function wantsBgImage(bg: string | undefined): boolean {
+  return ["grid", "lines", "gradient", "abstract"].includes((bg ?? "").toLowerCase());
+}
+
+/** Generate a comp-sized SVG background (grid/lines/gradient) as a data: URL, tinted from the palette. */
+function bgSvgDataUrl(type: string, W: number, H: number, accent: string, bg: string): string {
+  const base = `<rect width="${W}" height="${H}" fill="${bg}"/>`;
+  let inner = "";
+  const t = type.toLowerCase();
+  if (t === "grid") {
+    inner = `<defs><pattern id="p" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="${accent}" stroke-opacity="0.12" stroke-width="2"/></pattern></defs><rect width="${W}" height="${H}" fill="url(#p)"/>`;
+  } else if (t === "lines") {
+    inner = `<defs><pattern id="p" width="46" height="46" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="23" height="46" fill="${accent}" fill-opacity="0.06"/></pattern></defs><rect width="${W}" height="${H}" fill="url(#p)"/>`;
+  } else {
+    // gradient / abstract: soft accent wash from a corner
+    inner = `<defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="${accent}" stop-opacity="0.28"/><stop offset="1" stop-color="${bg}" stop-opacity="0"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/>`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${base}${inner}</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Pattern-interrupt → a BRIEF effect burst on the beat group: the effect's main
+ * uniform ramps 0→peak→0 over ~0.3s at beat start (a punch, not a constant
+ * treatment). Uses the `fx.<ref.id>.<prop>` channel convention the evaluator's
+ * sampleEffectProps reads. Peak magnitude scales with `k` (intensity).
+ */
+function patternBurst(pi: string | null | undefined, start: number, dur: number, fps: number, k: number): any | null {
+  const name = (pi ?? "").toLowerCase();
+  if (!name) return null;
+  const burstF = Math.max(3, Math.min(Math.round(fps * 0.3), Math.floor(dur * 0.4)));
+  const peakF = Math.max(1, Math.round(burstF * 0.35));
+  const id = createId();
+  const ramp = (prop: string, peak: number) => ({
+    id: createId(),
+    path: `fx.${id}.${prop}`,
+    type: "scalar" as const,
+    keys: [
+      { frame: toFrame(start), value: 0, interp: "linear" as const },
+      { frame: toFrame(start + peakF), value: peak, interp: "linear" as const },
+      { frame: toFrame(start + burstF), value: 0, interp: "linear" as const },
+    ],
+  });
+  switch (name) {
     case "chroma":
-      return { id: createId(), effect: "chromatic-aberration", enabled: true, props: { amount: 4 } };
+      return { id, effect: "chromatic-aberration", enabled: true, props: { amount: 0 }, channels: [ramp("amount", 4 + 8 * k)] };
+    case "glitch":
+    case "invert":
+      return {
+        id,
+        effect: "glitch",
+        enabled: true,
+        props: { intensity: 0, speed: 3, time: 0 },
+        channels: [
+          ramp("intensity", 8 + 14 * k),
+          {
+            id: createId(),
+            path: `fx.${id}.time`,
+            type: "scalar" as const,
+            keys: [
+              { frame: toFrame(start), value: 0, interp: "linear" as const },
+              { frame: toFrame(start + burstF), value: 20, interp: "linear" as const },
+            ],
+          },
+        ],
+      };
+    case "flash":
+      return { id, effect: "glow", enabled: true, props: { threshold: 0.4, intensity: 0, radius: 6 }, channels: [ramp("intensity", 1.0 + 0.8 * k)] };
     default:
       return null;
   }
@@ -335,6 +400,8 @@ function textNode(opts: {
   opacityKeys?: { frame: number; value: number }[];
   /** Emphasis scale pop. vec2 keys. */
   scaleKeys?: { frame: number; value: { x: number; y: number } }[];
+  /** Entrance/exit position move. vec3 keys. */
+  posKeys?: { frame: number; value: { x: number; y: number; z: number } }[];
 }): Node {
   const channels: any[] = [];
   if (opts.fillChannel) {
@@ -359,6 +426,14 @@ function textNode(opts: {
       path: "transform.scale",
       type: "vec2" as const,
       keys: opts.scaleKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+    });
+  }
+  if (opts.posKeys) {
+    channels.push({
+      id: createId(),
+      path: "transform.position",
+      type: "vec3" as const,
+      keys: opts.posKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
     });
   }
   return {
@@ -432,6 +507,7 @@ function buildBeatGroup(
   palette: { accent: ColorOKLCH; spike: ColorOKLCH; fg: ColorOKLCH },
   brand: string,
   visual: ResolvedVisual | undefined,
+  bgAssetId: string | undefined,
   lingerFrames: number,
   transitionIn: { preset: string; durationF: Frame; props: Record<string, unknown> } | undefined
 ): Node {
@@ -441,16 +517,26 @@ function buildBeatGroup(
   // absolute frames, so nothing desyncs.
   durationFrames = durationFrames + lingerFrames;
   const W = size.width;
+  const intensity = typeof beat.intensity === "number" ? Math.max(0, Math.min(1, beat.intensity)) : 0.65;
+  const k = 0.6 + 0.8 * intensity; // master magnitude knob for moves + effect bursts
   const margin = Math.round(W * 0.08);
   const colWidth = W - margin * 2;
   const children: Node[] = [];
+
+  // Synthesized full-bleed background (grid/lines/gradient) when there's no photo.
+  if (!visual && bgAssetId) {
+    children.push(
+      mediaNode({ assetId: bgAssetId, kind: "image", fit: "cover", opacity: 1, start: startFrame, duration: durationFrames })
+    );
+  }
 
   // B-roll visual behind the text (z-order 0 = bottom of the group).
   if (visual) {
     // Ken Burns: slow zoom + drift, direction alternating per beat for variety.
     const even = beatIndex % 2 === 0;
-    const s0 = even ? 1.06 : 1.16;
-    const s1 = even ? 1.16 : 1.06;
+    const z = 0.1 * k; // zoom travel, intensity-scaled
+    const s0 = even ? 1.06 : 1.06 + z;
+    const s1 = even ? 1.06 + z : 1.06;
     const dx = (even ? 1 : -1) * Math.round(W * 0.02);
     const dy = (even ? 1 : -1) * Math.round(size.height * 0.012);
     const end = startFrame + durationFrames;
@@ -497,12 +583,16 @@ function buildBeatGroup(
   if (beat.hud_tag) {
     const fs = Math.round(W * 0.032);
     const w = measureText(beat.hud_tag, fs, 700);
+    const hx = alignX(w);
+    const hy = Math.round(size.height * 0.12);
+    const entF = Math.min(8, Math.max(3, Math.round(durationFrames * 0.1)));
+    const rise = Math.round(size.height * 0.02);
     children.push(
       textNode({
         name: `${beat.id ?? "beat"} · hud`,
         text: beat.hud_tag,
-        x: alignX(w),
-        y: Math.round(size.height * 0.12),
+        x: hx,
+        y: hy,
         fontSize: fs,
         weight: 700,
         align,
@@ -510,6 +600,10 @@ function buildBeatGroup(
         start: startFrame,
         duration: durationFrames,
         tracking: 2,
+        posKeys: [
+          { frame: startFrame, value: { x: hx, y: hy + rise, z: 0 } },
+          { frame: startFrame + entF, value: { x: hx, y: hy, z: 0 } },
+        ],
       })
     );
   }
@@ -524,18 +618,30 @@ function buildBeatGroup(
       fs = Math.max(Math.round(W * 0.04), Math.floor((fs * colWidth) / w));
       w = measureText(beat.keyword, fs, 800);
     }
+    const kx = alignX(Math.min(w, colWidth));
+    const ky = Math.round(size.height * 0.2);
+    const entF = Math.min(10, Math.max(4, Math.round(durationFrames * 0.12)));
+    const rise = Math.round(size.height * 0.03);
     children.push(
       textNode({
         name: `${beat.id ?? "beat"} · keyword`,
         text: beat.keyword,
-        x: alignX(Math.min(w, colWidth)),
-        y: Math.round(size.height * 0.2),
+        x: kx,
+        y: ky,
         fontSize: fs,
         weight: 800,
         align,
         fill: keywordFill,
         start: startFrame,
         duration: durationFrames,
+        posKeys: [
+          { frame: startFrame, value: { x: kx, y: ky + rise, z: 0 } },
+          { frame: startFrame + entF, value: { x: kx, y: ky, z: 0 } },
+        ],
+        scaleKeys: [
+          { frame: startFrame, value: { x: 0.94, y: 0.94 } },
+          { frame: startFrame + entF, value: { x: 1, y: 1 } },
+        ],
       })
     );
   }
@@ -676,11 +782,11 @@ function buildBeatGroup(
     });
   }
   // Camera move on the whole beat (text + b-roll move together).
-  groupChannels.push(...cameraChannels(beat.camera, startFrame, durationFrames, W, size.height));
+  groupChannels.push(...cameraChannels(beat.camera, startFrame, durationFrames, W, size.height, k));
 
-  // Pattern-interrupt stylistic effect on the beat group.
+  // Pattern-interrupt effect burst on the beat group.
   const groupEffects: any[] = [];
-  const pe = patternEffect(beat.pattern_interrupt);
+  const pe = patternBurst(beat.pattern_interrupt, startFrame, durationFrames, fps, k);
   if (pe) groupEffects.push(pe);
 
   return {
@@ -742,6 +848,28 @@ export function compileSceneToProject(scene: SceneDoc): Project {
   const root: Node[] = [];
   const audioTracks: AudioTrack[] = [];
 
+  // Synthesized backgrounds (grid/lines/gradient) — one asset per type, reused
+  // across beats. Only used on beats without a resolved photo b-roll.
+  const palHex = (scene.palette ?? {}) as { accent?: string; bg?: string };
+  const accentHex = palHex.accent ?? "#4ab0f5";
+  const bgHex = palHex.bg ?? "#09090b";
+  const bgAssetIds = new Map<string, string>();
+  const ensureBgAsset = (type: string): string => {
+    const key = type.toLowerCase();
+    const existing = bgAssetIds.get(key);
+    if (existing) return existing;
+    const id = `bg_${key}`;
+    projectAssets.push({
+      id,
+      hash: id,
+      kind: "image",
+      master: bgSvgDataUrl(key, size.width, size.height, accentHex, bgHex),
+      provenance: "generated",
+    } as unknown as AssetRef);
+    bgAssetIds.set(key, id);
+    return id;
+  };
+
   // Pre-pass: per-beat frame durations, the transition INTO each beat, and the
   // overlap window each boundary needs (transition length, clamped to half of
   // the shorter neighbouring beat so it never swallows a whole beat).
@@ -770,6 +898,8 @@ export function compileSceneToProject(scene: SceneDoc): Project {
       };
     }
 
+    const bgAssetId = !visual && wantsBgImage(beat.background) ? ensureBgAsset(beat.background as string) : undefined;
+
     // Linger into the next beat by that boundary's overlap; transition in from
     // the previous beat using this beat's own transition.
     const linger = i < beats.length - 1 ? overlaps[i + 1] : 0;
@@ -779,7 +909,7 @@ export function compileSceneToProject(scene: SceneDoc): Project {
         ? { preset: def.preset, durationF: toFrame(overlaps[i]) as Frame, props: def.props }
         : undefined;
 
-    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, linger, transitionIn));
+    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, bgAssetId, linger, transitionIn));
 
     // One voiceover AudioTrack per beat, placed at the beat's start (sequential;
     // NOT extended by linger, so voiceovers never overlap).
