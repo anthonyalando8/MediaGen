@@ -33,6 +33,14 @@ export interface SceneFormat {
 
 export type MediaMode = "auto" | "image" | "video" | "hybrid";
 
+/** One English voice option for the picker (GET /api/voice/list). */
+export interface VoiceOption {
+  id: string;
+  label: string;
+  accent: "American" | "British";
+  gender: "female" | "male";
+}
+
 /** A beat's resolved visual (scene.json v2 shape) — what the asset-review step displays/edits. */
 export interface SceneVisual {
   asset_id: string;
@@ -76,6 +84,8 @@ interface GenerateOptions {
   resolveVisuals?: boolean;
   /** Override the format's own media.mode for this generation. Omitted = format's own choice. */
   mediaMode?: MediaMode;
+  /** Explicit voice pick (id from listVoices()) for this generation. Omitted = "Automatic" (today's genre/LLM-driven choice). */
+  voiceId?: string;
   onProgress?: (p: GenerateProgress) => void;
   signal?: AbortSignal;
   /** Poll interval ms (default 1200). */
@@ -121,6 +131,7 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
     format = DEFAULT_FORMAT,
     resolveVisuals = true,
     mediaMode,
+    voiceId,
     onProgress,
     signal,
     pollMs = 1200,
@@ -133,6 +144,7 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
       body: JSON.stringify({
         topic, format, resolve_visuals: resolveVisuals,
         ...(mediaMode ? { media_mode: mediaMode } : {}),
+        ...(voiceId ? { voice_id: voiceId } : {}),
       }),
       signal,
     })
@@ -160,6 +172,33 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
 /** Compile a previously-generated raw scene into a ready-to-load Project (same compiler as Import Scene…). */
 export function compileGeneratedScene(scene: any): Project {
   return compileSceneToProject(scene);
+}
+
+/**
+ * Fetch the English voice catalog for the picker. Returns [] (and never
+ * throws) if the server is unreachable — same fallback-friendly shape as
+ * listFormats().
+ */
+export async function listVoices(signal?: AbortSignal): Promise<VoiceOption[]> {
+  try {
+    return await j<VoiceOption[]>(
+      await fetch(`${SCENE_API_BASE}/api/voice/list`, { signal })
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** Synthesise a short sample of one voice — sub-second, no job/poll needed. */
+export async function previewVoice(voiceId: string, signal?: AbortSignal): Promise<{ url: string }> {
+  return j(
+    await fetch(`${SCENE_API_BASE}/api/voice/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice_id: voiceId }),
+      signal,
+    })
+  );
 }
 
 /**

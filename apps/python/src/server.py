@@ -15,10 +15,12 @@ exactly like the export window's live progress.
 ENDPOINTS
 ---------
   GET  /api/scene/formats       → [{id, label, description, default_resolve_visuals, profile_summary}]
-  POST /api/scene/generate      {topic, format?, resolve_visuals?, media_mode?}  → {job_id}
+  POST /api/scene/generate      {topic, format?, resolve_visuals?, media_mode?, voice_id?}  → {job_id}
   GET  /api/scene/status/{id}   → {state, step, total_steps, label, pct, error}
   GET  /api/scene/result/{id}   → the scene.json object (self-contained)
   POST /api/scene/reroll        {job_id, beat_index, mode?}  → {beat_index, visual, asset}
+  GET  /api/voice/list          → [{id, label, accent, gender}]  (English voices)
+  POST /api/voice/preview       {voice_id}  → {url}  (short sample, data: URL)
   GET  /api/health              → {ok, model_warm}
 
 `format` selects a recipe (prompt + validation profile) under prompts/formats/.
@@ -47,6 +49,7 @@ import uuid
 import logging
 import traceback
 import dataclasses
+import base64
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
@@ -59,7 +62,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))
 
 from llm import generate_script
 from formats import load_format, list_formats, DEFAULT_FORMAT
-from tts import synthesize, beat_durations
+from tts import synthesize, beat_durations, synthesize_preview, ENGLISH_VOICES, _ENGLISH_VOICE_IDS
 from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
 from scene_export import build_scene
@@ -150,10 +153,10 @@ def _sub(job_id: str, step: int, frac: float, detail: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline worker
 # ─────────────────────────────────────────────────────────────────────────────
-def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool, media_mode: str | None = None) -> None:
+def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool, media_mode: str | None = None, voice_id: str | None = None) -> None:
     started = _time.time()
-    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s media_mode=%s",
-             job_id[:8], topic, format_id, resolve_visuals, media_mode)
+    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s media_mode=%s voice_id=%s",
+             job_id[:8], topic, format_id, resolve_visuals, media_mode, voice_id)
     try:
         run_id, run_dir = make_run_dir(CFG["paths"]["workspace"])
         _set(job_id, run_id=run_id, run_dir=str(run_dir))
@@ -176,6 +179,7 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             sample_rate=CFG["tts"]["sample_rate"],
             progress=lambda i, n: _sub(job_id, 2, (i + 1) / n, f"voice {i + 1}/{n}"),
             voice_profile=fmt.voice,
+            voice_override=voice_id,
         )
         durations = beat_durations(beat_wavs)
 
@@ -265,6 +269,10 @@ class GenerateRequest(BaseModel):
     # hybrid/auto) — the picker's manual media-mode control. None (the
     # default) leaves the format's own choice untouched.
     media_mode: str | None = None
+    # Explicit per-generation voice pick from the editor's voice picker
+    # (must be one of tts.ENGLISH_VOICES). None (the default/"Automatic")
+    # leaves today's genre/LLM-driven voice selection untouched.
+    voice_id: str | None = None
 
 
 class RerollRequest(BaseModel):
@@ -274,6 +282,10 @@ class RerollRequest(BaseModel):
     # quick-convert actions — omitted means "reroll within the same mode
     # the beat already resolved with".
     mode: str | None = None
+
+
+class VoicePreviewRequest(BaseModel):
+    voice_id: str
 
 
 @app.get("/api/health")
@@ -301,12 +313,31 @@ def generate(req: GenerateRequest) -> dict:
     except FileNotFoundError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if req.voice_id and req.voice_id not in _ENGLISH_VOICE_IDS:
+        raise HTTPException(status_code=400, detail=f"Unknown voice_id '{req.voice_id}'")
+
     job_id = uuid.uuid4().hex
     _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0,
          format=format_id, created=_time.time())
     _evict_if_needed()
-    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals, req.media_mode)
+    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals, req.media_mode, req.voice_id)
     return {"job_id": job_id}
+
+
+@app.get("/api/voice/list")
+def voice_list() -> list[dict]:
+    """List the English voices available for the editor's voice picker (preview + manual override)."""
+    return ENGLISH_VOICES
+
+
+@app.post("/api/voice/preview")
+def voice_preview(req: VoicePreviewRequest) -> dict:
+    """Synthesise a short sample of one voice — sub-second on the already-warm model, no job queue needed."""
+    if req.voice_id not in _ENGLISH_VOICE_IDS:
+        raise HTTPException(status_code=400, detail=f"Unknown voice_id '{req.voice_id}'")
+    wav_bytes = synthesize_preview(req.voice_id)
+    b64 = base64.b64encode(wav_bytes).decode("ascii")
+    return {"url": f"data:audio/wav;base64,{b64}"}
 
 
 # Internal-only job fields never sent to the client — the raw scene (separate

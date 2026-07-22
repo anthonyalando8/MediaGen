@@ -34,6 +34,7 @@ Model files expected in project root (MediaGen/):
   voices-v1.0.bin
 """
 
+import io
 import pathlib
 import numpy as np
 import soundfile as sf
@@ -75,6 +76,48 @@ _DEFAULT_SPEED = 1.05
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# English voice catalog — for the editor's voice picker (preview + manual
+# override). voices-v1.0.bin actually ships 54 Kokoro voices across several
+# languages/accents (confirmed via Kokoro.get_voices()); this is the
+# English-only subset (American af_/am_, British bf_/bm_). Hardcoded rather
+# than queried at request time since the set is fixed for a given model file.
+# ─────────────────────────────────────────────────────────────────────────────
+ENGLISH_VOICES = [
+    {"id": "af_alloy",    "label": "Alloy",    "accent": "American", "gender": "female"},
+    {"id": "af_aoede",    "label": "Aoede",    "accent": "American", "gender": "female"},
+    {"id": "af_bella",    "label": "Bella",    "accent": "American", "gender": "female"},
+    {"id": "af_heart",    "label": "Heart",    "accent": "American", "gender": "female"},
+    {"id": "af_jessica",  "label": "Jessica",  "accent": "American", "gender": "female"},
+    {"id": "af_kore",     "label": "Kore",     "accent": "American", "gender": "female"},
+    {"id": "af_nicole",   "label": "Nicole",   "accent": "American", "gender": "female"},
+    {"id": "af_nova",     "label": "Nova",     "accent": "American", "gender": "female"},
+    {"id": "af_river",    "label": "River",    "accent": "American", "gender": "female"},
+    {"id": "af_sarah",    "label": "Sarah",    "accent": "American", "gender": "female"},
+    {"id": "af_sky",      "label": "Sky",      "accent": "American", "gender": "female"},
+    {"id": "am_adam",     "label": "Adam",     "accent": "American", "gender": "male"},
+    {"id": "am_echo",     "label": "Echo",     "accent": "American", "gender": "male"},
+    {"id": "am_eric",     "label": "Eric",     "accent": "American", "gender": "male"},
+    {"id": "am_fenrir",   "label": "Fenrir",   "accent": "American", "gender": "male"},
+    {"id": "am_liam",     "label": "Liam",     "accent": "American", "gender": "male"},
+    {"id": "am_michael",  "label": "Michael",  "accent": "American", "gender": "male"},
+    {"id": "am_onyx",     "label": "Onyx",     "accent": "American", "gender": "male"},
+    {"id": "am_puck",     "label": "Puck",     "accent": "American", "gender": "male"},
+    {"id": "am_santa",    "label": "Santa",    "accent": "American", "gender": "male"},
+    {"id": "bf_alice",    "label": "Alice",    "accent": "British",  "gender": "female"},
+    {"id": "bf_emma",     "label": "Emma",     "accent": "British",  "gender": "female"},
+    {"id": "bf_isabella", "label": "Isabella", "accent": "British",  "gender": "female"},
+    {"id": "bf_lily",     "label": "Lily",     "accent": "British",  "gender": "female"},
+    {"id": "bm_daniel",   "label": "Daniel",   "accent": "British",  "gender": "male"},
+    {"id": "bm_fable",    "label": "Fable",    "accent": "British",  "gender": "male"},
+    {"id": "bm_george",   "label": "George",   "accent": "British",  "gender": "male"},
+    {"id": "bm_lewis",    "label": "Lewis",    "accent": "British",  "gender": "male"},
+]
+_ENGLISH_VOICE_IDS = {v["id"] for v in ENGLISH_VOICES}
+
+_PREVIEW_TEXT = "This is a quick preview of how this voice sounds."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Model file resolver
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -112,20 +155,28 @@ def _find_model_files() -> tuple[pathlib.Path, pathlib.Path]:
 # Voice selection
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float, profile_style: str = "") -> tuple[str, float]:
+def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float, profile_style: str = "", direct_voice: str | None = None) -> tuple[str, float]:
     """
     Decide the voice + base speed for this script.
 
     Priority:
-      1. If cfg_voice is set AND non-empty AND not "auto" → use it (legacy)
-      2. Else: profile_style (genre's VoiceProfile.style) if non-empty — forces
+      1. direct_voice — an explicit per-generation pick from the editor's
+         voice picker. Highest priority: a deliberate UI selection is the
+         most specific signal there is, so it wins even over the legacy
+         cfg_voice override.
+      2. If cfg_voice is set AND non-empty AND not "auto" → use it (legacy)
+      3. Else: profile_style (genre's VoiceProfile.style) if non-empty — forces
          the voice regardless of what the LLM emitted for this run.
-      3. Else: read script.global.voice_style → map to voice+speed (LLM-driven,
+      4. Else: read script.global.voice_style → map to voice+speed (LLM-driven,
          now a fallback for genres that don't force a style)
-      4. Else: fall back to default
+      5. Else: fall back to default
 
     To enable per-script variation, set tts.voice="auto" in config.yaml.
     """
+    if direct_voice:
+        print(f"[tts] direct voice pick → voice='{direct_voice}'  base_speed={_DEFAULT_SPEED}")
+        return direct_voice, _DEFAULT_SPEED
+
     cfg_voice_norm = (cfg_voice or "").strip().lower()
 
     if cfg_voice_norm and cfg_voice_norm != "auto":
@@ -190,6 +241,7 @@ def synthesize(
     sample_rate: int   = 24000,
     progress=None,                 # optional callback(i, n) after each beat wav
     voice_profile: VoiceProfile | None = None,   # genre's say over voice + pace (formats.VoiceProfile)
+    voice_override: str | None = None,   # explicit per-generation pick from the editor's voice picker
 ) -> tuple[pathlib.Path, list[pathlib.Path]]:
     """
     Synthesise each beat with the script's voice_style → Kokoro voice mapping,
@@ -198,7 +250,7 @@ def synthesize(
     Returns (voice_path, [beat_0.wav, beat_1.wav, …])
     """
     voice_profile = voice_profile or VoiceProfile()
-    chosen_voice, base_speed = _resolve_voice(script, voice, speed, voice_profile.style)
+    chosen_voice, base_speed = _resolve_voice(script, voice, speed, voice_profile.style, voice_override)
     print(f"[tts] voice='{chosen_voice}'  base_speed={base_speed}")
     kokoro = get_kokoro()
 
@@ -243,3 +295,18 @@ def synthesize(
 def beat_durations(beat_paths: list[pathlib.Path]) -> list[float]:
     """Return duration in seconds for each beat WAV."""
     return [sf.info(str(p)).duration for p in beat_paths]
+
+
+def synthesize_preview(voice_id: str, speed: float = 1.05) -> bytes:
+    """
+    Synthesise a short fixed sample line with `voice_id` — the editor's
+    voice-picker preview button. Reuses the already-warm Kokoro instance;
+    a single short line is sub-second, so this has no job/queue machinery,
+    unlike the full pipeline. Returns WAV bytes (no disk I/O — soundfile
+    writes to an in-memory buffer).
+    """
+    kokoro = get_kokoro()
+    samples, sr = kokoro.create(_PREVIEW_TEXT, voice=voice_id, speed=speed, lang="en-us")
+    buf = io.BytesIO()
+    sf.write(buf, np.asarray(samples, dtype=np.float32), sr, format="WAV")
+    return buf.getvalue()

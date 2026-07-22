@@ -58,6 +58,14 @@ const FMT_OPTIONS: FmtOption[] = [
   { id: "gif", label: "GIF", tag: "Soon", enabled: false },
 ];
 
+// How long WITHOUT any frame-progress callback before we call it a genuine
+// stall. Video-heavy compositions are legitimately slow (each video b-roll
+// frame needs a real <video> seek — see docs/adr/README.md ADR-016) but
+// still land progress every frame; only an actual hang (WebGL context lost,
+// encoder queue stuck) goes quiet for this long.
+const STALL_TIMEOUT_MS = 60_000;
+const STALL_CHECK_INTERVAL_MS = 5_000;
+
 interface QualOption {
   id: string;
   label: string;
@@ -116,6 +124,13 @@ function ExportWindowInner() {
   const abortRef = useRef<AbortController | null>(null);
   const startedAtRef = useRef(0);
   const resultUrlRef = useRef<string | null>(null);
+  // Stall watchdog — see `start()`. Tracks wall-clock time of the last
+  // frame-progress callback; if no progress lands for STALL_TIMEOUT_MS, the
+  // export is aborted and reported as stalled. Replaces a FIXED total-
+  // duration timeout, which killed video-heavy exports that were slow but
+  // genuinely still working (frame 412 in 5 minutes isn't a stall).
+  const lastProgressAtRef = useRef(0);
+  const stalledRef = useRef(false);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultBytes, setResultBytes] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -171,6 +186,14 @@ function ExportWindowInner() {
     const controller = new AbortController();
     abortRef.current = controller;
     startedAtRef.current = performance.now();
+    lastProgressAtRef.current = performance.now();
+    stalledRef.current = false;
+    const stallInterval = setInterval(() => {
+      if (performance.now() - lastProgressAtRef.current > STALL_TIMEOUT_MS) {
+        stalledRef.current = true;
+        controller.abort();
+      }
+    }, STALL_CHECK_INTERVAL_MS);
 
     // Snapshot settings for this run (state may change if user reopens).
     const runOut = outSize;
@@ -214,34 +237,22 @@ function ExportWindowInner() {
         },
       };
 
-      const blob = await Promise.race([
-        exportToMp4(
-          {
-            comp: c,
-            registry,
-            resolveAudioUrl,
-            outputSize: runOut,
-            videoBitrate: runBitrate,
-            signal: controller.signal,
-            onProgress: (done, total) => {
-              setFrame(done);
-              setElapsedMs(performance.now() - startedAtRef.current);
-            },
+      const blob = await exportToMp4(
+        {
+          comp: c,
+          registry,
+          resolveAudioUrl,
+          outputSize: runOut,
+          videoBitrate: runBitrate,
+          signal: controller.signal,
+          onProgress: (done, total) => {
+            lastProgressAtRef.current = performance.now();
+            setFrame(done);
+            setElapsedMs(performance.now() - startedAtRef.current);
           },
-          deps
-        ),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  "Export timed out after 5 minutes — the encoder likely stalled. Try a lower resolution or a shorter composition, and check the console for a WebGL/WebCodecs error."
-                )
-              ),
-            5 * 60 * 1000
-          )
-        ),
-      ]);
+        },
+        deps
+      );
 
       const url = URL.createObjectURL(blob);
       resultUrlRef.current = url;
@@ -251,7 +262,17 @@ function ExportWindowInner() {
       setElapsedMs(performance.now() - startedAtRef.current);
       setPhase("done");
     } catch (err) {
-      if (controller.signal.aborted) {
+      if (stalledRef.current) {
+        // No frame progress for STALL_TIMEOUT_MS — genuinely stuck, not just
+        // slow (a slow-but-working video-heavy export keeps landing progress
+        // and never trips this).
+        console.error("[ExportWindow] export stalled (no progress):", err);
+        setErrorFrame(frame);
+        setErrorMsg(
+          `Export stalled — no progress for ${STALL_TIMEOUT_MS / 1000}s. The encoder likely hung; check the console for a WebGL/WebCodecs error.`
+        );
+        setPhase("error");
+      } else if (controller.signal.aborted) {
         // User cancelled — return to setup, keep settings.
         setPhase("setup");
         setCanceledNote(true);
@@ -264,6 +285,7 @@ function ExportWindowInner() {
         setPhase("error");
       }
     } finally {
+      clearInterval(stallInterval);
       abortRef.current = null;
       store.getState().setIsExporting(false);
     }

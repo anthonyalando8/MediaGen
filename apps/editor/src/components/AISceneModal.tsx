@@ -31,11 +31,13 @@ import {
   generateScene,
   compileGeneratedScene,
   listFormats,
+  listVoices,
+  previewVoice,
   rerollVisual,
   SceneGenerateError,
   DEFAULT_FORMAT,
 } from "../persistence/scene-generate";
-import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual } from "../persistence/scene-generate";
+import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual, VoiceOption } from "../persistence/scene-generate";
 import { closeAIScene, getAISceneState, subscribeAIScene } from "../store/ai-scene-handle";
 
 const overlay: React.CSSProperties = {
@@ -96,6 +98,12 @@ function AISceneModalInner() {
   const [format, setFormat] = useState<string>(DEFAULT_FORMAT);
   const [mediaMode, setMediaMode] = useState<MediaMode>("auto");
 
+  // Voice picker state. voiceId === "" means "Automatic" (today's genre/LLM-driven choice).
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [voiceId, setVoiceId] = useState<string>("");
+  const [previewingVoice, setPreviewingVoice] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
   // Asset review — which job this scene came from (for reroll), and which
   // beat (if any) currently has a reroll in flight.
   const [jobId, setJobId] = useState<string | null>(null);
@@ -107,7 +115,7 @@ function AISceneModalInner() {
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => { if (phase === "input") inputRef.current?.focus(); }, [phase]);
-  useEffect(() => () => { abortRef.current?.abort(); audioRef.current?.pause(); }, []);
+  useEffect(() => () => { abortRef.current?.abort(); audioRef.current?.pause(); previewAudioRef.current?.pause(); }, []);
 
   // Load the available formats once when the modal mounts.
   useEffect(() => {
@@ -120,10 +128,48 @@ function AISceneModalInner() {
     return () => ac.abort();
   }, []);
 
+  // Load the English voice catalog once when the modal mounts. Empty list on
+  // failure just means the picker shows only "Automatic" — generation still works.
+  useEffect(() => {
+    const ac = new AbortController();
+    listVoices(ac.signal).then(setVoices);
+    return () => ac.abort();
+  }, []);
+
   const activeFormat = useMemo(
     () => formats.find((f) => f.id === format) ?? formats[0],
     [formats, format]
   );
+
+  const voiceGroups = useMemo(() => {
+    const groups: { label: string; voices: VoiceOption[] }[] = [
+      { label: "American — female", voices: [] },
+      { label: "American — male", voices: [] },
+      { label: "British — female", voices: [] },
+      { label: "British — male", voices: [] },
+    ];
+    for (const v of voices) {
+      const idx = (v.accent === "American" ? 0 : 2) + (v.gender === "male" ? 1 : 0);
+      groups[idx].voices.push(v);
+    }
+    return groups.filter((g) => g.voices.length > 0);
+  }, [voices]);
+
+  const previewSelectedVoice = useCallback(async () => {
+    if (!voiceId || previewingVoice) return;
+    setPreviewingVoice(true);
+    try {
+      const { url } = await previewVoice(voiceId);
+      previewAudioRef.current?.pause();
+      const el = new Audio(url);
+      previewAudioRef.current = el;
+      void el.play();
+      el.onended = () => setPreviewingVoice(false);
+      el.onerror = () => setPreviewingVoice(false);
+    } catch {
+      setPreviewingVoice(false);
+    }
+  }, [voiceId, previewingVoice]);
 
   // ── Derived storyboard from the raw scene ────────────────────────────────
   const { beats, totalSec, voUrls } = useMemo(() => {
@@ -147,6 +193,8 @@ function AISceneModalInner() {
   const reset = useCallback(() => {
     audioRef.current?.pause();
     audioRef.current = null;
+    previewAudioRef.current?.pause();
+    setPreviewingVoice(false);
     rerollAbortRef.current?.abort();
     setPlaying(false);
     setScene(null);
@@ -160,6 +208,8 @@ function AISceneModalInner() {
   const close = useCallback(() => {
     if (busy) return; // cancel first
     audioRef.current?.pause();
+    previewAudioRef.current?.pause();
+    setPreviewingVoice(false);
     rerollAbortRef.current?.abort();
     closeAIScene();
     setPhase("input");
@@ -188,6 +238,7 @@ function AISceneModalInner() {
         topic: t,
         format,
         mediaMode,
+        voiceId: voiceId || undefined,
         signal: controller.signal,
         onProgress: setProgress,
       });
@@ -207,7 +258,7 @@ function AISceneModalInner() {
     } finally {
       abortRef.current = null;
     }
-  }, [topic, busy, format, mediaMode]);
+  }, [topic, busy, format, mediaMode, voiceId]);
 
   // ── Asset review: reroll / convert / reject ──────────────────────────────
   const handleReroll = useCallback(async (beatIndex: number, mode?: "image" | "video") => {
@@ -360,6 +411,42 @@ function AISceneModalInner() {
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Voice */}
+              <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
+                Voice
+              </label>
+              <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
+                <select
+                  value={voiceId}
+                  onChange={(e) => setVoiceId(e.target.value)}
+                  style={{ flex: 1, height: 34, padding: "0 10px", borderRadius: 8,
+                    border: "1px solid var(--border)", background: "var(--surface-0)",
+                    color: "var(--text-0)", fontSize: 12.5, fontFamily: "var(--font-ui)" }}
+                >
+                  <option value="">Automatic (genre decides)</option>
+                  {voiceGroups.map((g) => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.voices.map((v) => (
+                        <option key={v.id} value={v.id}>{v.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  title="Preview voice"
+                  onClick={() => void previewSelectedVoice()}
+                  disabled={!voiceId || previewingVoice}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 34, height: 34, borderRadius: 8, border: "1px solid var(--border)",
+                    background: "var(--surface-0)", color: "var(--text-1)",
+                    cursor: !voiceId || previewingVoice ? "default" : "pointer",
+                    opacity: !voiceId || previewingVoice ? 0.4 : 1 }}
+                >
+                  {previewingVoice ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
+                </button>
               </div>
 
               {/* Topic */}

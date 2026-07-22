@@ -142,6 +142,28 @@ Decisions made during Phase 1 build (WK1–WK9). Each ADR records what was decid
 **Decision:** `commit(pts, isClosed)` always reads the current node from the store: `const idx = comp.root.findIndex(n => n.id === node.id); const currentProps = comp.root[idx].props`. The `useCallback` dep array uses `node.id` (stable) not `node` (stale reference).  
 **Consequences:** Each commit correctly builds on the previous committed state. The same fix was applied to `RichTextEditor`'s `handleInput` for the same reason.
 
+---
+
+## ADR-016: Video export is slow by design (MVP shortcut) — WebCodecs demux is the real fix, deferred
+
+**Status:** Deferred (interim mitigation shipped; root cause NOT fixed — read this before touching video export performance)
+
+**Context:** Compositions with video b-roll (introduced at scale by the MediaGen AI-scene media resolver, `apps/python/src/media_resolve.py`) were taking 20+ minutes to export and hitting a hardcoded 5-minute export timeout (`ExportWindow.tsx`), surfacing as "Failed at frame 412 / Export timed out." Investigation traced this to `packages/media/src/texture-source.ts`'s own documented "MVP shortcut": video texture sourcing for BOTH live preview and export uses a hidden `<video>` element, seeked via `el.currentTime = time` and awaited per output frame (`waitForSeek` + `waitForPresentedFrame`, `manager.ts`'s `prepare()`). Unlike an image (decoded once, reused free every frame), every video-visible export frame pays a real codec seek. A proper fix — WebCodecs-based demux, decoding video frames directly without a real `<video>` element — was already scoped as future work in `packages/media/src/decoder.ts`'s `FrameDecoder` (built, but never wired into the export pipeline; its own doc calls this "P2").
+
+**Two "cheap" workarounds were investigated this session and REJECTED — do not re-attempt without addressing the reasons below:**
+1. *"Let the video keep playing instead of hard-seeking every frame."* `manager.ts`'s `get()` already does something like this for LIVE PREVIEW (`SEQUENTIAL PLAYBACK` branch — element plays naturally, just pushes the latest decoded frame). It is **deliberately not used for export**: live preview re-renders continuously (RAF loop), so an unresolved seek can catch up on the *next* tick; export calls `render()` exactly once per output frame and captures the canvas synchronously immediately after, with no next tick to catch up on. Applying the live-preview shortcut to export would reintroduce the exact stale/wrong-frame bug `texture-source.ts`'s module doc describes fixing (see that file's "FIX IN THIS REVISION" note).
+2. *"Parallelize video seeks within one frame."* `renderer.ts`'s `prepareFrame` awaits texture refs sequentially, deliberately — multiple refs can point at the SAME shared `<video>` element, and concurrent seeks on one element race. A same-asset-safe version (parallelize across *distinct* assets, serialize only within a shared asset) is theoretically valid, but doesn't help the common case here (one video per beat, not multiple simultaneous distinct videos) — not worth the risk for the expected gain.
+
+**Decision:** Shipped only the safe, real win available this session: `ExportWindow.tsx`'s fixed 5-minute `Promise.race` timeout was replaced with a stall watchdog (`STALL_TIMEOUT_MS = 60_000`) that tracks time since the last `onProgress` callback and only aborts on genuine silence, not on total elapsed time. A slow-but-working video-heavy export (steady per-frame progress) now runs to completion instead of being killed partway.
+
+**Consequences:** Exports no longer fail artificially, but video-heavy exports are still genuinely slow — the per-frame seek cost is inherent to the current architecture, unchanged. The real fix remains:
+1. Add `mp4box.js` (not currently a dependency anywhere in the repo) to demux the video's MP4 container — extract codec string/description/codedWidth/codedHeight and chunk samples into `EncodedVideoChunk`s with correct timestamps/keyframe flags.
+2. Build a "seek to arbitrary time" cursor on top of `FrameDecoder` (`decoder.ts` already does configure→decode→output; the missing piece is a sequential decode-ahead reader matched to how export already walks frames monotonically — NOT per-frame random-access seeking, which would be little better than today).
+3. A new texture source producing `VideoFrame` outputs instead of an `HTMLVideoElement`; `renderer-webgl`'s texture upload path needs to accept that in addition to (not instead of) the existing element-based path.
+4. Gate the new path to EXPORT ONLY via `packages/export`'s already-injectable `media`/`createRenderer` deps seam — live preview's proven `<video>`-based path must stay untouched.
+5. No CI coverage is possible (`packages/export/src/index.ts`'s own comment: real encode/decode "can only be verified in a browser") — verification is manual, across whatever codecs the stock providers (Pexels/Pixabay) actually return.
+
+Realistic estimate: multiple sessions, not a quick add — treat as its own scoped feature, not a bugfix.
 
 ---
 
