@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+.git
+venv/
+**/__pycache__
+**/*.py[cod]
+apps/python/workspace/
+apps/python/kokoro-v1.0.onnx
+apps/python/voices-v1.0.bin
+apps/python/.env
+data/
+captures/
+.vscode/
+.idea/

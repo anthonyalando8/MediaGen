@@ -15,6 +15,7 @@ import { applyOp, invertOp, toFrame } from "core";
 import type { AssetRef, Composition, Id, Op, Project } from "core";
 import type { StateCreator } from "zustand";
 import type { EditorState } from "./index";
+import { resetViewport } from "./viewport-reset-handle";
 
 export interface DocumentSlice {
   document: {
@@ -141,6 +142,12 @@ export function createDocumentSlice(initialProject: Project): StateCreator<Edito
       s.select([]);
       s.pause();
       s.setPlayhead(toFrame(0));
+      // A newly-loaded project starts fresh: let the empty-state start panel
+      // reappear (it self-hides again the moment the comp has any layer).
+      s.setStartPanelDismissed?.(false);
+      // Force the viewport to rebuild its renderer (fresh textures + cleared
+      // framebuffer) so no pixels from the previous project linger on screen.
+      resetViewport();
     },
 
     addAsset(asset) {

@@ -10,7 +10,10 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",
-    "lint:boundaries": "depcruise --config dep-cruiser.cjs packages apps"
+    "lint:boundaries": "depcruise --config dep-cruiser.cjs packages apps",
+    "docker:up": "docker compose up --build",
+    "docker:up:prod": "docker compose -f docker-compose.yml up --build",
+    "docker:down": "docker compose down"
   },
   "devDependencies": {
     "turbo": "^2.1.0",

@@ -770,7 +770,12 @@ function buildBeatGroup(
   // (a transitionIn already brings the beat on — a fade-in on top double-dips).
   const fadeF = Math.min(6, Math.max(2, Math.round(durationFrames * 0.08)));
   const groupChannels: any[] = [];
-  if (!transitionIn) {
+  // Fade-in on every beat EXCEPT the first: beat 0 must be fully opaque at
+  // frame 0, otherwise the paused reset-frame after an import/generate is
+  // transparent and the renderer leaves the PREVIOUS project's pixels on
+  // screen (stale canvas). A transitionIn already handles the entrance, so
+  // skip the plain fade there too.
+  if (!transitionIn && beatIndex > 0) {
     groupChannels.push({
       id: createId(),
       path: "opacity",

@@ -34,6 +34,10 @@ export interface UiSlice {
   /** Which inspector tab is active. */
   inspectorTab: InspectorTab;
   setInspectorTab(tab: InspectorTab): void;
+
+  /** Empty-state start panel soft-dismiss ("start blank"). Reset to false by loadProjectDocument. */
+  startPanelDismissed: boolean;
+  setStartPanelDismissed(v: boolean): void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -152,5 +156,8 @@ export const createUiSlice: StateCreator<EditorState, [], [], UiSlice> = (set, g
 
     inspectorTab: "properties",
     setInspectorTab(tab) { set({ inspectorTab: tab }); },
+
+    startPanelDismissed: false,
+    setStartPanelDismissed(v) { set({ startPanelDismissed: v }); },
   };
 };

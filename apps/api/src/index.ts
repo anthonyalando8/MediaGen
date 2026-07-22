@@ -52,7 +52,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
 
 export async function start(port = 3001): Promise<void> {
   const app = buildApp();
-  await app.listen({ port });
+  // host must be explicit: Fastify's listen() defaults to 127.0.0.1, which
+  // is unreachable from outside a container (the docker/api.Dockerfile
+  // healthcheck runs inside the container so it passes regardless — only
+  // requests routed in through Docker's port mapping notice).
+  await app.listen({ port, host: "0.0.0.0" });
   // eslint-disable-next-line no-console
   console.log(`[api] listening on http://localhost:${port}`);
 }

@@ -1,0 +1,65 @@
+# Auto-merged by plain `docker compose up` (Compose convention) — this is
+# what makes the stack dev-mode by default: switches all 3 services to the
+# Dockerfiles' "dev" target and bind-mounts source for hot reload.
+#
+# For a prod-like run, exclude this file explicitly:
+#   docker compose -f docker-compose.yml up --build
+#
+# node_modules anonymous volumes below are required on Windows/macOS hosts:
+# without them, the bind mount would overlay the container's own Linux
+# node_modules (installed at image build time) with the host's — which for
+# a Windows host means native binaries (esbuild, etc.) built for the wrong
+# platform. Masking the node_modules paths keeps the container's own install
+# and lets everything else hot-reload.
+services:
+  api:
+    build:
+      target: dev
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/api/node_modules
+      - /app/packages/characters/node_modules
+      - /app/packages/collab/node_modules
+      - /app/packages/contract/node_modules
+      - /app/packages/core/node_modules
+      - /app/packages/effects/node_modules
+      - /app/packages/export/node_modules
+      - /app/packages/media/node_modules
+      - /app/packages/motion/node_modules
+      - /app/packages/nodekinds/node_modules
+      - /app/packages/plugin-sdk/node_modules
+      - /app/packages/renderer-three/node_modules
+      - /app/packages/renderer-webgl/node_modules
+      - /app/packages/schema/node_modules
+      - /app/packages/sources/node_modules
+      - /app/packages/ui/node_modules
+
+  editor:
+    build:
+      target: dev
+    volumes:
+      - ./apps/editor:/app/apps/editor
+      - ./packages:/app/packages
+      - /app/node_modules
+      - /app/apps/editor/node_modules
+      - /app/packages/characters/node_modules
+      - /app/packages/collab/node_modules
+      - /app/packages/contract/node_modules
+      - /app/packages/core/node_modules
+      - /app/packages/effects/node_modules
+      - /app/packages/export/node_modules
+      - /app/packages/media/node_modules
+      - /app/packages/motion/node_modules
+      - /app/packages/nodekinds/node_modules
+      - /app/packages/plugin-sdk/node_modules
+      - /app/packages/renderer-three/node_modules
+      - /app/packages/renderer-webgl/node_modules
+      - /app/packages/schema/node_modules
+      - /app/packages/sources/node_modules
+      - /app/packages/ui/node_modules
+
+  python:
+    build:
+      target: dev

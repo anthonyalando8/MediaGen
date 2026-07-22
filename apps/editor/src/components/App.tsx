@@ -16,6 +16,7 @@ import { InspectorPanel } from "./InspectorPanel";
 import { TimelinePlaceholder } from "./TimelinePlaceholder";
 import { ExportWindow } from "./ExportWindow";
 import { AISceneModal } from "./AISceneModal";
+import { SceneStartPanel } from "./SceneStartPanel";
 import { useUndoRedoShortcuts } from "../store/use-undo-redo-shortcuts";
 import { useDeleteShortcut } from "../store/use-delete-shortcut";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -131,6 +132,7 @@ export function App() {
           <Viewport />
         </div>
         <ViewportEmptyOverlay />
+        <SceneStartPanel />
         <ViewportStatusBar />
       </div>
       <div

@@ -6,5 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true, // reachable from outside the container (docker/editor.Dockerfile)
+  },
+  preview: {
+    port: 5173,
+    host: true,
   },
 });
