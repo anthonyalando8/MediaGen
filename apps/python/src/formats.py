@@ -191,6 +191,24 @@ def load_format(prompts_root, format_id: str | None) -> Format:
     )
 
 
+def _summarize(voice: VoiceProfile, visuals: VisualProfile, media: MediaPlan) -> dict:
+    """Short, derived-not-hardcoded description of what a format's profile
+    actually does — shown in the editor's genre picker. Reads the same
+    fields that drive generation, so it can't drift out of sync with them."""
+    voice_text = voice.style or "LLM-driven"
+
+    motion_bits = []
+    if visuals.hud == "none":
+        motion_bits.append("no HUD")
+    if visuals.camera_energy == "low":
+        motion_bits.append("static camera")
+    if visuals.intensity_curve != "normal":
+        motion_bits.append(f"{visuals.intensity_curve} intensity")
+    motion_text = ", ".join(motion_bits) if motion_bits else "kinetic"
+
+    return {"voice": voice_text, "motion": motion_text, "media": media.mode}
+
+
 def list_formats(prompts_root) -> list[dict]:
     """Scan prompts/formats/* and return picker metadata. DEFAULT_FORMAT first."""
     root = _formats_root(prompts_root)
@@ -209,6 +227,9 @@ def list_formats(prompts_root) -> list[dict]:
             "label": meta.get("label", folder.name),
             "description": meta.get("description", ""),
             "default_resolve_visuals": bool(meta.get("default_resolve_visuals", True)),
+            "profile_summary": _summarize(
+                _voice_profile_from(meta), _visual_profile_from(meta), _media_plan_from(meta),
+            ),
         })
     out.sort(key=lambda m: (m["id"] != DEFAULT_FORMAT, m["label"].lower()))
     return out

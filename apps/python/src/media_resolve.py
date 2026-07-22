@@ -105,9 +105,11 @@ def _score_candidate(query_tokens: set, text: str, tags: str, width, height, all
     return score
 
 
-def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool):
+def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, exclude: set | None = None):
     best, best_score = None, -1.0
     for c in candidates:
+        if exclude and c.get("url") in exclude:
+            continue  # already shown to the user via a prior reroll — skip
         score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration)
         if score is None:
             continue
@@ -173,7 +175,7 @@ def _pixabay_image_candidates(q: str) -> list:
 _IMAGE_PROVIDERS = (_pexels_image_candidates, _unsplash_image_candidates, _pixabay_image_candidates)
 
 
-def _best_image_candidate(query: str, mood: list, allow_illustration: bool) -> dict | None:
+def _best_image_candidate(query: str, mood: list, allow_illustration: bool, exclude: set | None = None) -> dict | None:
     full_q = " ".join([query, *mood]).strip()
     q_tokens = _tokens(full_q)
 
@@ -188,7 +190,7 @@ def _best_image_candidate(query: str, mood: list, allow_illustration: bool) -> d
             for fn in _IMAGE_PROVIDERS:
                 candidates.extend(fn(subject))
 
-    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration)
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, exclude)
     if best is None:
         return None
     print(f"[media] {best['source']} ✓ (score={best_score:.2f}) \"{full_q}\"")
@@ -247,7 +249,7 @@ _VIDEO_PROVIDERS = (_pexels_video_candidates, _pixabay_video_candidates)
 _MAX_VIDEO_DURATION_MS = 30_000
 
 
-def _best_video_candidate(query: str, mood: list, allow_illustration: bool) -> dict | None:
+def _best_video_candidate(query: str, mood: list, allow_illustration: bool, exclude: set | None = None) -> dict | None:
     full_q = " ".join([query, *mood]).strip()
     q_tokens = _tokens(full_q)
 
@@ -256,7 +258,7 @@ def _best_video_candidate(query: str, mood: list, allow_illustration: bool) -> d
         candidates.extend(fn(full_q))
     candidates = [c for c in candidates if c.get("duration_ms", 0) <= _MAX_VIDEO_DURATION_MS]
 
-    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration)
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, exclude)
     if best is None:
         return None
     print(f"[media] {best['source']} video ✓ (score={best_score:.2f}) \"{full_q}\"")
@@ -275,6 +277,7 @@ def resolve_visual(
     mode: str = "auto",
     allow_illustration: bool = True,
     pace: str = "",
+    exclude: set | None = None,
 ) -> dict | None:
     """
     Resolve `query` to a visual — scored across every provider that has a
@@ -291,6 +294,7 @@ def resolve_visual(
                   doesn't set `media.mode`, so it reproduces the exact
                   pre-v2 output shape (image, never video) unless a format
                   opts in.
+    `exclude` — URLs to skip (already shown to the user via a prior reroll).
 
     Returns {"kind", "url", "relevance", "query", "duration_ms"?} or None.
     """
@@ -300,13 +304,13 @@ def resolve_visual(
 
     want_video = mode == "video" or (mode == "hybrid" and pace in _MOTION_PACES)
     if want_video:
-        result = _best_video_candidate(query, mood, allow_illustration)
+        result = _best_video_candidate(query, mood, allow_illustration, exclude)
         if result:
             return result
         # No video candidate cleared the bar — fall through to image so the
         # beat still gets a visual.
 
-    result = _best_image_candidate(query, mood, allow_illustration)
+    result = _best_image_candidate(query, mood, allow_illustration, exclude)
     if result:
         return result
     print(f"[media] ✗ no visual for \"{query}\"")

@@ -14,10 +14,11 @@ exactly like the export window's live progress.
 
 ENDPOINTS
 ---------
-  GET  /api/scene/formats       → [{id, label, description, default_resolve_visuals}]
-  POST /api/scene/generate      {topic, format?, resolve_visuals?}  → {job_id}
+  GET  /api/scene/formats       → [{id, label, description, default_resolve_visuals, profile_summary}]
+  POST /api/scene/generate      {topic, format?, resolve_visuals?, media_mode?}  → {job_id}
   GET  /api/scene/status/{id}   → {state, step, total_steps, label, pct, error}
   GET  /api/scene/result/{id}   → the scene.json object (self-contained)
+  POST /api/scene/reroll        {job_id, beat_index, mode?}  → {beat_index, visual, asset}
   GET  /api/health              → {ok, model_warm}
 
 `format` selects a recipe (prompt + validation profile) under prompts/formats/.
@@ -45,6 +46,7 @@ import threading
 import uuid
 import logging
 import traceback
+import dataclasses
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
@@ -61,6 +63,7 @@ from tts import synthesize, beat_durations
 from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
 from scene_export import build_scene
+from media_resolve import resolve_visual, download_as_data_url, download_video_as_data_url
 from utils import make_run_dir
 import json
 
@@ -147,10 +150,10 @@ def _sub(job_id: str, step: int, frac: float, detail: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline worker
 # ─────────────────────────────────────────────────────────────────────────────
-def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool) -> None:
+def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool, media_mode: str | None = None) -> None:
     started = _time.time()
-    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s",
-             job_id[:8], topic, format_id, resolve_visuals)
+    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s media_mode=%s",
+             job_id[:8], topic, format_id, resolve_visuals, media_mode)
     try:
         run_id, run_dir = make_run_dir(CFG["paths"]["workspace"])
         _set(job_id, run_id=run_id, run_dir=str(run_dir))
@@ -158,6 +161,9 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
         # 1. Script — load the selected format recipe (prompt + validation profile)
         _mark_step(job_id, 1)
         fmt = load_format(_PROMPTS_ROOT, format_id)
+        # Explicit request override wins over the format's own media.mode —
+        # mood/allow_illustration stay whatever the genre already set.
+        media_plan = dataclasses.replace(fmt.media, mode=media_mode) if media_mode else fmt.media
         script = generate_script(topic, fmt, CFG["llm"]["model"])
         (run_dir / "script.json").write_text(
             json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -195,14 +201,19 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             timeline=timeline, resolve_visuals=resolve_visuals,
             progress=lambda i, n, d: _sub(job_id, 5, (i + 1) / n, d),
             visual_profile=fmt.visuals,
-            media_plan=fmt.media,
+            media_plan=media_plan,
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 
         elapsed = round(_time.time() - started, 1)
         _set(job_id, state="done", step=_TOTAL, total_steps=_TOTAL,
              label="Ready", pct=100, scene=scene,
-             title=script.get("title", topic), format=format_id, elapsed_s=elapsed)
+             title=script.get("title", topic), format=format_id, elapsed_s=elapsed,
+             # For /api/scene/reroll: the effective media plan (mood/
+             # allow_illustration) and a per-beat "already shown" set so a
+             # reroll doesn't just hand back the same top candidate.
+             media_plan={"mood": media_plan.mood, "allow_illustration": media_plan.allow_illustration, "mode": media_plan.mode},
+             reroll_seen={})
         LOG.info("job %s · DONE in %ss (%d beats)", job_id[:8], elapsed, len(scene.get("beats", [])))
     except Exception as e:
         LOG.error("job %s · FAILED after %ss: %s", job_id[:8], round(_time.time() - started, 1), e)
@@ -250,6 +261,19 @@ class GenerateRequest(BaseModel):
     # to the original TikTok format so existing callers keep working unchanged.
     format: str = DEFAULT_FORMAT
     resolve_visuals: bool = True
+    # Optional editor override for the format's own media.mode (image/video/
+    # hybrid/auto) — the picker's manual media-mode control. None (the
+    # default) leaves the format's own choice untouched.
+    media_mode: str | None = None
+
+
+class RerollRequest(BaseModel):
+    job_id: str
+    beat_index: int
+    # Explicit kind override ("image"/"video") for the "→ Video"/"→ Image"
+    # quick-convert actions — omitted means "reroll within the same mode
+    # the beat already resolved with".
+    mode: str | None = None
 
 
 @app.get("/api/health")
@@ -281,8 +305,15 @@ def generate(req: GenerateRequest) -> dict:
     _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0,
          format=format_id, created=_time.time())
     _evict_if_needed()
-    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals)
+    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals, req.media_mode)
     return {"job_id": job_id}
+
+
+# Internal-only job fields never sent to the client — the raw scene (separate
+# fetch), and reroll bookkeeping (media_plan is plain dicts, reroll_seen holds
+# `set`s, neither of which the client needs nor FastAPI's default encoder
+# can serialize).
+_INTERNAL_JOB_FIELDS = {"scene", "media_plan", "reroll_seen"}
 
 
 @app.get("/api/scene/status/{job_id}")
@@ -291,8 +322,7 @@ def status(job_id: str) -> dict:
         job = _JOBS.get(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="unknown job")
-        # Status excludes the (large) scene payload — that's a separate fetch.
-        return {k: v for k, v in job.items() if k != "scene"}
+        return {k: v for k, v in job.items() if k not in _INTERNAL_JOB_FIELDS}
 
 
 @app.get("/api/scene/result/{job_id}")
@@ -304,3 +334,86 @@ def result(job_id: str) -> dict:
         if job.get("state") != "done":
             raise HTTPException(status_code=409, detail=f"job not ready ({job.get('state')})")
         return job["scene"]
+
+
+@app.post("/api/scene/reroll")
+def reroll(req: RerollRequest) -> dict:
+    """
+    Re-resolve one beat's visual — the editor's ↺ Reroll / → Video / → Image
+    actions in the asset-review step. Re-uses the beat's existing asset id
+    (swapping the vid_/img_ prefix if the kind changes) so repeated rerolls
+    don't grow scene.json's assets[] unboundedly, and excludes every URL
+    already shown for this beat so a reroll can't just hand back the same
+    candidate.
+    """
+    with _JOBS_LOCK:
+        job = _JOBS.get(req.job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="unknown job")
+        if job.get("state") != "done":
+            raise HTTPException(status_code=409, detail=f"job not ready ({job.get('state')})")
+        beats = job["scene"].get("beats", [])
+        if not (0 <= req.beat_index < len(beats)):
+            raise HTTPException(status_code=400, detail=f"beat_index out of range (0..{len(beats) - 1})")
+        beat = beats[req.beat_index]
+        query = (beat.get("visual_query") or "").strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="this beat has no visual_query to resolve against")
+        pace = beat.get("pace", "")
+        media_plan = job["media_plan"]
+        mode = req.mode or media_plan["mode"]
+        seen = job.setdefault("reroll_seen", {}).setdefault(req.beat_index, set())
+        current_url = (beat.get("visual") or {}).get("_source_url")
+        if current_url:
+            seen.add(current_url)
+        exclude = set(seen)  # snapshot — network calls below happen outside the lock
+
+    # Network resolve/download — deliberately outside _JOBS_LOCK (can take
+    # several seconds; every other status/result poll would otherwise stall).
+    found = resolve_visual(
+        query, mood=media_plan["mood"], mode=mode,
+        allow_illustration=media_plan["allow_illustration"], pace=pace, exclude=exclude,
+    )
+    if not found:
+        raise HTTPException(status_code=404, detail="no alternative visual found for this beat")
+    is_video = found["kind"] == "video"
+    data = download_video_as_data_url(found["url"]) if is_video else download_as_data_url(found["url"])
+    if not data and is_video:
+        # Oversized/failed clip — same fallback scene_export.py uses.
+        found = resolve_visual(query, mood=media_plan["mood"], mode="image",
+                                allow_illustration=media_plan["allow_illustration"], exclude=exclude)
+        if not found:
+            raise HTTPException(status_code=404, detail="no alternative visual found for this beat")
+        is_video = False
+        data = download_as_data_url(found["url"])
+    if not data:
+        raise HTTPException(status_code=502, detail="could not download the resolved visual")
+
+    new_iid = f"{'vid' if is_video else 'img'}_{req.beat_index}"
+    new_asset = {"id": new_iid, "kind": found["kind"], "url": data["url"]}
+    if data.get("width") and data.get("height"):
+        new_asset["width"], new_asset["height"] = data["width"], data["height"]
+    if is_video and found.get("duration_ms"):
+        new_asset["duration_ms"] = found["duration_ms"]
+    new_visual = {
+        "asset_id": new_iid, "kind": found["kind"], "role": "background",
+        "fit": "cover", "opacity": 0.9,
+        "relevance": found.get("relevance", 0.0), "query": found.get("query", query),
+        "alternatives": [], "_source_url": found["url"],
+    }
+
+    with _JOBS_LOCK:
+        job = _JOBS.get(req.job_id)
+        if not job:  # evicted while we were resolving — nothing left to update
+            raise HTTPException(status_code=404, detail="job no longer available")
+        old_iid = ((job["scene"]["beats"][req.beat_index].get("visual") or {}).get("asset_id"))
+        job["scene"]["assets"] = [a for a in job["scene"]["assets"] if a["id"] not in (old_iid, new_iid)]
+        job["scene"]["assets"].append(new_asset)
+        job["scene"]["beats"][req.beat_index]["visual"] = new_visual
+        job.setdefault("reroll_seen", {}).setdefault(req.beat_index, set()).add(found["url"])
+
+    return {
+        "beat_index": req.beat_index,
+        "visual": {k: v for k, v in new_visual.items() if k != "_source_url"},
+        "asset": new_asset,
+    }

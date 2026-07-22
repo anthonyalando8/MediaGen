@@ -26,6 +26,32 @@ export interface SceneFormat {
   label: string;
   description: string;
   default_resolve_visuals?: boolean;
+  /** Short, server-derived description of what the format's profile actually
+   * does — shown under the format chip in the picker. */
+  profile_summary?: { voice: string; motion: string; media: string };
+}
+
+export type MediaMode = "auto" | "image" | "video" | "hybrid";
+
+/** A beat's resolved visual (scene.json v2 shape) — what the asset-review step displays/edits. */
+export interface SceneVisual {
+  asset_id: string;
+  kind: "image" | "video";
+  role?: string;
+  fit?: string;
+  opacity?: number;
+  relevance?: number;
+  query?: string;
+  alternatives?: string[];
+}
+
+export interface SceneAsset {
+  id: string;
+  kind: "image" | "video" | "audio";
+  url: string;
+  width?: number;
+  height?: number;
+  duration_ms?: number;
 }
 
 export interface GenerateProgress {
@@ -48,6 +74,8 @@ interface GenerateOptions {
   /** Format recipe id (folder under prompts/formats/). Defaults server-side. */
   format?: string;
   resolveVisuals?: boolean;
+  /** Override the format's own media.mode for this generation. Omitted = format's own choice. */
+  mediaMode?: MediaMode;
   onProgress?: (p: GenerateProgress) => void;
   signal?: AbortSignal;
   /** Poll interval ms (default 1200). */
@@ -87,11 +115,12 @@ export async function listFormats(signal?: AbortSignal): Promise<SceneFormat[]> 
  * yet compiled). The caller previews it, then calls `compileGeneratedScene`
  * on confirm. Rejects on server error, job error, or abort.
  */
-export async function generateScene(opts: GenerateOptions): Promise<{ scene: any; title?: string }> {
+export async function generateScene(opts: GenerateOptions): Promise<{ scene: any; title?: string; jobId: string }> {
   const {
     topic,
     format = DEFAULT_FORMAT,
     resolveVisuals = true,
+    mediaMode,
     onProgress,
     signal,
     pollMs = 1200,
@@ -101,7 +130,10 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
     await fetch(`${SCENE_API_BASE}/api/scene/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic, format, resolve_visuals: resolveVisuals }),
+      body: JSON.stringify({
+        topic, format, resolve_visuals: resolveVisuals,
+        ...(mediaMode ? { media_mode: mediaMode } : {}),
+      }),
       signal,
     })
   );
@@ -122,10 +154,31 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
   const scene = await j<Record<string, unknown>>(
     await fetch(`${SCENE_API_BASE}/api/scene/result/${job_id}`, { signal })
   );
-  return { scene, title };
+  return { scene, title, jobId: job_id };
 }
 
 /** Compile a previously-generated raw scene into a ready-to-load Project (same compiler as Import Scene…). */
 export function compileGeneratedScene(scene: any): Project {
   return compileSceneToProject(scene);
+}
+
+/**
+ * Re-resolve one beat's visual (the asset-review step's ↺ Reroll / → Video /
+ * → Image actions). Excludes everything already shown for that beat
+ * server-side, so this never just hands back the same candidate.
+ */
+export async function rerollVisual(
+  jobId: string,
+  beatIndex: number,
+  mode?: "image" | "video",
+  signal?: AbortSignal,
+): Promise<{ beat_index: number; visual: SceneVisual; asset: SceneAsset }> {
+  return j(
+    await fetch(`${SCENE_API_BASE}/api/scene/reroll`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, beat_index: beatIndex, ...(mode ? { mode } : {}) }),
+      signal,
+    })
+  );
 }

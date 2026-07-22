@@ -125,6 +125,10 @@ def build_scene(
                 "fit": "cover", "opacity": 0.9,
                 "relevance": result.get("relevance", 0.0), "query": result.get("query", q),
                 "alternatives": [],
+                # Internal only (not for the UI) — the resolved source URL,
+                # so a later /api/scene/reroll knows what to exclude to
+                # avoid handing back the exact same candidate.
+                "_source_url": result["url"],
             }
 
     scene = {

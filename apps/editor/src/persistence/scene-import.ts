@@ -158,12 +158,13 @@ function cameraChannels(camera: string | undefined, start: number, dur: number, 
     path: "transform.scale",
     type: "vec2" as const,
     keys: fast
+      // snap+hold: fast ease-out feels like the intended "snap", not a linear ramp
       ? [
-          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "linear" as const },
+          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "bezier" as const, ...EASE_OUT },
           { frame: toFrame(start + Math.min(6, Math.floor(dur * 0.3))), value: { x: v1, y: v1 }, interp: "linear" as const },
         ]
       : [
-          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "linear" as const },
+          { frame: toFrame(start), value: { x: v0, y: v0 }, interp: "bezier" as const },
           { frame: toFrame(end), value: { x: v1, y: v1 }, interp: "linear" as const },
         ],
   });
@@ -172,7 +173,7 @@ function cameraChannels(camera: string | undefined, start: number, dur: number, 
     path: "transform.position",
     type: "vec3" as const,
     keys: [
-      { frame: toFrame(start), value: { x: 0, y: y0, z: 0 }, interp: "linear" as const },
+      { frame: toFrame(start), value: { x: 0, y: y0, z: 0 }, interp: "bezier" as const },
       { frame: toFrame(end), value: { x: 0, y: y1, z: 0 }, interp: "linear" as const },
     ],
   });
@@ -195,10 +196,13 @@ function cameraChannels(camera: string | undefined, start: number, dur: number, 
           id: createId(),
           path: "transform.position",
           type: "vec3" as const,
+          // bezier per segment — a purely linear jitter pattern reads as a
+          // mechanical zigzag; easing each hop softens it into something
+          // closer to organic handheld motion.
           keys: fr.map((f, i) => ({
             frame: toFrame(start + Math.round(dur * f)),
             value: { x: pat[i][0] * amp, y: pat[i][1] * amp, z: 0 },
-            interp: "linear" as const,
+            interp: i < fr.length - 1 ? ("bezier" as const) : ("linear" as const),
           })),
         },
       ];
@@ -292,6 +296,25 @@ function patternBurst(pi: string | null | undefined, start: number, dur: number,
     default:
       return null;
   }
+}
+
+// ── Easing ───────────────────────────────────────────────────────────────
+// Constant-velocity ("linear") keyframes read as mechanical — packages/core's
+// evaluator already supports "bezier" interp (default handles ≈ CSS `ease`),
+// and apps/editor's own manual animation presets (commands/channel-ops.ts's
+// EASING_PRESETS, commands/set-span-animation.ts) already use it everywhere.
+// This compiler was the one place still hardcoding "linear" on every
+// keyframe — that mismatch is what makes AI-generated scenes feel less
+// polished than hand-authored ones. EASE_OUT suits entrances/reveals (fast
+// start, settle); bare "bezier" (no handles → the engine's own default)
+// suits continuous moves (camera, Ken Burns, handheld).
+const EASE_OUT = { outHandle: [0, 0] as [number, number], inHandle: [0.58, 1] as [number, number] };
+
+/** All-but-last keyframe eases (bezier, default handles); the last has no
+ * outgoing segment to ease so its interp is never consulted — "linear" is
+ * just the convention used for terminal keys elsewhere in the codebase. */
+function eased<T extends { frame: number }>(keys: T[]): (T & { interp: "bezier" | "linear" })[] {
+  return keys.map((k, i) => ({ ...k, interp: i < keys.length - 1 ? ("bezier" as const) : ("linear" as const) }));
 }
 
 export class SceneFileError extends Error {
@@ -409,7 +432,7 @@ function textNode(opts: {
       id: createId(),
       path: "props.fill",
       type: "color" as const,
-      keys: opts.fillChannel.keys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+      keys: eased(opts.fillChannel.keys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
     });
   }
   if (opts.opacityKeys) {
@@ -417,7 +440,7 @@ function textNode(opts: {
       id: createId(),
       path: "opacity",
       type: "scalar" as const,
-      keys: opts.opacityKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+      keys: eased(opts.opacityKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
     });
   }
   if (opts.scaleKeys) {
@@ -425,7 +448,7 @@ function textNode(opts: {
       id: createId(),
       path: "transform.scale",
       type: "vec2" as const,
-      keys: opts.scaleKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+      keys: eased(opts.scaleKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
     });
   }
   if (opts.posKeys) {
@@ -433,7 +456,7 @@ function textNode(opts: {
       id: createId(),
       path: "transform.position",
       type: "vec3" as const,
-      keys: opts.posKeys.map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: "linear" as const })),
+      keys: eased(opts.posKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
     });
   }
   return {
@@ -545,8 +568,10 @@ function buildBeatGroup(
         id: createId(),
         path: "transform.scale",
         type: "vec2" as const,
+        // bezier — a constant-velocity Ken Burns drift reads as mechanical;
+        // easing in/out of the pan+zoom feels intentional rather than robotic.
         keys: [
-          { frame: toFrame(startFrame), value: { x: s0, y: s0 }, interp: "linear" as const },
+          { frame: toFrame(startFrame), value: { x: s0, y: s0 }, interp: "bezier" as const },
           { frame: toFrame(end), value: { x: s1, y: s1 }, interp: "linear" as const },
         ],
       },
@@ -555,7 +580,7 @@ function buildBeatGroup(
         path: "transform.position",
         type: "vec3" as const,
         keys: [
-          { frame: toFrame(startFrame), value: { x: 0, y: 0, z: 0 }, interp: "linear" as const },
+          { frame: toFrame(startFrame), value: { x: 0, y: 0, z: 0 }, interp: "bezier" as const },
           { frame: toFrame(end), value: { x: dx, y: dy, z: 0 }, interp: "linear" as const },
         ],
       },
@@ -781,7 +806,7 @@ function buildBeatGroup(
       path: "opacity",
       type: "scalar" as const,
       keys: [
-        { frame: toFrame(startFrame), value: 0, interp: "linear" as const },
+        { frame: toFrame(startFrame), value: 0, interp: "bezier" as const, ...EASE_OUT },
         { frame: toFrame(startFrame + fadeF), value: 1, interp: "linear" as const },
       ],
     });
