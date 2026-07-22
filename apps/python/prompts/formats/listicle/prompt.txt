@@ -1,0 +1,95 @@
+Write a SHORT-FORM LISTICLE / COUNTDOWN vertical video script for TikTok/Reels/Shorts.
+
+TOPIC: "{topic}"
+
+The video is a numbered rundown: a scroll-stopping intro, then ONE beat per list
+item (a reason, tip, mistake, or fact), then a short payoff that ties it together.
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 5 words, creator-style (may include a number, e.g. \"5 Habits Ruining You\")",
+  "thumbnail": "2-4 word emotionally charged phrase",
+  "style": "analytical | builder | contrarian | cinematic | humorous",
+
+  "global": {{
+    "theme":        "clean_modern | tech_blue | editorial_white | warm_amber | dark_kinetic | luxury_minimal",
+    "music_mood":   "upbeat | minimal | playful | tense | ambient",
+    "voice_style":  "analytical | storyteller | comedic | documentary",
+    "camera_style": "static | dynamic",
+    "subject":      "1-3 word concrete photographable noun anchoring every visual_query"
+  }},
+
+  "beats": [
+    {{
+      "id":            "beat_01",
+      "type":          "hook | insight | truth | payoff | cta",
+      "keyword":       "2-4 WORD PHRASE — for item beats, LEAD WITH THE NUMBER (e.g. \"#1 SKIP THIS\")",
+      "text":          "spoken sentence, 10-28 words",
+      "energy":        "high | mid | low",
+      "emotion":       "urgent | confident | serious | playful | surprised | amused",
+      "pace":          "slow | mid | fast | explosive",
+      "visual_intent": "clean | minimal | documentary | quirky | cinematic",
+      "camera":        "static | push_in | pull_out | snap_zoom | tilt_up",
+      "transition":    "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
+      "background":    "solid | gradient | grid | glow | lines",
+      "layout":        "left | center | right | full",
+      "visual_query":  "2-4 word LITERAL image search, subject-first, no mood words",
+      "intensity":     0.7
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURE — MANDATORY
+──────────────────────────────────────────────────────────────────────
+1. Beat 1 is the HOOK: name the promise and the count ("Five mistakes killing
+   your focus — number three is you"). Create curiosity or mild stakes.
+2. Each following beat is ONE list item, in order. Its keyword LEADS WITH THE
+   NUMBER ("#1 …", "#2 …"). Body delivers the item in one or two tight sentences.
+3. The FINAL beat is a payoff or challenge — not a "follow for more" CTA.
+4. Item count: 3-8 items (so 4-10 beats total). Match what the topic needs.
+
+──────────────────────────────────────────────────────────────────────
+WRITING RULES
+──────────────────────────────────────────────────────────────────────
+- Every beat text is 10-28 words. Total across all beats: under 240 words.
+- Speak as a creator with an opinion. Use "you". Be concrete and specific.
+- Keep items PARALLEL in shape (all "do X" or all "avoid Y"), so the rundown reads clean.
+- BANNED PHRASES: "here's the thing" / "the truth is" / "most people" / "follow for more".
+- Optional: wrap ONE word per sentence in *asterisks* to mark the landing word.
+  (Not required for this format, but it improves the on-screen emphasis animation.)
+
+──────────────────────────────────────────────────────────────────────
+CINEMATIC FIELDS
+──────────────────────────────────────────────────────────────────────
+- Give the video at least 2 different `camera` values and at least 2 `layout`
+  values across the whole script. Item beats MAY share a look, but don't run the
+  same camera for more than 3 beats in a row.
+- camera: hook=push_in or snap_zoom; items=static or push_in; payoff=pull_out.
+- transition: slam_cut into the hook, cut/whip_pan between items, fade/dip_black on the payoff.
+- intensity: hook ~0.9, items ~0.6-0.75, payoff ~0.8.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL — it ignores emotion and metaphor. Every visual_query:
+1. LEADS WITH the global `subject` (or a concrete same-domain noun) — the literal
+   thing on screen, present in EVERY beat.
+2. Adds at most 1-2 VISUAL modifiers (lighting, angle, setting): "night", "close up",
+   "macro", "overhead", "office", "screen glow".
+3. NEVER uses feeling/abstraction words ("struggle", "journey", "freedom", "mind") —
+   they return generic nature/abstract stock instead of your topic.
+4. 2-4 words. Concrete + visual. Template: [subject] + [setting or lighting].
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. Beat 1 = hook naming the count; last beat = payoff/challenge (not a follow CTA).
+2. Item beats numbered in their keyword ("#1", "#2", …), in order.
+3. Each beat 10-28 words; total under 240.
+4. ≥2 cameras and ≥2 layouts across the script; no camera repeated 4+ beats in a row.
+5. Every beat has a numeric intensity in [0.0, 1.0].
+6. Every visual_query is subject-first with no mood/abstraction words.
+
+Output the JSON only.

@@ -1,0 +1,25 @@
+id: shortform_tiktok
+label: "Short-form (TikTok / Reels)"
+description: "High-retention creator opinion. Strong hook, 4-8 punchy beats, kinetic cinematics. The original MediaGen format."
+
+# Reuse the existing, unchanged prompt at prompts/script.txt (relative to the
+# prompts root) so it stays the single source of truth.
+prompt_path: script.txt
+
+default_resolve_visuals: true
+
+beats: { min: 4, max: 8 }
+# 15-30 mirrors the validator's historical runtime behaviour (the old error
+# message said 15-25, but the check allowed up to 30). Tighten to 25 here if
+# you want the message and the gate to finally agree.
+words_per_beat: { min: 15, max: 30 }
+total_words: { max: 200 }
+require_emphasis: false
+
+variety:
+  min_cameras: 3
+  min_paces: 2
+  min_layouts: 2
+  min_backgrounds: 2
+  max_consecutive_camera: 2
+  max_consecutive_layout: 2

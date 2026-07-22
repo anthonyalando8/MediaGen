@@ -1,7 +1,7 @@
 // apps/editor/src/components/AISceneModal.tsx
 //
 // "Generate AI Scene" modal — three phases:
-//   input    → topic entry
+//   input    → format picker + topic entry
 //   running  → real per-step progress (label + detail + bar) with Cancel
 //   preview  → STORYBOARD of the finished scene (title, per-beat image thumb +
 //              keyword + duration, sequential voiceover playback) with
@@ -11,13 +11,24 @@
 // on Import (compileGeneratedScene → loadProjectDocument), the same path as
 // manual Import Scene… / Open….
 //
+// The format picker is populated from GET /api/scene/formats so it reflects
+// whatever recipes exist under prompts/formats/ — no hardcoded list. If the
+// server is unreachable, it falls back to a single default so the user can
+// still generate.
+//
 // Styled inline with the SeaBytes theme CSS variables (theme.css).
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Download, Loader2, Play, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEditorStoreApi } from "../store/context";
-import { generateScene, compileGeneratedScene, SceneGenerateError } from "../persistence/scene-generate";
-import type { GenerateProgress } from "../persistence/scene-generate";
+import {
+  generateScene,
+  compileGeneratedScene,
+  listFormats,
+  SceneGenerateError,
+  DEFAULT_FORMAT,
+} from "../persistence/scene-generate";
+import type { GenerateProgress, SceneFormat } from "../persistence/scene-generate";
 import { closeAIScene, getAISceneState, subscribeAIScene } from "../store/ai-scene-handle";
 
 const overlay: React.CSSProperties = {
@@ -25,6 +36,10 @@ const overlay: React.CSSProperties = {
   alignItems: "center", justifyContent: "center",
   background: "rgba(4, 8, 10, 0.6)", backdropFilter: "blur(3px)",
 };
+
+const FALLBACK_FORMATS: SceneFormat[] = [
+  { id: DEFAULT_FORMAT, label: "Short-form (TikTok / Reels)", description: "High-retention creator opinion." },
+];
 
 export function AISceneModal() {
   const { open } = useSyncExternalStore(subscribeAIScene, getAISceneState, getAISceneState);
@@ -51,12 +66,32 @@ function AISceneModalInner() {
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Format picker state.
+  const [formats, setFormats] = useState<SceneFormat[]>(FALLBACK_FORMATS);
+  const [format, setFormat] = useState<string>(DEFAULT_FORMAT);
+
   // Sequential voiceover playback for the preview.
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => { if (phase === "input") inputRef.current?.focus(); }, [phase]);
   useEffect(() => () => { abortRef.current?.abort(); audioRef.current?.pause(); }, []);
+
+  // Load the available formats once when the modal mounts.
+  useEffect(() => {
+    const ac = new AbortController();
+    listFormats(ac.signal).then((fs) => {
+      if (fs.length === 0) return; // keep fallback
+      setFormats(fs);
+      setFormat((cur) => (fs.some((f) => f.id === cur) ? cur : fs[0].id));
+    });
+    return () => ac.abort();
+  }, []);
+
+  const activeFormat = useMemo(
+    () => formats.find((f) => f.id === format) ?? formats[0],
+    [formats, format]
+  );
 
   // ── Derived storyboard from the raw scene ────────────────────────────────
   const { beats, totalSec, voUrls } = useMemo(() => {
@@ -111,6 +146,7 @@ function AISceneModalInner() {
     try {
       const { scene: raw, title: tt } = await generateScene({
         topic: t,
+        format,
         signal: controller.signal,
         onProgress: setProgress,
       });
@@ -129,7 +165,7 @@ function AISceneModalInner() {
     } finally {
       abortRef.current = null;
     }
-  }, [topic, busy]);
+  }, [topic, busy, format]);
 
   const doImport = useCallback(() => {
     if (!scene) return;
@@ -194,6 +230,37 @@ function AISceneModalInner() {
         <div style={{ padding: 18 }}>
           {phase === "input" && (
             <>
+              {/* Format picker */}
+              <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
+                Video format
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 6 }}>
+                {formats.map((f) => {
+                  const selected = f.id === format;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFormat(f.id)}
+                      title={f.description}
+                      style={{
+                        padding: "7px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                        cursor: "pointer", fontFamily: "var(--font-ui)",
+                        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                        background: selected ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "var(--surface-0)",
+                        color: selected ? "var(--accent)" : "var(--text-1)",
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "0 2px 16px", minHeight: 16 }}>
+                {activeFormat?.description || "\u00a0"}
+              </p>
+
+              {/* Topic */}
               <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
                 What should the video be about?
               </label>
@@ -208,8 +275,8 @@ function AISceneModalInner() {
                   background: "var(--surface-0)", color: "var(--text-0)", fontSize: 14, fontFamily: "var(--font-ui)" }}
               />
               <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "10px 2px 0" }}>
-                Writes a script, generates the voiceover, fetches matching visuals, then shows a
-                preview here before importing. Takes up to a couple of minutes.
+                Writes a script in the chosen format, generates the voiceover, fetches matching visuals,
+                then shows a preview here before importing. Takes up to a couple of minutes.
               </p>
             </>
           )}

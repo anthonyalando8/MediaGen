@@ -1,0 +1,13 @@
+id: calm_narrative
+label: "Calm narrative"
+description: "Slow, reflective storytelling. Even pacing, minimal motion, breathing room. Repetition is intentional."
+
+default_resolve_visuals: true
+
+beats: { min: 3, max: 7 }
+words_per_beat: { min: 12, max: 32 }
+total_words: { max: 220 }
+require_emphasis: false
+
+# Variety gates OFF — a calm piece is SUPPOSED to hold a steady, repeating look.
+variety: {}

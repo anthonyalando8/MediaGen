@@ -10,14 +10,18 @@ Pipeline:  script → voice (Kokoro) → captions/transcript → timeline
 
 Usage (from project root — MediaGen/):
 
-  # single topic
+  # single topic (default format: shortform_tiktok)
   python src/main.py "why linux beats windows for developers"
 
+  # pick a different video format (folder under prompts/formats/)
+  python src/main.py "5 habits ruining your focus" --format listicle
+  python src/main.py "the quiet cost of always being busy" --format calm_narrative
+
   # pick a random topic from a subject file
-  python src/main.py --source tech --random
+  python src/main.py --source tech --random --format listicle
 
   # process every topic in a subject file  (--limit N caps it)
-  python src/main.py --source tech --batch --limit 10
+  python src/main.py --source tech --batch --limit 10 --format shortform_tiktok
 
   # rebuild from an existing workspace (creates a NEW run, never overwrites)
   python src/main.py --rebuild 015
@@ -26,6 +30,7 @@ Usage (from project root — MediaGen/):
   python src/main.py --rebuild 015 --from scene      # reuse voice+captions; rebuild scene.json only
 
   Subject files live in:  data/topics/<subject>.txt   (one topic per line)
+  Formats live in:        prompts/formats/<format>/   (prompt.txt + format.yaml)
 """
 
 import sys
@@ -39,6 +44,7 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
 from llm      import generate_script
+from formats  import load_format, list_formats, DEFAULT_FORMAT
 from tts      import synthesize, beat_durations
 from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
@@ -132,6 +138,9 @@ def rebuild(prefix: str, from_step: int, cfg: dict) -> dict:
     Read script.json from the workspace matching *prefix*, create a NEW run,
     copy the reusable files, then run from *from_step* onward. The source
     workspace is never modified.
+
+    Rebuild never re-runs step 1 (script generation), so no format is needed —
+    the existing script.json already encodes whatever format produced it.
     """
     t0 = time.time()
     workspace_root = pathlib.Path(cfg["paths"]["workspace"])
@@ -214,17 +223,17 @@ def _load_durations(beat_wavs: list[pathlib.Path], script: dict) -> list[float]:
 # Single run
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_one(topic: str, cfg: dict) -> dict:
-    """Run the full pipeline for a single topic. Returns a small result dict."""
+def run_one(topic: str, cfg: dict, format_id: str = DEFAULT_FORMAT) -> dict:
+    """Run the full pipeline for a single topic + format. Returns a small result dict."""
     t0 = time.time()
 
     run_id, run_dir = make_run_dir(cfg["paths"]["workspace"])
-    _banner(f"Topic: {topic}", f"Run:   {run_id}", f"Dir:   {run_dir}")
+    _banner(f"Topic:  {topic}", f"Format: {format_id}", f"Run:    {run_id}", f"Dir:    {run_dir}")
 
     # ── 1. Script ─────────────────────────────────────────────────────────
-    _step(1, "Script generation")
-    prompt_path = pathlib.Path(cfg["paths"]["prompts"]) / "script.txt"
-    script = generate_script(topic, prompt_path, cfg["llm"]["model"])
+    _step(1, f"Script generation  (format: {format_id})")
+    fmt = load_format(cfg["paths"]["prompts"], format_id)
+    script = generate_script(topic, fmt, cfg["llm"]["model"])
     (run_dir / "script.json").write_text(
         json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8"
     )
@@ -250,7 +259,7 @@ def run_one(topic: str, cfg: dict) -> dict:
     # ── 5. Scene export (editor scene.json) ───────────────────────────────
     scene_path = _run_scene(script, cfg, run_dir, durations, beat_wavs, timeline)
 
-    return _finish(scene_path, run_dir, topic, run_id, t0)
+    return _finish(scene_path, run_dir, topic, run_id, t0, format_id=format_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -290,7 +299,8 @@ def _run_scene(
 
 def _finish(
     scene_path: pathlib.Path, run_dir: pathlib.Path,
-    topic: str, run_id: str, t0: float, rebuilt_from: str | None = None,
+    topic: str, run_id: str, t0: float,
+    rebuilt_from: str | None = None, format_id: str | None = None,
 ) -> dict:
     elapsed = time.time() - t0
     _banner(
@@ -300,6 +310,8 @@ def _finish(
     )
     result = {"ok": True, "topic": topic, "run_id": run_id,
               "elapsed_s": round(elapsed, 1), "scene": str(scene_path)}
+    if format_id:
+        result["format"] = format_id
     if rebuilt_from:
         result["rebuilt_from"] = rebuilt_from
     (run_dir / "report.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
@@ -310,7 +322,8 @@ def _finish(
 # Batch mode
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_batch(cfg: dict, source: str, limit: int | None = None) -> None:
+def run_batch(cfg: dict, source: str, limit: int | None = None,
+              format_id: str = DEFAULT_FORMAT) -> None:
     subject_path = resolve_source(cfg, source)
     topics = load_topics(subject_path)
 
@@ -326,12 +339,12 @@ def run_batch(cfg: dict, source: str, limit: int | None = None) -> None:
 
     total      = len(topics)
     limit_note = f" (limit {limit})" if limit is not None else ""
-    print(f"[main] Batch mode — {total} topics from '{source}'{limit_note}")
+    print(f"[main] Batch mode — {total} topics from '{source}'{limit_note}, format '{format_id}'")
 
     for i, topic in enumerate(topics, 1):
         print(f"\n[main] ── Topic {i}/{total} ──────────────────────")
         try:
-            run_one(topic, cfg)
+            run_one(topic, cfg, format_id)
         except Exception as e:
             print(f"[main] ✗ Failed for '{topic}': {e}", file=sys.stderr)
 
@@ -380,12 +393,33 @@ def _print_script(script: dict) -> None:
 # CLI argument parsing
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _extract_opt(args: list[str], name: str) -> tuple[str | None, str | None]:
+    """Pull `--name VALUE` out of args. Returns (value, error_msg)."""
+    if name not in args:
+        return None, None
+    idx = args.index(name)
+    if idx + 1 >= len(args):
+        return None, f"{name} requires a value"
+    return args[idx + 1], None
+
+
 def _parse_args(args: list[str]) -> dict:
     if not args:
         return {"mode": "help"}
 
+    # --format applies to every generating mode (direct/random/batch), not rebuild.
+    fmt_val, fmt_err = _extract_opt(args, "--format")
+    if fmt_err:
+        return {"mode": "error", "msg": f"{fmt_err} (e.g. --format listicle)"}
+    format_id = fmt_val or DEFAULT_FORMAT
+
     if not args[0].startswith("--"):
-        return {"mode": "direct", "topic": " ".join(args)}
+        # Strip the --format pair from the topic words if present.
+        topic_words = [a for a in args]
+        if fmt_val:
+            i = topic_words.index("--format")
+            del topic_words[i:i + 2]
+        return {"mode": "direct", "topic": " ".join(topic_words), "format": format_id}
 
     if args[0] == "--rebuild":
         if len(args) < 2:
@@ -428,12 +462,12 @@ def _parse_args(args: list[str]) -> dict:
             return {"mode": "error", "msg": "--limit has no effect with --random. Use --batch instead."}
         if not source:
             return {"mode": "error", "msg": "--random requires --source <subject>"}
-        return {"mode": "random", "source": source}
+        return {"mode": "random", "source": source, "format": format_id}
 
     if is_batch:
         if not source:
             return {"mode": "error", "msg": "--batch requires --source <subject>"}
-        return {"mode": "batch", "source": source, "limit": limit}
+        return {"mode": "batch", "source": source, "limit": limit, "format": format_id}
 
     return {"mode": "error", "msg": f"Unrecognised arguments: {' '.join(args)}\nRun without arguments to see usage."}
 
@@ -449,6 +483,9 @@ if __name__ == "__main__":
 
     if mode == "help":
         print(__doc__)
+        print("Available formats:")
+        for m in list_formats(cfg["paths"]["prompts"]):
+            print(f"  • {m['id']:<18} {m['description']}")
         sys.exit(0)
 
     elif mode == "error":
@@ -456,7 +493,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     elif mode == "direct":
-        run_one(parsed["topic"], cfg)
+        run_one(parsed["topic"], cfg, parsed["format"])
 
     elif mode == "random":
         subject_path = resolve_source(cfg, parsed["source"])
@@ -464,10 +501,10 @@ if __name__ == "__main__":
         if not topic:
             print(f"[main] No topics in {subject_path}", file=sys.stderr)
             sys.exit(1)
-        run_one(topic, cfg)
+        run_one(topic, cfg, parsed["format"])
 
     elif mode == "batch":
-        run_batch(cfg, source=parsed["source"], limit=parsed["limit"])
+        run_batch(cfg, source=parsed["source"], limit=parsed["limit"], format_id=parsed["format"])
 
     elif mode == "rebuild":
         rebuild(parsed["prefix"], parsed["from_step"], cfg)

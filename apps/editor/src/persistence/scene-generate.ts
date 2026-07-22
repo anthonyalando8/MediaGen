@@ -6,6 +6,10 @@
 // BEFORE committing. Importing is a separate, synchronous step
 // (`compileGeneratedScene`) the caller runs on user confirm, using the SAME
 // compiler as manual Import Scene… / Open….
+//
+// `format` selects a video-format recipe on the server (prompt + validation
+// profile). `listFormats()` fetches the picker options so the UI stays in sync
+// with whatever formats exist under prompts/formats/ — no hardcoded enum.
 
 import { compileSceneToProject } from "./scene-import";
 import type { Project } from "core";
@@ -13,6 +17,16 @@ import type { Project } from "core";
 /** Base URL of the Python scene API. Override via VITE_SCENE_API if you host it elsewhere. */
 export const SCENE_API_BASE =
   (import.meta as any).env?.VITE_SCENE_API ?? "http://localhost:8000";
+
+/** Server default when no format is passed — mirrors formats.DEFAULT_FORMAT. */
+export const DEFAULT_FORMAT = "shortform_tiktok";
+
+export interface SceneFormat {
+  id: string;
+  label: string;
+  description: string;
+  default_resolve_visuals?: boolean;
+}
 
 export interface GenerateProgress {
   state: "queued" | "running" | "done" | "error";
@@ -24,12 +38,15 @@ export interface GenerateProgress {
   pct: number;
   error?: string;
   title?: string;
+  format?: string;
 }
 
 export class SceneGenerateError extends Error {}
 
 interface GenerateOptions {
   topic: string;
+  /** Format recipe id (folder under prompts/formats/). Defaults server-side. */
+  format?: string;
   resolveVisuals?: boolean;
   onProgress?: (p: GenerateProgress) => void;
   signal?: AbortSignal;
@@ -51,18 +68,40 @@ async function j<T>(res: Response): Promise<T> {
 }
 
 /**
+ * Fetch the available video formats for the picker. Returns [] (and never
+ * throws) if the server is unreachable, so the modal can fall back to a single
+ * default option and still let the user generate.
+ */
+export async function listFormats(signal?: AbortSignal): Promise<SceneFormat[]> {
+  try {
+    return await j<SceneFormat[]>(
+      await fetch(`${SCENE_API_BASE}/api/scene/formats`, { signal })
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Runs generate → poll → fetch and resolves with the RAW scene document (not
  * yet compiled). The caller previews it, then calls `compileGeneratedScene`
  * on confirm. Rejects on server error, job error, or abort.
  */
 export async function generateScene(opts: GenerateOptions): Promise<{ scene: any; title?: string }> {
-  const { topic, resolveVisuals = true, onProgress, signal, pollMs = 1200 } = opts;
+  const {
+    topic,
+    format = DEFAULT_FORMAT,
+    resolveVisuals = true,
+    onProgress,
+    signal,
+    pollMs = 1200,
+  } = opts;
 
   const { job_id } = await j<{ job_id: string }>(
     await fetch(`${SCENE_API_BASE}/api/scene/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic, resolve_visuals: resolveVisuals }),
+      body: JSON.stringify({ topic, format, resolve_visuals: resolveVisuals }),
       signal,
     })
   );

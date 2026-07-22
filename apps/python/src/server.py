@@ -14,10 +14,14 @@ exactly like the export window's live progress.
 
 ENDPOINTS
 ---------
-  POST /api/scene/generate      {topic, resolve_visuals?}  → {job_id}
+  GET  /api/scene/formats       → [{id, label, description, default_resolve_visuals}]
+  POST /api/scene/generate      {topic, format?, resolve_visuals?}  → {job_id}
   GET  /api/scene/status/{id}   → {state, step, total_steps, label, pct, error}
   GET  /api/scene/result/{id}   → the scene.json object (self-contained)
   GET  /api/health              → {ok, model_warm}
+
+`format` selects a recipe (prompt + validation profile) under prompts/formats/.
+It defaults to the original TikTok format, so existing callers are unaffected.
 
 The scene is self-contained (voiceover + images embedded as data: URLs), so the
 editor needs nothing but the returned JSON — it compiles + loads it directly.
@@ -52,6 +56,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))
 
 from llm import generate_script
+from formats import load_format, list_formats, DEFAULT_FORMAT
 from tts import synthesize, beat_durations
 from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
@@ -73,6 +78,7 @@ def _load_cfg() -> dict:
 
 
 CFG = _load_cfg()
+_PROMPTS_ROOT = CFG["paths"]["prompts"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 LOG = logging.getLogger("scene")
@@ -141,17 +147,18 @@ def _sub(job_id: str, step: int, frac: float, detail: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline worker
 # ─────────────────────────────────────────────────────────────────────────────
-def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
+def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool) -> None:
     started = _time.time()
-    LOG.info("job %s · START topic=%r resolve_visuals=%s", job_id[:8], topic, resolve_visuals)
+    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s",
+             job_id[:8], topic, format_id, resolve_visuals)
     try:
         run_id, run_dir = make_run_dir(CFG["paths"]["workspace"])
         _set(job_id, run_id=run_id, run_dir=str(run_dir))
 
-        # 1. Script
+        # 1. Script — load the selected format recipe (prompt + validation profile)
         _mark_step(job_id, 1)
-        prompt_path = pathlib.Path(CFG["paths"]["prompts"]) / "script.txt"
-        script = generate_script(topic, prompt_path, CFG["llm"]["model"])
+        fmt = load_format(_PROMPTS_ROOT, format_id)
+        script = generate_script(topic, fmt, CFG["llm"]["model"])
         (run_dir / "script.json").write_text(
             json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -192,7 +199,7 @@ def _run_pipeline(job_id: str, topic: str, resolve_visuals: bool) -> None:
         elapsed = round(_time.time() - started, 1)
         _set(job_id, state="done", step=_TOTAL, total_steps=_TOTAL,
              label="Ready", pct=100, scene=scene,
-             title=script.get("title", topic), elapsed_s=elapsed)
+             title=script.get("title", topic), format=format_id, elapsed_s=elapsed)
         LOG.info("job %s · DONE in %ss (%d beats)", job_id[:8], elapsed, len(scene.get("beats", [])))
     except Exception as e:
         LOG.error("job %s · FAILED after %ss: %s", job_id[:8], round(_time.time() - started, 1), e)
@@ -236,6 +243,9 @@ app.add_middleware(
 
 class GenerateRequest(BaseModel):
     topic: str
+    # Which format recipe to use (folder name under prompts/formats/). Defaults
+    # to the original TikTok format so existing callers keep working unchanged.
+    format: str = DEFAULT_FORMAT
     resolve_visuals: bool = True
 
 
@@ -244,16 +254,31 @@ def health() -> dict:
     return {"ok": True, "models_warm": _MODELS_WARM}
 
 
+@app.get("/api/scene/formats")
+def formats() -> list[dict]:
+    """List the available video formats for the editor's picker."""
+    return list_formats(_PROMPTS_ROOT)
+
+
 @app.post("/api/scene/generate")
 def generate(req: GenerateRequest) -> dict:
     topic = (req.topic or "").strip()
     if not topic:
         raise HTTPException(status_code=400, detail="topic is required")
+
+    format_id = (req.format or DEFAULT_FORMAT).strip() or DEFAULT_FORMAT
+    # Fail fast with a clear error if the format doesn't exist, rather than
+    # surfacing it mid-job three steps later.
+    try:
+        load_format(_PROMPTS_ROOT, format_id)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     job_id = uuid.uuid4().hex
     _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0,
-         created=_time.time())
+         format=format_id, created=_time.time())
     _evict_if_needed()
-    _EXECUTOR.submit(_run_pipeline, job_id, topic, req.resolve_visuals)
+    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals)
     return {"job_id": job_id}
 
 

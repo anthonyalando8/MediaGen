@@ -1,23 +1,21 @@
 """
 llm.py  --  Script generation via Ollama.
 
-Calls the local Ollama CLI, parses the JSON response,
-retries up to 3 times on bad output, validates beat structure
-AND cinematic field variety so the renderer gets motion-rich data.
+Calls the local Ollama CLI, parses the JSON response, retries up to 3 times on
+bad output, validates beat structure AND cinematic-field variety so the renderer
+gets motion-rich data.
 
 ────────────────────────────────────────────────────────────────────
-CINEMATIC VALIDATION — what's new vs the previous version
+FORMAT-DRIVEN VALIDATION (what changed)
 ────────────────────────────────────────────────────────────────────
-1. Each cinematic field (camera/pace/emotion/transition/background/
-   layout/visual_intent) is validated against an allowed vocabulary.
-   Unknown values are mapped to safe defaults instead of silently
-   passing through.
-2. Variety gates fail validation (and trigger a retry):
-     - <3 unique cameras across the script
-     - <2 unique paces / layouts / backgrounds
-     - same camera or layout for 3+ consecutive beats
-3. Missing per-beat fields are filled with scene-type defaults instead
-   of dropping through to "static / mid / solid" everywhere.
+`generate_script` now takes a `Format` (see formats.py) instead of a raw prompt
+path. The prompt comes from the format; the numeric/variety GATES come from the
+format's `ValidationProfile`. The old hardcoded thresholds (4-8 beats, 15-25
+words, ≥3 cameras, no 3-in-a-row…) are now just the `shortform_tiktok` profile.
+
+The CINEMATIC VOCABULARY below (`_ALLOWED`, `_DEFAULTS_BY_TYPE`,
+`_TRANSITION_BY_TYPE`) is NOT format-specific — it defines the scene/2.0
+contract every format must normalise toward, so it stays shared here.
 """
 
 import subprocess
@@ -28,7 +26,8 @@ import sys
 from llm_fix_duplicates import fix_duplicate_word_fragments
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Cinematic vocabulary — must match renderer/inject.js + scenes contracts
+# Cinematic vocabulary — must match renderer/inject.js + scenes contracts.
+# Contract-level (shared across all formats), NOT a per-format gate.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ALLOWED = {
@@ -43,7 +42,7 @@ _ALLOWED = {
                       "minimal", "aggressive", "documentary", "absurd", "quirky"},
     "energy":        {"high", "mid", "low"},
     "type":          {"hook", "insight", "tension", "truth", "flip", "climax", "payoff", "cta"},
-    "pattern_interrupt": {"", "slam", "chroma", "iris", "tilt","flash", "freeze", "invert"},
+    "pattern_interrupt": {"", "slam", "chroma", "iris", "tilt", "flash", "freeze", "invert"},
     "composition":       {"", "crop-low", "tilt", "corner", "sparse"},
 }
 
@@ -64,7 +63,7 @@ _DEFAULTS_BY_TYPE = {
 _TRANSITION_BY_TYPE = {
     "hook": "slam_cut", "climax": "slam_cut", "tension": "dip_black",
     "payoff": "fade",   "flip":   "flash",    "cta":     "dip_black",
-    "truth": "cut",     "insight":"cut",
+    "truth": "cut",     "insight": "cut",
 }
 
 
@@ -72,18 +71,19 @@ _TRANSITION_BY_TYPE = {
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
+def generate_script(topic: str, fmt, model: str) -> dict:
     """
-    Generate a structured 4-8 beat script via Ollama.
+    Generate a structured script via Ollama for the given format.
 
-    Retries up to 3 times on bad output OR cinematic-variety failure.
+    `fmt` is a formats.Format (prompt + validation profile). Retries up to 3
+    times on bad output OR profile-gate failure.
     """
-    template = prompt_path.read_text(encoding="utf-8")
-    prompt   = template.format(topic=topic)
-    raw      = ""
+    prompt = fmt.prompt.format(topic=topic)
+    profile = fmt.profile
+    raw = ""
 
     for attempt in range(1, 4):
-        print(f"[llm] Generating script (attempt {attempt}/3)…")
+        print(f"[llm] Generating script (format={fmt.id}, attempt {attempt}/3)…")
         try:
             raw = subprocess.check_output(
                 ["ollama", "run", model, prompt],
@@ -92,7 +92,7 @@ def generate_script(topic: str, prompt_path: pathlib.Path, model: str) -> dict:
                 timeout=180,   # hard guard: a wedged model call fails → retry, not hang
             )
             data = _parse_json(raw.strip())
-            _validate(data)
+            _validate(data, profile)
             print(f"[llm] ✓ Script OK — \"{data['title']}\"")
             _print_cinematic_summary(data)
             return data
@@ -150,6 +150,9 @@ def _normalise_schema(data: dict) -> dict:
     Normalise old schema (id int, hook bool) to new schema (type, energy),
     AND fill in missing cinematic fields with scene-type defaults so the
     contract is complete before validation runs.
+
+    Format-agnostic: this brings ANY format's beats up to the scene/2.0
+    contract, defaulting whatever a looser format chose to omit.
     """
     beats = data.get("beats", [])
     total = len(beats)
@@ -249,17 +252,17 @@ def _sanitize_json_strings(s: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Internals — validation (basic + cinematic variety)
+# Internals — validation (profile-driven)
 # ---------------------------------------------------------------------------
 
-def _validate(data: dict) -> None:
-    """Run all gates. Raises ValueError on any failure → triggers retry."""
-    _validate_basic(data)
-    _validate_cinematic_variety(data["beats"])
+def _validate(data: dict, profile) -> None:
+    """Run all gates for this format's profile. Raises ValueError → triggers retry."""
+    _validate_basic(data, profile)
+    _validate_cinematic_variety(data["beats"], profile.variety)
 
 
-def _validate_basic(data: dict) -> None:
-    """Schema + word-count gates from the original implementation."""
+def _validate_basic(data: dict, profile) -> None:
+    """Schema + word-count gates, thresholds taken from the format profile."""
     if "beats" not in data:
         raise KeyError("Missing key: 'beats'")
     if "title" not in data:
@@ -268,9 +271,12 @@ def _validate_basic(data: dict) -> None:
     beats = data["beats"]
     if not isinstance(beats, list):
         raise ValueError("beats must be a list")
-    if not (4 <= len(beats) <= 8):
-        raise ValueError(f"Expected 4-8 beats, got {len(beats)}")
 
+    n = len(beats)
+    if not (profile.beats_min <= n <= profile.beats_max):
+        raise ValueError(f"Expected {profile.beats_min}-{profile.beats_max} beats, got {n}")
+
+    lo, hi = profile.words_per_beat_min, profile.words_per_beat_max
     for i, beat in enumerate(beats):
         for k in ("keyword", "text"):
             if k not in beat:
@@ -278,76 +284,70 @@ def _validate_basic(data: dict) -> None:
         if not beat["text"].strip():
             raise ValueError(f"Beat {i} has empty text")
         beat_words = len(beat["text"].split())
-        if not (15 <= beat_words <= 30):
-            raise ValueError(
-                f"Beat {i} has {beat_words} words — must be 15-25 words per beat."
-            )
+        if not (lo <= beat_words <= hi):
+            raise ValueError(f"Beat {i} has {beat_words} words — must be {lo}-{hi} words per beat.")
+        if profile.require_emphasis and "*" not in beat["text"]:
+            raise ValueError(f"Beat {i} missing an *emphasis* word (format requires one per beat).")
 
     total_words = sum(len(b["text"].split()) for b in beats)
-    min_words   = len(beats) * 15
+    min_words = profile.total_words_min if profile.total_words_min is not None else n * lo
     if total_words < min_words:
         raise ValueError(
-            f"Script too short: {total_words} words across {len(beats)} beats "
+            f"Script too short: {total_words} words across {n} beats "
             f"(minimum {min_words}). Model must expand."
         )
-    if total_words > 200:
-        raise ValueError(f"Script too long: {total_words} words (maximum 200).")
+    if profile.total_words_max is not None and total_words > profile.total_words_max:
+        raise ValueError(f"Script too long: {total_words} words (maximum {profile.total_words_max}).")
 
 
-def _validate_cinematic_variety(beats: list) -> None:
+def _validate_cinematic_variety(beats: list, variety: dict) -> None:
     """
-    Reject scripts that would produce stiff renders.
+    Reject scripts that would produce stiff renders — but ONLY when the format
+    asks for variety. An empty `variety` dict disables these gates entirely
+    (e.g. the calm_narrative format, where a steady look is intentional).
 
-    Gates:
-      - ≥3 distinct cameras across the script
-      - ≥2 distinct paces / layouts / backgrounds
-      - no 3 consecutive beats with the same camera
-      - no 3 consecutive beats with the same layout
-
-    Why these thresholds?
-      A 4-beat script with 2 cameras = 50% variance — acceptable floor.
-      A 6-beat script with 2 cameras = 33% variance — every beat starts to
-      look the same. 3 cameras across 4-8 beats keeps the visual rhythm.
+    Recognised keys:
+      min_cameras / min_paces / min_layouts / min_backgrounds
+      max_consecutive_camera / max_consecutive_layout
     """
+    if not variety:
+        return  # gates disabled for this format
     if len(beats) < 4:
-        return  # too short to gate
+        return  # too short to gate meaningfully
 
     def _unique(field):
         return {b.get(field) for b in beats}
 
-    cams       = _unique("camera")
-    paces      = _unique("pace")
-    layouts    = _unique("layout")
-    bgs        = _unique("background")
+    min_checks = [
+        ("min_cameras",     "camera"),
+        ("min_paces",       "pace"),
+        ("min_layouts",     "layout"),
+        ("min_backgrounds", "background"),
+    ]
+    for key, field in min_checks:
+        need = variety.get(key)
+        if need and len(_unique(field)) < need:
+            raise ValueError(
+                f"Cinematic variety: only {len(_unique(field))} unique {field}(s) "
+                f"across {len(beats)} beats — need ≥{need}. Got: {_unique(field)}"
+            )
 
-    if len(cams) < 3:
-        raise ValueError(
-            f"Cinematic variety: only {len(cams)} unique camera(s) "
-            f"across {len(beats)} beats — need ≥3. Got: {cams}"
-        )
-    if len(paces) < 2:
-        raise ValueError(
-            f"Cinematic variety: only 1 unique pace across {len(beats)} beats — need ≥2."
-        )
-    if len(layouts) < 2:
-        raise ValueError(
-            f"Cinematic variety: only 1 unique layout across {len(beats)} beats — need ≥2."
-        )
-    if len(bgs) < 2:
-        raise ValueError(
-            f"Cinematic variety: only 1 unique background — need ≥2."
-        )
-
-    # No 3-in-a-row repeats for camera or layout
-    for field in ("camera", "layout"):
+    consec_checks = [
+        ("max_consecutive_camera", "camera"),
+        ("max_consecutive_layout", "layout"),
+    ]
+    for key, field in consec_checks:
+        limit = variety.get(key)
+        if not limit:
+            continue
         run = 1
         for i in range(1, len(beats)):
-            if beats[i].get(field) == beats[i-1].get(field):
+            if beats[i].get(field) == beats[i - 1].get(field):
                 run += 1
-                if run >= 3:
+                if run > limit:
                     raise ValueError(
-                        f"Cinematic variety: '{field}' repeated 3+ consecutive beats "
-                        f"({beats[i].get(field)} at index {i-2}..{i})."
+                        f"Cinematic variety: '{field}' repeated more than {limit} "
+                        f"consecutive beats ({beats[i].get(field)} near index {i})."
                     )
             else:
                 run = 1

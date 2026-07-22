@@ -1,0 +1,84 @@
+Write a CALM, REFLECTIVE narration script for a vertical short (TikTok/Reels/Shorts).
+
+TOPIC: "{topic}"
+
+This is NOT a punchy hook-driven video. It is slow, considered, and warm — a
+single voice thinking out loud. Even pacing, gentle motion, room to breathe.
+The goal is resonance, not retention pressure.
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 5 words, quiet and evocative",
+  "thumbnail": "2-4 word gentle phrase",
+  "style": "calm",
+
+  "global": {{
+    "theme":        "cinematic_grain | luxury_minimal | warm_amber | editorial_white | documentary_gritty",
+    "music_mood":   "ambient | emotional | minimal | cinematic",
+    "voice_style":  "storyteller | calm_intense | documentary",
+    "camera_style": "static",
+    "subject":      "1-3 word concrete photographable noun anchoring every visual_query"
+  }},
+
+  "beats": [
+    {{
+      "id":            "beat_01",
+      "type":          "hook | insight | truth | payoff",
+      "keyword":       "2-4 words, soft — a phrase, not a shout",
+      "text":          "spoken sentence, 12-32 words, unhurried",
+      "energy":        "low | mid",
+      "emotion":       "hopeful | melancholic | serious | confident | cold",
+      "pace":          "slow | mid",
+      "visual_intent": "cinematic | minimal | clean | documentary | mysterious",
+      "camera":        "static | push_in | pull_out | tilt_up",
+      "transition":    "fade | dip_black | cut | blur_wipe",
+      "background":    "gradient | solid | glow | noise",
+      "layout":        "center | left",
+      "visual_query":  "2-4 word LITERAL image search, subject-first, no mood words",
+      "intensity":     0.45
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+TONE & STRUCTURE
+──────────────────────────────────────────────────────────────────────
+- 3-7 beats. Let the idea unfold; don't rush to a payoff.
+- Open with a quiet observation or image, not a confrontation.
+- Sentences can be longer and softer (12-32 words). Total under 220 words.
+- End on a settled thought or an open question — never a CTA, never "follow for more".
+- Use "you" sparingly and warmly. First person ("I") is welcome.
+- BANNED PHRASES: "here's the thing" / "the truth is" / "let's talk about" / "follow for more".
+- Optional: wrap ONE word per sentence in *asterisks* to mark a gentle landing word.
+
+──────────────────────────────────────────────────────────────────────
+MOTION (deliberately restrained)
+──────────────────────────────────────────────────────────────────────
+- Keep intensity LOW: 0.35-0.60 for most beats, up to ~0.7 at the single emotional peak.
+- pace stays slow/mid throughout. transitions are fade/dip_black/cut — no slams, no whips.
+- camera is mostly static, with the occasional gentle push_in or pull_out.
+- It is FINE to hold the same layout and camera across many beats — steadiness is
+  the point of this format. There are no variety requirements here.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL — it ignores emotion and metaphor. Every visual_query:
+1. LEADS WITH the global `subject` (or a concrete same-domain noun) — present in EVERY beat.
+2. Adds at most 1-2 VISUAL modifiers (lighting, angle, setting): "morning", "window light",
+   "close up", "overhead", "soft focus", "dusk".
+3. NEVER uses feeling/abstraction words ("solitude", "journey", "peace", "soul") — they
+   return generic landscape/abstract stock instead of your topic.
+4. 2-4 words. Concrete + visual. Template: [subject] + [setting or lighting].
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. 3-7 beats; each 12-32 words; total under 220.
+2. Opens quietly; ends on a settled thought or open question (no CTA).
+3. All intensity values low (mostly 0.35-0.60; peak up to ~0.7).
+4. pace only slow/mid; transitions only fade/dip_black/cut/blur_wipe.
+5. Every visual_query is subject-first with no mood/abstraction words.
+
+Output the JSON only.

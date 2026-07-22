@@ -1,0 +1,17 @@
+id: listicle
+label: "Listicle / Countdown"
+description: "A numbered rundown — reasons, tips, mistakes, or facts. Intro hook, one beat per item, a payoff close."
+
+default_resolve_visuals: true
+
+beats: { min: 4, max: 10 }
+words_per_beat: { min: 10, max: 28 }
+total_words: { max: 240 }
+require_emphasis: false
+
+# Looser than shortform: a countdown can reuse the same camera/layout for its
+# item beats without looking broken, so only gate for a little variety.
+variety:
+  min_cameras: 2
+  min_layouts: 2
+  max_consecutive_camera: 3
