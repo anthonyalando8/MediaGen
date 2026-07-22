@@ -169,6 +169,7 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             voice=CFG["tts"]["voice"], speed=CFG["tts"]["speed"],
             sample_rate=CFG["tts"]["sample_rate"],
             progress=lambda i, n: _sub(job_id, 2, (i + 1) / n, f"voice {i + 1}/{n}"),
+            voice_profile=fmt.voice,
         )
         durations = beat_durations(beat_wavs)
 
@@ -193,6 +194,7 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             beat_durations_ms=durations_ms, beat_wavs=beat_wavs,
             timeline=timeline, resolve_visuals=resolve_visuals,
             progress=lambda i, n, d: _sub(job_id, 5, (i + 1) / n, d),
+            visual_profile=fmt.visuals,
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 

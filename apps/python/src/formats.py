@@ -51,6 +51,37 @@ class ValidationProfile:
     variety: dict = field(default_factory=dict)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Genre profile — the FEEL, as data (was: format-blind tts.py/visuals.py
+# reading only the LLM's own per-beat fields + module-level constant tables).
+# Every field below defaults to a value that reproduces today's exact
+# behavior when a format.yaml doesn't declare the corresponding section —
+# see the docstrings in tts.py/visuals.py for exactly how each is consumed.
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class VoiceProfile:
+    style: str = ""                # forces tts.py's voice_style lookup; "" = today's LLM-driven behavior
+    pace_map: dict = field(default_factory=dict)   # {"hook": "fast", "cta": "explosive"} — forces per-scene pace
+
+
+@dataclass
+class VisualProfile:
+    hud: str = "auto"              # "auto" (today's mapping) | "none" (kill the // chip)
+    theme: str = ""                # forces the theme id; "" = today's _style_to_theme() computation
+    camera_energy: str = "normal"  # "normal"/"high" = today's per-scene table unchanged | "low" = force static
+    intensity_curve: str = "normal"  # "normal" = today's formula unchanged | "flat" | "spiky"
+    looseness: float = 0.0         # scales composition-mutator count; 0.0 reproduces today's "always exactly 1"
+    texture: str = "none"          # parsed + stored only — no consumer yet, forward-compat with the fix plan's §04
+
+
+@dataclass
+class MediaPlan:
+    mode: str = "auto"             # image|video|hybrid|auto — parsed + stored only, consumed in a later phase
+    background: str = "auto"
+    mood: list = field(default_factory=list)
+    allow_illustration: bool = True
+
+
 @dataclass
 class Format:
     id: str
@@ -58,6 +89,9 @@ class Format:
     description: str
     prompt: str
     profile: ValidationProfile
+    voice: VoiceProfile = field(default_factory=VoiceProfile)
+    visuals: VisualProfile = field(default_factory=VisualProfile)
+    media: MediaPlan = field(default_factory=MediaPlan)
     default_resolve_visuals: bool = True
 
 
@@ -91,6 +125,36 @@ def _profile_from(meta: dict) -> ValidationProfile:
     return p
 
 
+def _voice_profile_from(meta: dict) -> VoiceProfile:
+    v = meta.get("voice") or {}
+    return VoiceProfile(
+        style=str(v.get("style", "")),
+        pace_map=dict(v.get("pace_map") or {}),
+    )
+
+
+def _visual_profile_from(meta: dict) -> VisualProfile:
+    v = meta.get("visuals") or {}
+    return VisualProfile(
+        hud=str(v.get("hud", "auto")),
+        theme=str(v.get("theme", "")),
+        camera_energy=str(v.get("camera_energy", "normal")),
+        intensity_curve=str(v.get("intensity_curve", "normal")),
+        looseness=float(v.get("looseness", 0.0)),
+        texture=str(v.get("texture", "none")),
+    )
+
+
+def _media_plan_from(meta: dict) -> MediaPlan:
+    m = meta.get("media") or {}
+    return MediaPlan(
+        mode=str(m.get("mode", "auto")),
+        background=str(m.get("background", "auto")),
+        mood=list(m.get("mood") or []),
+        allow_illustration=bool(m.get("allow_illustration", True)),
+    )
+
+
 def _resolve_prompt(prompts_root, folder: pathlib.Path, meta: dict) -> str:
     inline = folder / "prompt.txt"
     if inline.exists():
@@ -120,6 +184,9 @@ def load_format(prompts_root, format_id: str | None) -> Format:
         description=meta.get("description", ""),
         prompt=_resolve_prompt(prompts_root, folder, meta),
         profile=_profile_from(meta),
+        voice=_voice_profile_from(meta),
+        visuals=_visual_profile_from(meta),
+        media=_media_plan_from(meta),
         default_resolve_visuals=bool(meta.get("default_resolve_visuals", True)),
     )
 

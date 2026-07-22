@@ -38,6 +38,9 @@ import pathlib
 import numpy as np
 import soundfile as sf
 
+from visuals import _beat_scene
+from formats import VoiceProfile
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Narrator vocabulary — maps script.global.voice_style → Kokoro params
@@ -109,14 +112,17 @@ def _find_model_files() -> tuple[pathlib.Path, pathlib.Path]:
 # Voice selection
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float) -> tuple[str, float]:
+def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float, profile_style: str = "") -> tuple[str, float]:
     """
     Decide the voice + base speed for this script.
 
     Priority:
       1. If cfg_voice is set AND non-empty AND not "auto" → use it (legacy)
-      2. Else: read script.global.voice_style → map to voice+speed
-      3. Else: fall back to default
+      2. Else: profile_style (genre's VoiceProfile.style) if non-empty — forces
+         the voice regardless of what the LLM emitted for this run.
+      3. Else: read script.global.voice_style → map to voice+speed (LLM-driven,
+         now a fallback for genres that don't force a style)
+      4. Else: fall back to default
 
     To enable per-script variation, set tts.voice="auto" in config.yaml.
     """
@@ -124,6 +130,12 @@ def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float) -> tuple[str,
 
     if cfg_voice_norm and cfg_voice_norm != "auto":
         return cfg_voice, cfg_speed
+
+    profile_style_norm = (profile_style or "").strip().lower()
+    if profile_style_norm in _VOICE_BY_STYLE:
+        voice, base = _VOICE_BY_STYLE[profile_style_norm]
+        print(f"[tts] genre voice='{profile_style_norm}' (forced) → voice='{voice}'  base_speed={base}")
+        return voice, base
 
     style = (script.get("global", {}) or {}).get("voice_style", "").strip().lower()
     if style in _VOICE_BY_STYLE:
@@ -135,9 +147,12 @@ def _resolve_voice(script: dict, cfg_voice: str, cfg_speed: float) -> tuple[str,
     return _DEFAULT_VOICE, _DEFAULT_SPEED
 
 
-def _speed_for_beat(beat: dict, base_speed: float) -> float:
-    """Apply pace multiplier to the base speed for one beat."""
-    pace = beat.get("pace", "mid")
+def _speed_for_beat(beat: dict, base_speed: float, scene: str = "", pace_map: dict | None = None) -> float:
+    """Apply pace multiplier to the base speed for one beat. `pace_map`
+    (genre's VoiceProfile.pace_map, keyed by scene: hook/insight/climax/…)
+    forces the pace for that scene, ahead of the beat's own LLM-supplied
+    pace — empty pace_map (the default) falls through unchanged."""
+    pace = (pace_map or {}).get(scene) or beat.get("pace", "mid")
     mult = _PACE_SPEED_MULT.get(pace, 1.0)
     return round(base_speed * mult, 3)
 
@@ -174,6 +189,7 @@ def synthesize(
     speed:       float = 1.05,     # base speed override; ignored if voice="auto"
     sample_rate: int   = 24000,
     progress=None,                 # optional callback(i, n) after each beat wav
+    voice_profile: VoiceProfile | None = None,   # genre's say over voice + pace (formats.VoiceProfile)
 ) -> tuple[pathlib.Path, list[pathlib.Path]]:
     """
     Synthesise each beat with the script's voice_style → Kokoro voice mapping,
@@ -181,7 +197,8 @@ def synthesize(
 
     Returns (voice_path, [beat_0.wav, beat_1.wav, …])
     """
-    chosen_voice, base_speed = _resolve_voice(script, voice, speed)
+    voice_profile = voice_profile or VoiceProfile()
+    chosen_voice, base_speed = _resolve_voice(script, voice, speed, voice_profile.style)
     print(f"[tts] voice='{chosen_voice}'  base_speed={base_speed}")
     kokoro = get_kokoro()
 
@@ -189,13 +206,15 @@ def synthesize(
     all_samples: list[np.ndarray] = []
     beat_paths:  list[pathlib.Path] = []
     final_sr = sample_rate
+    total_beats = len(script["beats"])
 
     for i, beat in enumerate(script["beats"]):
         # Strip *emphasis* markers before TTS — they're for the renderer only.
         # Otherwise Kokoro pronounces them as "asterisk".
         text  = beat["text"].replace("*", "").strip()
-        spd   = _speed_for_beat(beat, base_speed)
-        pace  = beat.get("pace", "mid")
+        scene = _beat_scene(beat, i, total_beats)
+        spd   = _speed_for_beat(beat, base_speed, scene, voice_profile.pace_map)
+        pace  = voice_profile.pace_map.get(scene) or beat.get("pace", "mid")
         print(f"[tts]   Beat {i+1} [pace={pace} speed={spd}]: {text[:60]}…")
 
         samples, sr = kokoro.create(text, voice=chosen_voice, speed=spd, lang="en-us")

@@ -11,3 +11,15 @@ require_emphasis: false
 
 # Variety gates OFF — a calm piece is SUPPOSED to hold a steady, repeating look.
 variety: {}
+
+# Genre profile — the feel, not just the words (see formats.py VoiceProfile /
+# VisualProfile). storyteller voice, no HUD chip, static camera, compressed
+# intensity, a little handmade jitter so it doesn't read as machine-uniform.
+voice:
+  style: storyteller
+
+visuals:
+  hud: none
+  camera_energy: low
+  intensity_curve: flat
+  looseness: 0.15

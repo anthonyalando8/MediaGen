@@ -32,6 +32,7 @@ import pathlib
 from visuals import _build_beat_contracts, _style_to_theme, _THEME_PALETTES
 from captions.timeline import attach_to_contracts
 from media_resolve import resolve_image, download_as_data_url
+from formats import VisualProfile
 
 
 def _wav_data_url(path: pathlib.Path) -> str:
@@ -48,6 +49,7 @@ def build_scene(
     timeline: dict | None = None,
     resolve_visuals: bool = True,
     progress=None,
+    visual_profile: VisualProfile | None = None,   # genre's say over the cinematic defaults (formats.VisualProfile)
 ) -> pathlib.Path:
     """
     Assemble scene.json (v2) and write it to out_dir. Returns the path.
@@ -57,14 +59,17 @@ def build_scene(
     timeline          — the timeline dict (build_timeline) for word_times.
     resolve_visuals   — set False to skip stock lookups (faster; text-only scene).
     """
+    visual_profile = visual_profile or VisualProfile()
     style        = script.get("style", "contrarian")
     global_theme = (script.get("global", {}) or {}).get("theme", "")
-    theme        = _style_to_theme(global_theme or style)
+    computed_theme = _style_to_theme(global_theme or style)
+    theme        = visual_profile.theme if visual_profile.theme in _THEME_PALETTES else computed_theme
     pal          = _THEME_PALETTES.get(theme, _THEME_PALETTES["tech_blue"])
     cam_style    = (script.get("global", {}) or {}).get("camera_style", "")
 
     contracts = _build_beat_contracts(
         script["beats"], beat_durations_ms, style=style, camera_style=cam_style,
+        profile=visual_profile,
     )
     if timeline:
         attach_to_contracts(contracts, timeline)

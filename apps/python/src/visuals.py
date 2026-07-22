@@ -20,6 +20,7 @@ CINEMATIC UPGRADE — what changed vs the previous version
 """
 
 from visuals_dir.visuals_calc_word_width import calc_kw_font_size
+from formats import VisualProfile
 
 # ---------------------------------------------------------------------------
 # Beat contract helpers
@@ -43,7 +44,9 @@ def _beat_scene(beat: dict, i: int, total: int) -> str:
     return "insight"
 
 
-def _beat_hud(beat: dict, i: int, total: int) -> str:
+def _beat_hud(beat: dict, i: int, total: int, hud_mode: str = "auto") -> str:
+    if hud_mode == "none":
+        return ""  # falsy → scene-import.ts's `if (beat.hud_tag)` already skips rendering it
     t = beat.get("type", "insight").lower()
     mapping = {
         "hook":    "// HOOK",
@@ -165,7 +168,9 @@ _STYLE_LAYOUT_BIAS = {
 }
 
 
-def _camera_for(scene: str, i: int) -> str:
+def _camera_for(scene: str, i: int, energy: str = "normal") -> str:
+    if energy == "low":
+        return "static"  # calm genres: always subdued, no per-scene kinetic table
     base = _SCENE_CAMERA.get(scene, "static")
     if base == "static":
         return ["static", "handheld", "static", "push_in"][i % 4]
@@ -224,7 +229,7 @@ _SCENE_INTENSITY = {
     "insight": 0.60,
 }
 
-def _intensity_for(scene: str, i: int, total: int) -> float:
+def _intensity_for(scene: str, i: int, total: int, curve: str = "normal") -> float:
     if scene in _SCENE_INTENSITY:
         base = _SCENE_INTENSITY[scene]
     else:
@@ -234,6 +239,12 @@ def _intensity_for(scene: str, i: int, total: int) -> float:
     progress = i / max(1, total - 1)
     if 0.25 < progress < 0.40 and scene in {"insight", "truth"}:
         base *= 0.65
+
+    # Genre reshape — "normal" is the identity (today's exact values).
+    if curve == "flat":
+        base = base * 0.55 + 0.15   # compress toward a calmer mid-band; nothing maxes out
+    elif curve == "spiky":
+        base = 0.5 + (base - 0.5) * 1.3   # exaggerate contrast around the midpoint
 
     return round(max(0.0, min(1.0, base)), 2)
 
@@ -276,16 +287,31 @@ def _assign_interrupts(contracts: list) -> None:
 _MUTATABLE_SCENES = {"insight", "truth", "flip"}
 _MUTATORS = ["crop-low", "tilt", "corner", "sparse"]
 
-def _pick_composition_mutator(contracts: list) -> None:
+def _pick_composition_mutator(contracts: list, looseness: float = 0.0) -> None:
+    """Mark `count` beats with a composition mutator, spread evenly across the
+    eligible ones. `count = max(1, round(looseness * len(eligible)))` — a
+    looseness of 0.0 (the default) always yields exactly 1, identical to the
+    original single-mutator-per-video behavior. Higher looseness marks more
+    beats, per the fix plan's "break the grid" knob (§04)."""
     eligible = [
         i for i, c in enumerate(contracts)
         if c["scene"] in _MUTATABLE_SCENES and not c.get("composition")
     ]
     if not eligible:
         return
-    idx = eligible[len(contracts) % len(eligible)]
-    mut = _MUTATORS[len(contracts) % len(_MUTATORS)]
-    contracts[idx]["composition"] = mut
+    count = max(1, round(looseness * len(eligible)))
+    count = min(count, len(eligible))
+    if count == 1:
+        # Exact original formula — byte-for-byte identical at looseness=0.0.
+        idx = eligible[len(contracts) % len(eligible)]
+        mut = _MUTATORS[len(contracts) % len(_MUTATORS)]
+        contracts[idx]["composition"] = mut
+        return
+    step = len(eligible) / count
+    for n in range(count):
+        idx = eligible[int(n * step)]
+        mut = _MUTATORS[(len(contracts) + n) % len(_MUTATORS)]
+        contracts[idx]["composition"] = mut
 
 
 def _build_beat_contracts(
@@ -293,6 +319,7 @@ def _build_beat_contracts(
     beat_durations_ms: list = None,
     style: str = "",
     camera_style: str = "",
+    profile: VisualProfile | None = None,
 ) -> list:
     """
     Build the per-beat contracts the renderer consumes.
@@ -301,14 +328,20 @@ def _build_beat_contracts(
     caller (LLM / script) explicitly provided wins. Defaults only fill
     blanks. This is what prevents the renderer from producing stiff
     repetitive output when beat JSON is sparse.
+
+    `profile` (formats.VisualProfile) is the genre's say over those
+    defaults — HUD, camera energy, intensity curve, looseness. Omitting it
+    (None) reproduces the exact pre-profile behavior via VisualProfile()'s
+    defaults.
     """
+    profile = profile or VisualProfile()
     total = len(beats)
     contracts = []
 
     for i, beat in enumerate(beats):
         scene  = _beat_scene(beat, i, total)
         layout = beat.get("layout")    or _layout_for(scene, i, style)
-        camera = beat.get("camera")    or _camera_for(scene, i)
+        camera = beat.get("camera")    or _camera_for(scene, i, profile.camera_energy)
         pace   = beat.get("pace")      or _SCENE_PACE.get(scene, "mid")
         emo    = beat.get("emotion")   or _SCENE_EMOTION.get(scene, "")
         bg     = beat.get("background") or _background_for(scene, i)
@@ -316,7 +349,7 @@ def _build_beat_contracts(
         contract = {
             "id":              beat.get("id", i),
             "scene":           scene,
-            "hud_tag":         _beat_hud(beat, i, total),
+            "hud_tag":         _beat_hud(beat, i, total, profile.hud),
             "keyword":         beat["keyword"],
             "body":            beat["text"],
             "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
@@ -364,8 +397,8 @@ def _build_beat_contracts(
             contracts[i]["entry_vector"] = _exit_vector(prev["camera"])
 
     for i, c in enumerate(contracts):
-        c["intensity"] = c.get("intensity") or _intensity_for(c["scene"], i, len(contracts))
+        c["intensity"] = c.get("intensity") or _intensity_for(c["scene"], i, len(contracts), profile.intensity_curve)
     _assign_interrupts(contracts)
-    _pick_composition_mutator(contracts)
+    _pick_composition_mutator(contracts, profile.looseness)
 
     return contracts

@@ -241,7 +241,7 @@ def run_one(topic: str, cfg: dict, format_id: str = DEFAULT_FORMAT) -> dict:
 
     # ── 2. Voice (Kokoro) ─────────────────────────────────────────────────
     _step(2, "Voice synthesis  (Kokoro, voice_style-aware)")
-    voice_path, beat_wavs, durations = _run_tts(script, cfg, run_dir)
+    voice_path, beat_wavs, durations = _run_tts(script, cfg, run_dir, fmt)
 
     # ── 3. Captions / transcript (word-level timestamps) ──────────────────
     _step(3, "Captions / transcript  (whisper word timing)")
@@ -257,7 +257,7 @@ def run_one(topic: str, cfg: dict, format_id: str = DEFAULT_FORMAT) -> dict:
     write_timeline(timeline, run_dir)
 
     # ── 5. Scene export (editor scene.json) ───────────────────────────────
-    scene_path = _run_scene(script, cfg, run_dir, durations, beat_wavs, timeline)
+    scene_path = _run_scene(script, cfg, run_dir, durations, beat_wavs, timeline, fmt)
 
     return _finish(scene_path, run_dir, topic, run_id, t0, format_id=format_id)
 
@@ -267,13 +267,14 @@ def run_one(topic: str, cfg: dict, format_id: str = DEFAULT_FORMAT) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_tts(
-    script: dict, cfg: dict, run_dir: pathlib.Path
+    script: dict, cfg: dict, run_dir: pathlib.Path, fmt=None
 ) -> tuple[pathlib.Path, list[pathlib.Path], list[float]]:
     voice_path, beat_wavs = synthesize(
         script, run_dir,
         voice=cfg["tts"]["voice"],
         speed=cfg["tts"]["speed"],
         sample_rate=cfg["tts"]["sample_rate"],
+        voice_profile=fmt.voice if fmt else None,
     )
     n_beats = len(script["beats"])
     if len(beat_wavs) != n_beats:
@@ -285,7 +286,7 @@ def _run_tts(
 
 def _run_scene(
     script: dict, cfg: dict, run_dir: pathlib.Path,
-    durations: list[float], beat_wavs: list[pathlib.Path], timeline: dict,
+    durations: list[float], beat_wavs: list[pathlib.Path], timeline: dict, fmt=None,
 ) -> pathlib.Path:
     _step(5, "Scene export  (editor scene.json)")
     durations_ms = [int(d * 1000) for d in durations]
@@ -294,6 +295,7 @@ def _run_scene(
         beat_durations_ms=durations_ms,
         beat_wavs=beat_wavs,
         timeline=timeline,
+        visual_profile=fmt.visuals if fmt else None,
     )
 
 
