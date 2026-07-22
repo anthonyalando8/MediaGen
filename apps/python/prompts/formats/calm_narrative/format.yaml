@@ -23,3 +23,8 @@ visuals:
   camera_energy: low
   intensity_curve: flat
   looseness: 0.15
+
+# photo-led, full-bleed — explicit statement of the default (mode: image
+# is behaviorally identical to "auto" today, just self-documenting).
+media:
+  mode: image

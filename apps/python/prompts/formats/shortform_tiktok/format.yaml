@@ -29,3 +29,9 @@ voice:
 visuals:
   intensity_curve: spiky
   looseness: 0.4
+
+# hybrid, motion bg — fast/explosive-paced beats pull a real video clip
+# instead of a static photo; everything else stays image-led.
+media:
+  mode: hybrid
+  mood: [dynamic, energetic]

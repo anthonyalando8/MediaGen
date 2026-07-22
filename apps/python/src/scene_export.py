@@ -31,8 +31,8 @@ import pathlib
 
 from visuals import _build_beat_contracts, _style_to_theme, _THEME_PALETTES
 from captions.timeline import attach_to_contracts
-from media_resolve import resolve_image, download_as_data_url
-from formats import VisualProfile
+from media_resolve import resolve_visual, download_as_data_url, download_video_as_data_url
+from formats import VisualProfile, MediaPlan
 
 
 def _wav_data_url(path: pathlib.Path) -> str:
@@ -50,6 +50,7 @@ def build_scene(
     resolve_visuals: bool = True,
     progress=None,
     visual_profile: VisualProfile | None = None,   # genre's say over the cinematic defaults (formats.VisualProfile)
+    media_plan: MediaPlan | None = None,           # genre's say over media mode/mood (formats.MediaPlan)
 ) -> pathlib.Path:
     """
     Assemble scene.json (v2) and write it to out_dir. Returns the path.
@@ -60,6 +61,7 @@ def build_scene(
     resolve_visuals   — set False to skip stock lookups (faster; text-only scene).
     """
     visual_profile = visual_profile or VisualProfile()
+    media_plan = media_plan or MediaPlan()
     style        = script.get("style", "contrarian")
     global_theme = (script.get("global", {}) or {}).get("theme", "")
     computed_theme = _style_to_theme(global_theme or style)
@@ -84,26 +86,46 @@ def build_scene(
         assets.append({"id": aid, "kind": "audio", "url": _wav_data_url(wav)})
         contracts[i]["audio"] = {"asset_id": aid}
 
-    # ── Visuals: resolve + embed a stock image per beat ──────────────────────
+    # ── Visuals: resolve + embed a stock image/video per beat (v2 shape) ─────
     if resolve_visuals:
+        media = media_plan
         for i, c in enumerate(contracts):
             if progress:
                 progress(i, len(contracts), f"visuals {i + 1}/{len(contracts)}")
             q = (c.get("visual_query") or "").strip()
             if not q:
                 continue
-            url = resolve_image(q)
-            if not url:
+            result = resolve_visual(
+                q, mood=media.mood, mode=media.mode,
+                allow_illustration=media.allow_illustration, pace=c.get("pace", ""),
+            )
+            if not result:
                 continue
-            data = download_as_data_url(url)
+            is_video = result["kind"] == "video"
+            data = download_video_as_data_url(result["url"]) if is_video else download_as_data_url(result["url"])
+            if not data and is_video:
+                # Oversized/failed clip — fall back to an image resolve for this beat
+                # rather than leaving it with no visual at all.
+                result = resolve_visual(q, mood=media.mood, mode="image", allow_illustration=media.allow_illustration)
+                if not result:
+                    continue
+                is_video = False
+                data = download_as_data_url(result["url"])
             if not data:
                 continue
-            iid = f"img_{i}"
-            asset = {"id": iid, "kind": "image", "url": data["url"]}
+            iid = f"{'vid' if is_video else 'img'}_{i}"
+            asset = {"id": iid, "kind": result["kind"], "url": data["url"]}
             if data.get("width") and data.get("height"):
                 asset["width"], asset["height"] = data["width"], data["height"]
+            if is_video and result.get("duration_ms"):
+                asset["duration_ms"] = result["duration_ms"]
             assets.append(asset)
-            c["visual"] = {"asset_id": iid, "fit": "cover", "opacity": 0.9}
+            c["visual"] = {
+                "asset_id": iid, "kind": result["kind"], "role": "background",
+                "fit": "cover", "opacity": 0.9,
+                "relevance": result.get("relevance", 0.0), "query": result.get("query", q),
+                "alternatives": [],
+            }
 
     scene = {
         "video_id": out_dir.name,

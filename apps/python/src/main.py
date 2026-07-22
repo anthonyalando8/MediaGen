@@ -296,6 +296,7 @@ def _run_scene(
         beat_wavs=beat_wavs,
         timeline=timeline,
         visual_profile=fmt.visuals if fmt else None,
+        media_plan=fmt.media if fmt else None,
     )
 
 

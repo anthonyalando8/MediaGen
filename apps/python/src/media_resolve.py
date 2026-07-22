@@ -1,28 +1,44 @@
 """
-media_resolve.py  —  Stock visual resolution, moved OUT of renderer/capture.js.
+media_resolve.py  —  Stock visual resolution (v2: scored, filtered, +video).
 
 capture.js used to fetch a background image per beat (Pexels → Unsplash →
 Pixabay) at render time. In the editor pipeline there is no Playwright render
-step, so resolution moves here: the scene builder calls `resolve_image()` per
-beat and embeds the result in scene.json, giving the editor one self-contained
-document.
+step, so resolution moves here: the scene builder calls `resolve_visual()`
+per beat and embeds the result in scene.json, giving the editor one
+self-contained document.
 
-Ported faithfully from capture.js's `fetchMediaAsset` (image path):
-  Pexels (portrait, medium) → Unsplash (portrait) → Pixabay (vertical),
-  with a one-retry fallback on the first two subject words.
+v1 → v2 (fix-plan §05, "stop fetching star-shaped clip-art")
+--------------------------------------------------------------------------
+v1 took the FIRST provider's FIRST result (Pexels → Unsplash → Pixabay,
+falling through only on a zero-hit response) — no scoring, no comparison, no
+illustration filter beyond Pixabay's own `image_type=photo` param. v2:
+
+  1. Fetches up to 8 candidates from EVERY provider that has a key (not just
+     the first one that returns anything).
+  2. Scores every candidate together — term overlap between the (mood-
+     enriched) query and the candidate's title/alt/tags, a portrait-
+     orientation bonus, and (when `allow_illustration=False`) an
+     illustration/vector/clipart keyword exclusion — and returns the best.
+  3. Adds video candidates (Pexels + Pixabay video search) for `media.mode`
+     "video"/"hybrid", so kinetic beats can pull a real clip instead of a
+     static photo.
 
 Keys are read from the environment (or apps/python/.env), same names as
 capture.js: PEXELS_API_KEY, UNSPLASH_API_KEY, PIXABAY_API_KEY.
 
-Stdlib only (urllib) — no new dependency. `download_as_data_url()` fetches the
-bytes and returns a `data:` URL so the media travels INSIDE scene.json and
-renders in the editor with no CORS/tainting risk (a plain hosted URL can fail
-WebGL texture upload if the CDN omits CORS headers).
+Stdlib only (urllib) — no new dependency. `download_as_data_url()` /
+`download_video_as_data_url()` fetch the bytes and return a `data:` URL so
+the media travels INSIDE scene.json and renders in the editor with no
+CORS/tainting risk (a plain hosted URL can fail WebGL texture upload if the
+CDN omits CORS headers). Video clips are capped at MAX_VIDEO_BYTES — a
+single beat's embedded clip can balloon scene.json fast; oversized
+candidates are skipped in favor of falling back to an image.
 """
 
 from __future__ import annotations
 import io
 import os
+import re
 import json
 import base64
 import pathlib
@@ -30,6 +46,7 @@ import urllib.parse
 import urllib.request
 
 TIMEOUT_S = 6
+MAX_VIDEO_BYTES = 6 * 1024 * 1024  # ~6MB cap per embedded clip (data: URL tradeoff)
 
 
 # ── .env loader (shell env wins) ────────────────────────────────────────────
@@ -67,85 +84,240 @@ def _get_json(url: str, headers: dict | None = None) -> dict | None:
         return None
 
 
-# ── Per-provider image search (mirrors capture.js) ──────────────────────────
+# ── Scoring ──────────────────────────────────────────────────────────────────
 
-def _pexels_image(q: str) -> str | None:
+_ILLUSTRATION_HINTS = {"illustration", "vector", "clipart", "clip-art", "icon", "cartoon", "drawing", "graphic"}
+
+
+def _tokens(s: str) -> set:
+    return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+
+def _score_candidate(query_tokens: set, text: str, tags: str, width, height, allow_illustration: bool):
+    """Term-overlap score in [0, ~1.15]. Returns None to exclude the candidate
+    outright (illustration hint present and allow_illustration is False)."""
+    cand_tokens = _tokens(text) | _tokens(tags)
+    if not allow_illustration and (cand_tokens & _ILLUSTRATION_HINTS):
+        return None
+    score = len(query_tokens & cand_tokens) / max(1, len(query_tokens))
+    if width and height and height > width:
+        score += 0.15  # portrait bonus — matches the orientation we request anyway
+    return score
+
+
+def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool):
+    best, best_score = None, -1.0
+    for c in candidates:
+        score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration)
+        if score is None:
+            continue
+        if score > best_score:
+            best, best_score = c, score
+    return best, best_score
+
+
+# ── Per-provider candidate fetch (image) ────────────────────────────────────
+
+def _pexels_image_candidates(q: str) -> list:
     if not _PEXELS:
-        return None
-
-    def search(sq: str) -> list:
-        u = ("https://api.pexels.com/v1/search?query="
-             + urllib.parse.quote(sq)
-             + "&orientation=portrait&per_page=8&size=medium")
-        data = _get_json(u, {"Authorization": _PEXELS})
-        return (data or {}).get("photos", []) or []
-
-    results = search(q)
-    if not results:
-        subject = " ".join(q.split()[:2])
-        if subject != q:
-            results = search(subject)
-    if not results:
-        return None
-    src = results[0].get("src", {}) or {}
-    return src.get("portrait") or src.get("large2x") or src.get("large")
+        return []
+    u = ("https://api.pexels.com/v1/search?query=" + urllib.parse.quote(q)
+         + "&orientation=portrait&per_page=8&size=medium")
+    data = _get_json(u, {"Authorization": _PEXELS})
+    out = []
+    for p in (data or {}).get("photos", []) or []:
+        src = p.get("src", {}) or {}
+        url = src.get("portrait") or src.get("large2x") or src.get("large")
+        if not url:
+            continue
+        out.append({"url": url, "text": p.get("alt", ""), "tags": "",
+                    "width": p.get("width"), "height": p.get("height"), "source": "Pexels"})
+    return out
 
 
-def _unsplash_image(q: str) -> str | None:
+def _unsplash_image_candidates(q: str) -> list:
     if not _UNSPLASH:
-        return None
-
-    def search(sq: str) -> list:
-        u = ("https://api.unsplash.com/search/photos?query="
-             + urllib.parse.quote(sq)
-             + f"&orientation=portrait&content_filter=high&per_page=8&order_by=relevant&client_id={_UNSPLASH}")
-        data = _get_json(u, {"Accept-Version": "v1"})
-        return (data or {}).get("results", []) or []
-
-    results = search(q)
-    if not results:
-        subject = " ".join(q.split()[:2])
-        if subject != q:
-            results = search(subject)
-    if not results:
-        return None
-    urls = results[0].get("urls", {}) or {}
-    return urls.get("regular")
+        return []
+    u = ("https://api.unsplash.com/search/photos?query=" + urllib.parse.quote(q)
+         + f"&orientation=portrait&content_filter=high&per_page=8&order_by=relevant&client_id={_UNSPLASH}")
+    data = _get_json(u, {"Accept-Version": "v1"})
+    out = []
+    for r in (data or {}).get("results", []) or []:
+        urls = r.get("urls", {}) or {}
+        url = urls.get("regular")
+        if not url:
+            continue
+        tags = " ".join(t.get("title", "") for t in (r.get("tags") or []) if isinstance(t, dict))
+        out.append({"url": url, "text": r.get("alt_description") or r.get("description") or "", "tags": tags,
+                    "width": r.get("width"), "height": r.get("height"), "source": "Unsplash"})
+    return out
 
 
-def _pixabay_image(q: str) -> str | None:
+def _pixabay_image_candidates(q: str) -> list:
     if not _PIXABAY:
-        return None
+        return []
+    u = ("https://pixabay.com/api/?key=" + urllib.parse.quote(_PIXABAY)
+         + "&q=" + urllib.parse.quote(q)
+         + "&image_type=photo&orientation=vertical&safesearch=true&per_page=8&order=relevant")
+    data = _get_json(u)
+    out = []
+    for h in (data or {}).get("hits", []) or []:
+        url = h.get("webformatURL") or h.get("largeImageURL")
+        if not url:
+            continue
+        out.append({"url": url, "text": h.get("tags", ""), "tags": h.get("tags", ""),
+                    "width": h.get("webformatWidth"), "height": h.get("webformatHeight"), "source": "Pixabay"})
+    return out
 
-    def search(sq: str) -> list:
-        u = ("https://pixabay.com/api/?key=" + urllib.parse.quote(_PIXABAY)
-             + "&q=" + urllib.parse.quote(sq)
-             + "&image_type=photo&orientation=vertical&safesearch=true&per_page=8&order=relevant")
-        data = _get_json(u)
-        return (data or {}).get("hits", []) or []
 
-    results = search(q)
-    if not results:
-        subject = " ".join(q.split()[:2])
-        if subject != q:
-            results = search(subject)
-    if not results:
+_IMAGE_PROVIDERS = (_pexels_image_candidates, _unsplash_image_candidates, _pixabay_image_candidates)
+
+
+def _best_image_candidate(query: str, mood: list, allow_illustration: bool) -> dict | None:
+    full_q = " ".join([query, *mood]).strip()
+    q_tokens = _tokens(full_q)
+
+    candidates = []
+    for fn in _IMAGE_PROVIDERS:
+        candidates.extend(fn(full_q))
+    if not candidates:
+        # One-retry fallback on the bare subject — mirrors the legacy
+        # per-provider retry, now applied once across all providers.
+        subject = " ".join(query.split()[:2])
+        if subject and subject != full_q:
+            for fn in _IMAGE_PROVIDERS:
+                candidates.extend(fn(subject))
+
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration)
+    if best is None:
         return None
-    hit = results[0]
-    return hit.get("webformatURL") or hit.get("largeImageURL")
+    print(f"[media] {best['source']} ✓ (score={best_score:.2f}) \"{full_q}\"")
+    return {"kind": "image", "url": best["url"], "relevance": round(min(1.0, max(0.0, best_score)), 2), "query": full_q}
+
+
+# ── Per-provider candidate fetch (video) ────────────────────────────────────
+
+def _pexels_video_candidates(q: str) -> list:
+    if not _PEXELS:
+        return []
+    u = ("https://api.pexels.com/videos/search?query=" + urllib.parse.quote(q)
+         + "&orientation=portrait&per_page=8")
+    data = _get_json(u, {"Authorization": _PEXELS})
+    out = []
+    for v in (data or {}).get("videos", []) or []:
+        files = sorted(
+            (f for f in (v.get("video_files") or []) if f.get("link") and f.get("width", 0) >= 480),
+            key=lambda f: f.get("width", 0),
+        )
+        if not files:
+            continue
+        f = files[0]  # smallest file that still meets the floor — keeps the embed small
+        out.append({"url": f["link"], "text": "", "tags": "", "width": f.get("width"), "height": f.get("height"),
+                    "duration_ms": int((v.get("duration") or 0) * 1000), "source": "Pexels"})
+    return out
+
+
+def _pixabay_video_candidates(q: str) -> list:
+    if not _PIXABAY:
+        return []
+    u = ("https://pixabay.com/api/videos/?key=" + urllib.parse.quote(_PIXABAY)
+         + "&q=" + urllib.parse.quote(q) + "&per_page=8")
+    data = _get_json(u)
+    out = []
+    for h in (data or {}).get("hits", []) or []:
+        videos = h.get("videos", {}) or {}
+        # "tiny" first, not "small" — real-world check showed "small" clips
+        # routinely exceed MAX_VIDEO_BYTES and get rejected/skipped downstream,
+        # falling back to an image. Smallest-first actually lands a video.
+        v = videos.get("tiny") or videos.get("small") or videos.get("medium")
+        if not v or not v.get("url"):
+            continue
+        out.append({"url": v["url"], "text": h.get("tags", ""), "tags": h.get("tags", ""),
+                    "width": v.get("width"), "height": v.get("height"),
+                    "duration_ms": int((h.get("duration") or 0) * 1000), "source": "Pixabay"})
+    return out
+
+
+_VIDEO_PROVIDERS = (_pexels_video_candidates, _pixabay_video_candidates)
+
+# Stock video search returns full-length clips (routinely 1-3+ minutes) —
+# beats only run a few seconds, so a long clip is both wasted bandwidth and
+# near-guaranteed to blow the MAX_VIDEO_BYTES cap even at the smallest
+# resolution. Filtering by duration BEFORE scoring avoids a doomed download.
+_MAX_VIDEO_DURATION_MS = 30_000
+
+
+def _best_video_candidate(query: str, mood: list, allow_illustration: bool) -> dict | None:
+    full_q = " ".join([query, *mood]).strip()
+    q_tokens = _tokens(full_q)
+
+    candidates = []
+    for fn in _VIDEO_PROVIDERS:
+        candidates.extend(fn(full_q))
+    candidates = [c for c in candidates if c.get("duration_ms", 0) <= _MAX_VIDEO_DURATION_MS]
+
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration)
+    if best is None:
+        return None
+    print(f"[media] {best['source']} video ✓ (score={best_score:.2f}) \"{full_q}\"")
+    return {"kind": "video", "url": best["url"], "relevance": round(min(1.0, max(0.0, best_score)), 2),
+            "query": full_q, "duration_ms": best.get("duration_ms", 0)}
+
+
+# ── Public resolve ───────────────────────────────────────────────────────────
+
+_MOTION_PACES = {"fast", "explosive"}
+
+
+def resolve_visual(
+    query: str,
+    mood: list | None = None,
+    mode: str = "auto",
+    allow_illustration: bool = True,
+    pace: str = "",
+) -> dict | None:
+    """
+    Resolve `query` to a visual — scored across every provider that has a
+    key, instead of the first hit from the first provider.
+
+    mode:
+      "image"   — image providers only (today's behaviour).
+      "video"   — video providers first; falls back to image if no video
+                  candidate scores (a query with no good clip shouldn't
+                  leave the beat with no visual at all).
+      "hybrid"  — video for beats whose `pace` is fast/explosive, image
+                  otherwise (reuses the beat's existing `pace` field).
+      "auto"    — image only. This is the default for any format that
+                  doesn't set `media.mode`, so it reproduces the exact
+                  pre-v2 output shape (image, never video) unless a format
+                  opts in.
+
+    Returns {"kind", "url", "relevance", "query", "duration_ms"?} or None.
+    """
+    if not query:
+        return None
+    mood = mood or []
+
+    want_video = mode == "video" or (mode == "hybrid" and pace in _MOTION_PACES)
+    if want_video:
+        result = _best_video_candidate(query, mood, allow_illustration)
+        if result:
+            return result
+        # No video candidate cleared the bar — fall through to image so the
+        # beat still gets a visual.
+
+    result = _best_image_candidate(query, mood, allow_illustration)
+    if result:
+        return result
+    print(f"[media] ✗ no visual for \"{query}\"")
+    return None
 
 
 def resolve_image(query: str) -> str | None:
-    """Resolve `query` to a stock image URL (Pexels → Unsplash → Pixabay)."""
-    if not query:
-        return None
-    for fn, name in ((_pexels_image, "Pexels"), (_unsplash_image, "Unsplash"), (_pixabay_image, "Pixabay")):
-        url = fn(query)
-        if url:
-            print(f"[media] {name} ✓ \"{query}\"")
-            return url
-    print(f"[media] ✗ no image for \"{query}\"")
-    return None
+    """Legacy image-only resolve — returns just the URL. Thin wrapper over
+    resolve_visual() for any caller not yet updated."""
+    result = resolve_visual(query, mode="image")
+    return result["url"] if result else None
 
 
 # ── Download + embed ─────────────────────────────────────────────────────────
@@ -177,3 +349,23 @@ def download_as_data_url(url: str) -> dict | None:
     except Exception:
         pass
     return out
+
+
+def download_video_as_data_url(url: str) -> dict | None:
+    """Like download_as_data_url but for video, with a byte-size cap — a
+    single beat's clip embedded as base64 can balloon scene.json fast.
+    Returns None (caller falls back to image) if the clip exceeds the cap."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "MediaGen/1.0"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S * 5) as r:
+            if r.status != 200:
+                return None
+            raw = r.read(MAX_VIDEO_BYTES + 1)
+            if len(raw) > MAX_VIDEO_BYTES:
+                print(f"[media] ✗ video candidate exceeds {MAX_VIDEO_BYTES // (1024 * 1024)}MB cap, skipping")
+                return None
+            mime = r.headers.get("Content-Type", "video/mp4").split(";")[0].strip()
+    except Exception:
+        return None
+    b64 = base64.b64encode(raw).decode("ascii")
+    return {"url": f"data:{mime};base64,{b64}"}

@@ -195,6 +195,7 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             timeline=timeline, resolve_visuals=resolve_visuals,
             progress=lambda i, n, d: _sub(job_id, 5, (i + 1) / n, d),
             visual_profile=fmt.visuals,
+            media_plan=fmt.media,
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 
