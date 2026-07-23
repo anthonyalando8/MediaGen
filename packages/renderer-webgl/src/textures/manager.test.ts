@@ -1,6 +1,6 @@
 // packages/renderer-webgl/src/textures/manager.test.ts
 import { describe, expect, it, vi } from "vitest";
-import { Texture, TextureSource as PixiTextureSource } from "pixi.js";
+import { ImageSource, Texture, TextureSource as PixiTextureSource } from "pixi.js";
 import type { MediaAssetRef, TextureSource as MediaTextureSource } from "media";
 import { TextureManager } from "./manager";
 
@@ -37,7 +37,20 @@ function makeVideoSource(id: string, seek: (frame: number, fps: number) => Promi
   };
 }
 
+function makeVideoFrameSource(id: string, seek: (frame: number, fps: number) => Promise<void>, currentFrame: () => VideoFrame): MediaTextureSource {
+  return {
+    kind: "video-frames",
+    assetId: id,
+    width: 10,
+    height: 10,
+    seek,
+    currentFrame,
+    dispose: () => {},
+  };
+}
+
 const makeTexture = () => new Texture({ source: new PixiTextureSource({ width: 10, height: 10 }) });
+const makeImageFrameTexture = (resource: VideoFrame) => new Texture({ source: new ImageSource({ resource, width: 10, height: 10 }) });
 
 describe("TextureManager", () => {
   it("returns Texture.EMPTY while loading, then the real texture once resolved", async () => {
@@ -303,6 +316,86 @@ describe("TextureManager", () => {
       expect(manager.get({ assetId: "missing" }, 30)).toBe(Texture.EMPTY);
 
       errorSpy.mockRestore();
+    });
+  });
+
+  describe("video-frames kind (ADR-016's WebCodecs export path)", () => {
+    it("prepare() seeks the cursor, then swaps the new VideoFrame onto the ImageSource and updates it", async () => {
+      const asset: MediaAssetRef = { id: "vf1", kind: "video", url: "blob:vf1" };
+      const frame0 = {} as unknown as VideoFrame;
+      const frame1 = {} as unknown as VideoFrame;
+      let current = frame0;
+      const seek = vi.fn(async (targetFrame: number) => {
+        current = targetFrame === 0 ? frame0 : frame1;
+      });
+      const source = makeVideoFrameSource("vf1", seek, () => current);
+      let texture: Texture | undefined;
+
+      const manager = new TextureManager(
+        { resolveAsset: () => asset },
+        { loadTexture: async () => source, createTexture: () => (texture = makeImageFrameTexture(frame0)) }
+      );
+
+      await manager.prepare({ assetId: "vf1", frame: 0 }, 30);
+      expect(seek).toHaveBeenCalledWith(0, 30);
+      expect((texture!.source as ImageSource).resource).toBe(frame0);
+
+      const updateSpy = vi.spyOn(texture!.source, "update");
+      await manager.prepare({ assetId: "vf1", frame: 1 }, 30);
+
+      expect(seek).toHaveBeenCalledWith(1, 30);
+      expect((texture!.source as ImageSource).resource).toBe(frame1); // swapped to the NEW frame, not left on the old one
+      expect(updateSpy).toHaveBeenCalled();
+    });
+
+    it("get() never seeks on its own — it only reflects whatever VideoFrame the cursor already holds", async () => {
+      const asset: MediaAssetRef = { id: "vf2", kind: "video", url: "blob:vf2" };
+      const frame = {} as unknown as VideoFrame;
+      const seek = vi.fn(async () => {});
+      const source = makeVideoFrameSource("vf2", seek, () => frame);
+      let texture: Texture | undefined;
+
+      const manager = new TextureManager(
+        { resolveAsset: () => asset },
+        { loadTexture: async () => source, createTexture: () => (texture = makeImageFrameTexture(frame)) }
+      );
+
+      manager.get({ assetId: "vf2", frame: 0 }, 30, false);
+      await flush();
+
+      const updateSpy = vi.spyOn(texture!.source, "update");
+      manager.get({ assetId: "vf2", frame: 5 }, 30, false); // a "large jump" by frame number — irrelevant here, get() must not react to it
+
+      expect(seek).not.toHaveBeenCalled(); // only prepare() drives seeking for this kind, same invariant as "video"
+      expect(updateSpy).not.toHaveBeenCalled(); // resource unchanged (still `frame`) — nothing to re-upload
+    });
+
+    it("get() swaps and re-uploads when the held VideoFrame changed since the texture was created (prepare() already advanced the cursor)", async () => {
+      const asset: MediaAssetRef = { id: "vf3", kind: "video", url: "blob:vf3" };
+      const frame0 = {} as unknown as VideoFrame;
+      const frame1 = {} as unknown as VideoFrame;
+      let current = frame0;
+      const source = makeVideoFrameSource(
+        "vf3",
+        async () => {},
+        () => current
+      );
+      let texture: Texture | undefined;
+
+      const manager = new TextureManager(
+        { resolveAsset: () => asset },
+        { loadTexture: async () => source, createTexture: () => (texture = makeImageFrameTexture(frame0)) }
+      );
+
+      manager.get({ assetId: "vf3", frame: 0 }, 30, false);
+      await flush();
+
+      current = frame1; // simulate prepare() having advanced the cursor's held frame
+      const updateSpy = vi.spyOn(texture!.source, "update");
+      manager.get({ assetId: "vf3", frame: 1 }, 30, false);
+
+      expect((texture!.source as ImageSource).resource).toBe(frame1);
+      expect(updateSpy).toHaveBeenCalled();
     });
   });
 });

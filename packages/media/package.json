@@ -10,7 +10,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "contract": "workspace:*"
+    "contract": "workspace:*",
+    "mp4box": "^2.4.1"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

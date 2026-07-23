@@ -9,7 +9,7 @@ import { createCanvasHost } from "./host/canvas-host";
 import { SceneGraphAdapter } from "./adapter/scene-graph";
 import { TextureManager } from "./textures/manager";
 import { setTimeContext } from "./passes/pass-resolver";
-import type { MediaService } from "./textures/manager";
+import type { MediaService, TextureManagerOptions } from "./textures/manager";
 
 export interface Renderer {
   render(tree: RenderTree, playing?: boolean, frame?: number, wallTime?: number): void;
@@ -42,8 +42,8 @@ function collectTexRefs(nodes: RenderNode[]): { assetId: string; frame?: number 
   return refs;
 }
 
-export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaService): Renderer {
-  const textures = new TextureManager(media);
+export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaService, textureOptions?: TextureManagerOptions): Renderer {
+  const textures = new TextureManager(media, textureOptions);
   const host = createCanvasHost(canvas, {
     width: canvas.width || 1,
     height: canvas.height || 1,

@@ -34,6 +34,9 @@
 // awaited one, except for large-jump seeks which only benefit from the same
 // robustness.
 
+import { demuxVideoTrack } from "./mp4-demux";
+import { VideoDecodeCursor } from "./decode-cursor";
+
 export interface MediaAssetRef {
   id: string;
   kind: "image" | "video" | "audio";
@@ -69,7 +72,27 @@ export interface VideoTextureSource {
   dispose(): void;
 }
 
-export type TextureSource = ImageTextureSource | VideoTextureSource;
+/**
+ * EXPORT-ONLY (ADR-016's real fix): a WebCodecs demux+decode source producing
+ * `VideoFrame`s directly, instead of a hidden `<video>` element's `currentTime`
+ * seeks. Same `TexRef{assetId, frame}` contract as `VideoTextureSource` — only
+ * `renderer-webgl`'s `TextureManager` (manager.ts) needs to know the difference,
+ * and only `packages/export`'s deps ever construct one (see `loadTextureForExport`
+ * below; live preview keeps using `createVideoTexture`/`loadTexture`, untouched).
+ */
+export interface VideoFrameTextureSource {
+  kind: "video-frames";
+  assetId: string;
+  readonly width: number;
+  readonly height: number;
+  /** Advances (or, on a backward jump, resets and re-decodes from) the cursor to the frame at `frame/fps`, resolving once that frame is decoded. */
+  seek(frame: number, fps: number): Promise<void>;
+  /** The most recently decoded frame. Do NOT call `.close()` on this yourself — the underlying cursor owns its lifecycle (see `VideoDecodeCursor`'s doc). */
+  currentFrame(): VideoFrame;
+  dispose(): void;
+}
+
+export type TextureSource = ImageTextureSource | VideoTextureSource | VideoFrameTextureSource;
 
 /** Decodes an image asset into an ImageBitmap ready for GPU upload. */
 export async function loadImageTexture(asset: MediaAssetRef): Promise<ImageTextureSource> {
@@ -262,6 +285,56 @@ export async function loadTexture(asset: MediaAssetRef): Promise<TextureSource> 
       return loadImageTexture(asset);
     case "video":
       return createVideoTexture(asset);
+    default:
+      throw new Error(`unsupported asset kind for texture loading: "${asset.kind}"`);
+  }
+}
+
+/**
+ * EXPORT-ONLY: demuxes `asset` (via mp4-demux.ts) and decodes it with a
+ * `VideoDecodeCursor` (decode-cursor.ts) instead of a hidden `<video>`
+ * element — the real fix ADR-016 scoped. Seeks the cursor to frame 0 before
+ * resolving, mirroring `createVideoTexture`'s "resolves only once a frame
+ * actually exists" contract, so `currentFrame()` is valid the instant this
+ * returns (`TextureManager.load`, manager.ts, immediately builds a GPU
+ * texture from it).
+ */
+export async function createVideoFrameTexture(asset: MediaAssetRef): Promise<VideoFrameTextureSource> {
+  const track = await demuxVideoTrack(asset.url);
+  const cursor = new VideoDecodeCursor(track);
+  await cursor.seekTo(0);
+
+  return {
+    kind: "video-frames",
+    assetId: asset.id,
+    width: track.config.codedWidth ?? 0,
+    height: track.config.codedHeight ?? 0,
+    async seek(frame, fps) {
+      await cursor.seekTo((1e6 * frame) / fps);
+    },
+    currentFrame() {
+      return cursor.currentFrame();
+    },
+    dispose() {
+      cursor.dispose();
+    },
+  };
+}
+
+/**
+ * Same dispatch as `loadTexture`, except video assets route through the
+ * WebCodecs demux path (`createVideoFrameTexture`) instead of the hidden
+ * `<video>` element. Images are unchanged. This is the one seam
+ * `packages/export`'s `defaultExportDeps` injects to gate the new path to
+ * export only — live preview keeps calling `loadTexture` (via
+ * `createWebGLRenderer`'s default), completely untouched.
+ */
+export async function loadTextureForExport(asset: MediaAssetRef): Promise<TextureSource> {
+  switch (asset.kind) {
+    case "image":
+      return loadImageTexture(asset);
+    case "video":
+      return createVideoFrameTexture(asset);
     default:
       throw new Error(`unsupported asset kind for texture loading: "${asset.kind}"`);
   }

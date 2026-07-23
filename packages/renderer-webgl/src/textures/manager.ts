@@ -3,7 +3,7 @@
 // "Resolve TexRef → Pixi Texture via media; LRU cache; video frame upload"
 // (Deliverable 08).
 
-import { Texture, VideoSource } from "pixi.js";
+import { ImageSource, Texture, VideoSource } from "pixi.js";
 import { loadTexture as defaultLoadTexture } from "media";
 import type { MediaAssetRef, TextureSource as MediaTextureSource } from "media";
 import type { TexRef } from "contract";
@@ -29,6 +29,15 @@ function defaultCreateTexture(source: MediaTextureSource): Texture {
     // single source of truth for playback state (Viewport.tsx's RAF loop drives
     // playhead; TextureManager.get drives seeks/play/pause from there).
     return new Texture(new VideoSource({ resource: source.element, autoPlay: false }));
+  }
+  if (source.kind === "video-frames") {
+    // EXPORT ONLY (ADR-016's WebCodecs demux path, media's texture-source.ts).
+    // Each decoded `VideoFrame` is one-shot — unlike "video"'s persistent
+    // HTMLVideoElement, there's no single resource to construct once and let
+    // the browser mutate. `get()`'s video-frames branch below swaps this
+    // ImageSource's `resource` to each new VideoFrame and calls `update()`,
+    // which re-uploads without recreating this Texture/ImageSource.
+    return new Texture(new ImageSource({ resource: source.currentFrame(), width: source.width, height: source.height }));
   }
   return Texture.from(source.bitmap);
 }
@@ -135,6 +144,20 @@ export class TextureManager {
             void el.play().catch(() => {});
           });
         }
+      } else if (entry.source.kind === "video-frames" && tex.frame !== undefined) {
+        // EXPORT ONLY — always paused (export never plays), so unlike
+        // "video" there's no sequential-playback/large-jump distinction to
+        // make: the caller drives exact seeking through the awaited
+        // prepare() path (same invariant as "video"'s paused/export branch
+        // above — get() must never launch its own seek), and here just
+        // reflects whatever VideoFrame the cursor currently holds by
+        // swapping it onto the persistent ImageSource and re-uploading.
+        const imgSource = entry.texture.source as ImageSource;
+        const frame = entry.source.currentFrame();
+        if (imgSource.resource !== frame) {
+          imgSource.resource = frame;
+          imgSource.update();
+        }
       }
       return entry.texture;
     }
@@ -199,6 +222,16 @@ export class TextureManager {
     if (entry.source.kind === "video" && tex.frame !== undefined) {
       await entry.source.seek(tex.frame, fps);
       entry.texture.source.update();
+    } else if (entry.source.kind === "video-frames" && tex.frame !== undefined) {
+      await entry.source.seek(tex.frame, fps);
+      // Unlike "video"'s persistent HTMLVideoElement (mutated in place by the
+      // browser — a plain `update()` re-reads it), each decoded VideoFrame is
+      // a distinct one-shot object: the ImageSource's `resource` must be
+      // swapped to the NEW frame before `update()`, or this re-uploads
+      // whatever (possibly already-closed) frame it still holds from last time.
+      const imgSource = entry.texture.source as ImageSource;
+      imgSource.resource = entry.source.currentFrame();
+      imgSource.update();
     }
   }
 

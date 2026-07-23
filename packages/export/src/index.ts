@@ -45,6 +45,7 @@ import { evaluateComposition } from "core";
 import type { Composition, EvalCtx, Frame, NodeKindRegistry } from "core";
 import { createWebGLRenderer } from "renderer-webgl";
 import type { MediaService, Renderer } from "renderer-webgl";
+import { loadTextureForExport } from "media";
 import { Output, Mp4OutputFormat, BufferTarget, CanvasSource, AudioBufferSource, QUALITY_HIGH } from "mediabunny";
 import type { Quality } from "mediabunny";
 import { createVirtualClock } from "./virtual-clock";
@@ -165,7 +166,13 @@ function defaultCreateMuxer(canvas: HTMLCanvasElement, options: { videoBitrate: 
 export function defaultExportDeps(media: ExportMediaService): ExportDeps {
   return {
     createCanvas: defaultCreateCanvas,
-    createRenderer: createWebGLRenderer,
+    // ADR-016's real fix, EXPORT ONLY: route video textures through the
+    // WebCodecs demux path (media's `loadTextureForExport`) instead of the
+    // hidden-<video>-element seek-per-frame path live preview still uses.
+    // `createWebGLRenderer`'s 3rd param defaults to undefined (media's plain
+    // `loadTexture`) everywhere else — this is the one call site that
+    // overrides it, per this file's own `createRenderer` injection seam.
+    createRenderer: (canvas, rendererMedia) => createWebGLRenderer(canvas, rendererMedia, { loadTexture: loadTextureForExport }),
     createMuxer: defaultCreateMuxer,
     media,
     audioRenderDeps: {
