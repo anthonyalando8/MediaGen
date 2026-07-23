@@ -1,52 +1,54 @@
 // packages/media/src/decode-cursor.ts
 //
-// "Seek to arbitrary time" cursor built on decoder.ts's FrameDecoder, matched
-// to how export walks frames MONOTONICALLY FORWARD (packages/export/src/
-// frame-pump.ts's `for (let i = 0; i < frameCount; i++) await onFrame(i)`) —
-// deliberately NOT a per-frame random-access decoder (ADR-016 rejected that:
-// it wouldn't beat today's per-frame <video> seek). Walking forward within one
-// GOP costs nothing extra beyond the next decode() call; a forward jump past
-// a keyframe skips the now-unneeded rest of the old GOP; only a genuine
-// BACKWARD jump (the same asset reused earlier in decode order elsewhere on
-// the timeline — not the common "one video per beat" case, but possible for
-// correctness) pays a decoder reset.
+// Frame-accurate seek cursor over decoder.ts's FrameDecoder, matched to how
+// export walks frames MONOTONICALLY FORWARD (packages/export/src/frame-pump.ts).
 //
-// ── FIX IN THIS REVISION: seekTo no longer DEADLOCKS or throws mid-GOP ───────
-// Two coupled bugs, both fixed here.
+// ── THE WEBCODECS CONTRACT THIS RESPECTS (learned the hard way) ──────────────
+// A `VideoDecoder` is an ASYNCHRONOUS, PIPELINED, REORDERING decoder:
 //
-// 1. DEADLOCK AT FRAME 0. `seekTo` used to await EACH `decoder.decode(chunk)`
-//    before submitting the next chunk. A `VideoDecoder` is PIPELINED: it does
-//    not emit an output frame the instant its matching chunk is fed — it
-//    buffers, waiting for either more input chunks or an explicit `flush()`
-//    (fundamental to B-frame reordering and hardware-decoder latency). Awaiting
-//    frame N's output before feeding chunk N+1, while the decoder waits for
-//    more input before emitting frame N, is a classic deadlock. It stranded on
-//    the very first frame: `createVideoFrameTexture` does `await
-//    cursor.seekTo(0)` at load, that promise never resolved, so the export
-//    froze at frame 0. Fix: submit every chunk in the range WITHOUT awaiting
-//    between them, then `flush()` once to force the decoder to drain them.
+//   • Outputs arrive later than their inputs and in PRESENTATION order. A frame
+//     is emitted only once enough LATER chunks (decode order) have been fed to
+//     prove no earlier-presentation frame is still coming — up to the codec's
+//     reorder depth (H.264 `max_num_reorder_frames`, ≤ 16). So you must NEVER
+//     await frame N's output before feeding chunk N+1: that deadlocks (app
+//     waits for the frame, decoder waits for more input). [freeze-at-0, v1]
 //
-// 2. "A key frame is required after configure() or flush()." After `flush()`,
-//    the `VideoDecoder` requires its NEXT submitted chunk to be a keyframe — it
-//    does NOT retain a reference chain you can continue feeding delta frames
-//    into. So the original plan of flushing each seek yet continuing a delta
-//    walk from `lastSubmittedDecodeIdx + 1` on the next seek threw the instant
-//    the next chunk was a delta frame. Fix: make every seek SELF-CONTAINED —
-//    always start decoding from the latest keyframe at/before the target, so
-//    the first chunk after any flush is always a keyframe. No cross-seek
-//    decoder state is assumed; `resetDecoder` is no longer needed.
+//   • Therefore, to get the TARGET frame out without a flush, feed the stream
+//     to `target + REORDER_MARGIN`. That guarantees the target is emitted — but
+//     the frames `target+1 … target+MARGIN` are themselves still buffered
+//     (their promises stay pending). Awaiting the whole submitted batch
+//     (`Promise.all`) blocks on those trailing pending frames forever. So we
+//     await ONLY the target's promise. [freeze-at-0, v3 — the Promise.all bug]
 //
-// Tradeoff: decoding from the keyframe on every seek re-decodes the GOP prefix,
-// so a long-GOP clip is O(gopLength) per output frame. Correct and deadlock-
-// free first; a read-ahead cache that reuses in-GOP frames across forward seeks
-// is the perf follow-up (kept out here to avoid holding many VideoFrames — each
-// pins GPU/CPU buffers — in memory at once).
+//   • `flush()` forces every queued frame out, but afterwards the decoder
+//     REQUIRES a keyframe as its next chunk — you cannot flush per seek and
+//     keep feeding delta frames. [\"key frame is required after flush()\"] So we
+//     flush ONLY at end-of-stream (when there aren't MARGIN samples left to
+//     feed), and the next decoding seek resets to a keyframe.
+//
+//   • Open `VideoFrame`s pin GPU/CPU buffers; too many outstanding applies
+//     backpressure and output stalls. [stall-at-~frame-12] So frames are closed
+//     the moment the forward consumer passes them, and we keep only ~MARGIN
+//     ahead.
+//
+// PRODUCER / CONSUMER MODEL
+// ------------------------
+//   producer: `ensureSubmittedThrough` submits chunks forward, staying up to
+//             REORDER_MARGIN ahead of the target; each chunk's decode promise
+//             has a handler that files the resolved frame into `decoded` (or
+//             closes it if the consumer has already passed that index).
+//   consumer: `seekTo` awaits ONLY the target's pending promise, takes it from
+//             `decoded`, and closes everything behind it.
+//
+// A genuine BACKWARD jump (or a target already consumed/evicted, or a seek
+// after the end-of-stream flush) resets the decoder and re-decodes from the
+// covering keyframe.
 
 import { FrameDecoder } from "./decoder";
 import type { FrameDecoderConfig } from "./decoder";
 import type { DemuxedVideoTrack } from "./mp4-demux";
 
-/** The narrow slice of `FrameDecoder` this cursor actually needs — real WebCodecs only works in a browser, so tests inject a fake here instead (same "narrow interface behind an injectable seam" pattern as `packages/export`'s `ExportDeps.createMuxer`). */
+/** The narrow slice of `FrameDecoder` this cursor needs — real WebCodecs only runs in a browser, so tests inject a fake here (same seam as `packages/export`'s `ExportDeps.createMuxer`). */
 export interface FrameDecoderLike {
   decode(chunk: EncodedVideoChunk): Promise<VideoFrame>;
   flush(): Promise<void>;
@@ -57,13 +59,41 @@ export type CreateFrameDecoder = (config: FrameDecoderConfig, onError: (error: D
 
 const defaultCreateFrameDecoder: CreateFrameDecoder = (config, onError) => new FrameDecoder(config, onError);
 
+/**
+ * How far (in decode-order samples) we stay ahead of the target so the target
+ * is emitted WITHOUT a flush. H.264's decoded-picture-buffer / reorder depth is
+ * capped at 16, so once `target + 16` samples have been submitted the decoder
+ * can no longer be withholding the target — it must have output it. Larger than
+ * any real reorder depth; small enough that only ~16 frames are ever in flight.
+ */
+const REORDER_MARGIN = 16;
+
 export class VideoDecodeCursor {
   private decoder: FrameDecoderLike;
   /** Indices into `track.samples`, sorted by `timestampUs` (presentation order) — samples arrive from mp4box in DECODE order, which differs whenever the codec uses B-frames. */
   private readonly presentationOrder: number[];
-  /** `decodeOrder` values of every keyframe, ascending (decode order and array order coincide for `track.samples`, since mp4box delivers samples in decode order). */
+  /** `decodeOrder` values of every keyframe, ascending. */
   private readonly keyframeDecodeOrders: number[];
-  /** Presentation index the cursor is currently parked on, so an identical re-seek is a cheap no-op. `-1` until the first `seekTo` resolves. */
+
+  /** Highest decode-order sample index submitted to the current decoder, or `-1` after (re)configure. */
+  private submittedUpTo = -1;
+  /** Set once we've `flush()`ed (only ever at end-of-stream); the decoder then requires a keyframe next, so the next decoding seek resets. */
+  private flushed = false;
+  /** Frames the decoder has emitted but the consumer hasn't taken yet, keyed by decode-order index. Cursor owns them; closed on consume / reset / dispose. */
+  private readonly decoded = new Map<number, VideoFrame>();
+  /** Per-chunk decode promises still awaiting output, keyed by decode-order index. A seek awaits `pending.get(target)`; every handler moves its frame into `decoded` (or closes it if already passed). */
+  private readonly pending = new Map<number, Promise<void>>();
+  /**
+   * Consumer watermark in PRESENTATION time (µs): any frame whose
+   * `timestampUs` is strictly below this has been passed by the forward export
+   * and must be closed on arrival. MUST be presentation-time, not a decode-
+   * order index — with B-frames the export walks presentation order while the
+   * decoder is fed decode order, so a decode-index watermark closes frames a
+   * later presentation frame still needs (the stall-at-8 bug).
+   */
+  private consumedPtsBelow = Number.NEGATIVE_INFINITY;
+
+  /** Presentation index currently parked on, so an identical re-seek is a no-op. `-1` until the first `seekTo` resolves. */
   private lastTargetIdx = -1;
   private currentFrameValue: VideoFrame | undefined;
 
@@ -82,7 +112,7 @@ export class VideoDecodeCursor {
     }
   }
 
-  /** The most recently decoded frame. Valid only after `seekTo` has resolved at least once. Callers must NOT `close()` this themselves — the cursor closes it once superseded (in the next `seekTo`) or on `dispose()`. */
+  /** The most recently decoded frame. Valid only after `seekTo` has resolved once. Callers must NOT `close()` it — the cursor does, on the next `seekTo` or `dispose()`. */
   currentFrame(): VideoFrame {
     if (!this.currentFrameValue) {
       throw new Error("VideoDecodeCursor: seekTo() must resolve at least once before currentFrame()");
@@ -109,7 +139,7 @@ export class VideoDecodeCursor {
     return order[result];
   }
 
-  /** Latest keyframe (by decode order) at or before `decodeIdx`, or `undefined` if none (shouldn't happen for a valid track — the first sample is always a keyframe). */
+  /** Latest keyframe (by decode order) at or before `decodeIdx`, or `undefined` if none. */
   private latestKeyframeAtOrBefore(decodeIdx: number): number | undefined {
     const keys = this.keyframeDecodeOrders;
     let lo = 0;
@@ -127,76 +157,135 @@ export class VideoDecodeCursor {
     return result;
   }
 
+  private resetDecoder(): void {
+    // Closing the decoder drops its queued outputs, so the in-flight `pending`
+    // promises simply never resolve (their handlers never run) — safe to clear.
+    this.decoder.close();
+    this.decoder = this.createDecoder(this.track.config, this.onError);
+    this.submittedUpTo = -1;
+    this.flushed = false;
+    this.pending.clear();
+    for (const frame of this.decoded.values()) frame.close();
+    this.decoded.clear();
+    this.consumedPtsBelow = Number.NEGATIVE_INFINITY;
+  }
+
+  /** Submits a chunk and wires its output into `decoded` (or closes it if the consumer has already moved past that index). */
+  private submit(i: number): void {
+    const sample = this.track.samples[i];
+    const chunk = new EncodedVideoChunk({
+      type: sample.isKeyframe ? "key" : "delta",
+      timestamp: sample.timestampUs,
+      duration: sample.durationUs,
+      data: sample.data,
+    });
+    const p = this.decoder
+      .decode(chunk)
+      .then((frame) => {
+        this.pending.delete(i);
+        if (this.track.samples[i].timestampUs < this.consumedPtsBelow) {
+          frame.close(); // export already passed this presentation time while it was decoding
+        } else {
+          this.decoded.set(i, frame);
+        }
+      })
+      .catch(() => {
+        this.pending.delete(i); // decoder closed under us (reset) — nothing to emit
+      });
+    this.pending.set(i, p);
+  }
+
+  /**
+   * Ensures every chunk from the current position up through `throughIdx`
+   * (clamped to the stream) has been submitted, opening on `keyframe` when the
+   * decoder is fresh. Flushes ONLY when the stream ends before a full margin
+   * could be fed, so a near-end target still drains.
+   */
+  private async ensureSubmittedThrough(throughIdx: number, keyframe: number): Promise<void> {
+    const lastIdx = this.track.samples.length - 1;
+    const end = Math.min(throughIdx, lastIdx);
+    const start = this.submittedUpTo < 0 ? keyframe : this.submittedUpTo + 1;
+    if (start > end) return;
+
+    for (let i = start; i <= end; i++) this.submit(i);
+    this.submittedUpTo = Math.max(this.submittedUpTo, end);
+
+    // If we ran out of samples before reaching `throughIdx`, the reorder buffer
+    // may still hold frames we need — flush to drain them. Only happens at true
+    // end-of-stream; `flushed` forces the next decoding seek to reset.
+    if (end === lastIdx && throughIdx > lastIdx) {
+      await this.decoder.flush();
+      this.flushed = true;
+    }
+  }
+
+  private setCurrent(frame: VideoFrame, targetIdx: number): VideoFrame {
+    this.currentFrameValue?.close();
+    this.currentFrameValue = frame;
+    this.lastTargetIdx = targetIdx;
+    return frame;
+  }
+
   /**
    * Seeks to the sample covering `timeUs`, resolving with its decoded
-   * `VideoFrame`. Calling this again with the same target as last time is a
-   * no-op (returns the same frame, decodes nothing new).
-   *
-   * SELF-CONTAINED per seek: always decodes from the latest keyframe at/before
-   * the target through to the target, submitting every chunk WITHOUT awaiting
-   * between them (a pipelined VideoDecoder won't emit frame N until it has more
-   * input or a flush — awaiting each decode deadlocks), then `flush()`es once
-   * to drain them. Starting at a keyframe every time is required because
-   * `flush()` leaves the decoder demanding a keyframe as its next chunk (see
-   * module doc) — we can never continue a delta walk across a flush.
+   * `VideoFrame`. Re-seeking to the same target is a no-op. See module doc for
+   * why this feeds past the target and awaits only the target's own output.
    */
   async seekTo(timeUs: number): Promise<VideoFrame> {
-    const targetIdx = this.findTargetDecodeIdx(timeUs);
+    const target = this.findTargetDecodeIdx(timeUs);
 
-    // Already parked on this exact frame — nothing to decode.
-    if (targetIdx === this.lastTargetIdx && this.currentFrameValue) {
+    if (target === this.lastTargetIdx && this.currentFrameValue) {
       return this.currentFrameValue;
     }
 
-    const keyframe = this.latestKeyframeAtOrBefore(targetIdx);
-    // A valid track always opens with a keyframe; fall back to 0 defensively.
-    const startIdx = keyframe ?? 0;
-
-    const samples = this.track.samples;
-
-    // Submit every chunk from the keyframe through the target up front, keeping
-    // the decoder's pipeline fed. Do NOT await between submissions.
-    const pending: Promise<VideoFrame>[] = [];
-    for (let i = startIdx; i <= targetIdx; i++) {
-      const sample = samples[i];
-      pending.push(
-        this.decoder.decode(
-          new EncodedVideoChunk({
-            type: sample.isKeyframe ? "key" : "delta",
-            timestamp: sample.timestampUs,
-            duration: sample.durationUs,
-            data: sample.data,
-          })
-        )
-      );
+    // Can we reach the target by continuing forward? Only if it's already
+    // decoded, already in flight, or still ahead of what we've submitted and no
+    // end-of-stream flush has intervened. Otherwise it's a backward/evicted
+    // jump — reset and re-decode from its keyframe.
+    const reachableForward = this.decoded.has(target) || this.pending.has(target) || (!this.flushed && target > this.submittedUpTo);
+    if (!reachableForward) {
+      this.resetDecoder();
     }
 
-    // Force the decoder to emit everything we just submitted. Without this the
-    // target frame's promise can hang forever. After this flush the decoder
-    // requires a keyframe next — which the next seek always supplies, since it
-    // too starts from a keyframe.
-    await this.decoder.flush();
-    const frames = await Promise.all(pending);
+    const keyframe = this.latestKeyframeAtOrBefore(target) ?? 0;
 
-    // Last frame in the range is the target; the rest were decoded only to
-    // satisfy the decoder's reference chain — their pixels are never read.
-    this.currentFrameValue?.close();
-    frames.forEach((frame, k) => {
-      if (k === frames.length - 1) {
-        this.currentFrameValue = frame;
-      } else {
-        frame.close();
+    // Stay a full reorder margin ahead so the target is emitted without a flush.
+    await this.ensureSubmittedThrough(target + REORDER_MARGIN, keyframe);
+
+    // Await ONLY the target — never the trailing read-ahead frames, which stay
+    // legitimately buffered until later input pushes them out.
+    const wait = this.pending.get(target);
+    if (wait) await wait;
+
+    const frame = this.decoded.get(target);
+    if (!frame) {
+      throw new Error(`VideoDecodeCursor: decoder never emitted target frame ${target} (submittedUpTo=${this.submittedUpTo}, flushed=${this.flushed})`);
+    }
+    this.decoded.delete(target);
+
+    // Export advances past this presentation time: close anything strictly
+    // behind it and refuse late arrivals below the new watermark (in `submit`).
+    // Presentation-time, NOT decode index — read-ahead frames (future pts) and
+    // the target itself are never closed here, even when their decode indices
+    // are lower than a B-frame we already consumed.
+    const targetPts = this.track.samples[target].timestampUs;
+    this.consumedPtsBelow = targetPts;
+    for (const [i, f] of this.decoded) {
+      if (this.track.samples[i].timestampUs < targetPts) {
+        f.close();
+        this.decoded.delete(i);
       }
-    });
+    }
 
-    this.lastTargetIdx = targetIdx;
-
-    return this.currentFrame();
+    return this.setCurrent(frame, target);
   }
 
   dispose(): void {
     this.currentFrameValue?.close();
     this.currentFrameValue = undefined;
+    for (const frame of this.decoded.values()) frame.close();
+    this.decoded.clear();
+    this.pending.clear();
     this.decoder.close();
   }
 }
