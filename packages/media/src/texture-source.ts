@@ -301,7 +301,14 @@ export async function loadTexture(asset: MediaAssetRef): Promise<TextureSource> 
  */
 export async function createVideoFrameTexture(asset: MediaAssetRef): Promise<VideoFrameTextureSource> {
   const track = await demuxVideoTrack(asset.url);
-  const cursor = new VideoDecodeCursor(track);
+  // Without this, a decode error (any codec-level issue in this specific
+  // asset — decoder.ts's default `onError` is a silent no-op) would surface
+  // nowhere: the export would just freeze on whatever frame triggered it,
+  // with no indication why (decoder.ts's own doc now explains the promise
+  // side of this; this is the visibility side).
+  const cursor = new VideoDecodeCursor(track, (error) => {
+    console.error(`createVideoFrameTexture: decode error on asset "${asset.id}" (${asset.url}):`, error);
+  });
   await cursor.seekTo(0);
 
   return {

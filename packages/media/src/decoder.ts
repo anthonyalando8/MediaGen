@@ -26,15 +26,20 @@ export interface FrameDecoderConfig {
  * resolved VideoFrames once done with them (WebCodecs frames hold GPU/CPU
  * buffers and are not garbage-collected promptly).
  */
+interface PendingDecode {
+  resolve: (frame: VideoFrame) => void;
+  reject: (error: Error) => void;
+}
+
 export class FrameDecoder {
   private decoder: VideoDecoder;
-  private pending = new Map<number, (frame: VideoFrame) => void>();
+  private pending = new Map<number, PendingDecode>();
   private closed = false;
 
   constructor(config: FrameDecoderConfig, onError: (error: DOMException) => void = () => {}) {
     this.decoder = new VideoDecoder({
       output: (frame) => this.handleOutput(frame),
-      error: onError,
+      error: (error) => this.handleError(error, onError),
     });
     this.decoder.configure({
       codec: config.codec,
@@ -45,14 +50,34 @@ export class FrameDecoder {
   }
 
   private handleOutput(frame: VideoFrame): void {
-    const resolve = this.pending.get(frame.timestamp);
-    if (resolve) {
+    const pending = this.pending.get(frame.timestamp);
+    if (pending) {
       this.pending.delete(frame.timestamp);
-      resolve(frame);
+      pending.resolve(frame);
     } else {
       // No one is waiting for this timestamp (e.g. after close()) — release it.
       frame.close();
     }
+  }
+
+  /**
+   * Per the WebCodecs spec, a decode error CLOSES the underlying
+   * `VideoDecoder` — no further output will ever arrive for any chunk
+   * already submitted. Without this, every currently-pending `decode()`
+   * call would simply never settle (not resolved — no output is coming —
+   * and, before this fix, not rejected either, since nothing rejected them):
+   * a silent, permanent hang on whichever frame was in flight when the
+   * error occurred, with the error itself discarded by a no-op default
+   * `onError`. This is what "export freezes at a specific frame with zero
+   * console output" traces back to.
+   */
+  private handleError(error: DOMException, onError: (error: DOMException) => void): void {
+    this.closed = true;
+    for (const { reject } of this.pending.values()) {
+      reject(new Error(`FrameDecoder: decode error: ${error.message}`));
+    }
+    this.pending.clear();
+    onError(error);
   }
 
   get state(): CodecState {
@@ -66,15 +91,25 @@ export class FrameDecoder {
   /**
    * Queues `chunk` for decode, resolving with the output VideoFrame at that
    * chunk's timestamp. The decoder may reorder/buffer frames internally
-   * (B-frames); this resolves whenever the matching output arrives.
+   * (B-frames); this resolves whenever the matching output arrives. Rejects
+   * if the decoder errors (see `handleError`) or is already closed.
    */
   decode(chunk: EncodedVideoChunk): Promise<VideoFrame> {
     if (this.closed) {
       return Promise.reject(new Error("FrameDecoder is closed"));
     }
-    return new Promise((resolve) => {
-      this.pending.set(chunk.timestamp, resolve);
-      this.decoder.decode(chunk);
+    return new Promise((resolve, reject) => {
+      this.pending.set(chunk.timestamp, { resolve, reject });
+      try {
+        this.decoder.decode(chunk);
+      } catch (err) {
+        // A synchronous throw here (e.g. the decoder was already closed by
+        // a just-prior error) would otherwise leave this entry dangling —
+        // nothing else will ever settle it once decode() itself never
+        // queued the chunk.
+        this.pending.delete(chunk.timestamp);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
 
@@ -88,6 +123,9 @@ export class FrameDecoder {
     if (this.closed) return;
     this.closed = true;
     this.decoder.close();
+    for (const { reject } of this.pending.values()) {
+      reject(new Error("FrameDecoder closed"));
+    }
     this.pending.clear();
   }
 }
