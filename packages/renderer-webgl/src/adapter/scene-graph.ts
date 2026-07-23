@@ -4,7 +4,7 @@
 // (keyed diff)" (Deliverable 08). NO domain types cross this boundary —
 // only `contract` (RenderTree/RenderNode) and `pixi.js`.
 
-import { BlurFilter, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RenderTexture, Sprite, Text } from "pixi.js";
+import { BlurFilter, ColorMatrixFilter, Container, Graphics, Matrix, Rectangle, RenderTexture, Sprite, Text, Texture } from "pixi.js";
 import type { Renderer } from "pixi.js";
 import type { ColorOKLCH, GlyphRun, PassSpec, RenderNode, RenderTree, ShapeGeom, Stroke } from "contract";
 import { oklchToHex } from "../color";
@@ -16,6 +16,28 @@ import { buildMaskFilter } from "../passes/mask-pass";
 import type { MaskSpec } from "../passes/mask-pass";
 
 type Display = Container;
+
+/** Diagnostic-only: finds the first Sprite anywhere in `root`'s subtree whose texture is still `Texture.EMPTY` or has a zero dimension — the signature of a not-yet-loaded image/video (see `reconcileTransitionGroup`'s use). */
+function findEmptyTextureSprite(root: Container): Sprite | undefined {
+  for (const child of root.children) {
+    if (child instanceof Sprite) {
+      if (child.texture === Texture.EMPTY || child.texture.width === 0 || child.texture.height === 0) return child;
+    }
+    if (child instanceof Container) {
+      const found = findEmptyTextureSprite(child);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+/** Diagnostic-only: every `TexRef` an "image"/"video" node references within `node`'s own subtree (recursing into "group"/"effectGroup" children and a nested "transitionGroup"'s own from/to) — used to report WHICH asset(s) a transitionGroup's stuck "to" side is waiting on. */
+function collectTexRefsForNode(node: RenderNode): { assetId: string; frame?: number }[] {
+  if (node.t === "image" || node.t === "video") return [node.tex];
+  if ("children" in node) return node.children.flatMap(collectTexRefsForNode);
+  if (node.t === "transitionGroup") return [...collectTexRefsForNode(node.from), ...collectTexRefsForNode(node.to)];
+  return [];
+}
 
 /**
  * One nesting level's complete keyed-diff state, bundled together. A node
@@ -104,6 +126,11 @@ export class SceneGraphAdapter {
 
   /** Whether the timeline is currently playing — passed down to `textures.get()` so video elements play naturally during playback rather than being seek-driven every frame. */
   private playing = false;
+
+  /** Diagnostic-only: transitionGroup node ids we've already logged the toTexture clear-background for, so `reconcileTransitionGroup`'s diagnostic fires once per transition, not every frame. */
+  private readonly loggedTransitionBackground = new Set<string>();
+  /** Diagnostic-only: transitionGroup node ids we've already warned about an empty "to"-side texture for — same one-shot rationale as `loggedTransitionBackground`. */
+  private readonly loggedEmptyTransitionTexture = new Set<string>();
 
   constructor(
     private readonly textures: TextureManager,
@@ -490,9 +517,52 @@ export class SceneGraphAdapter {
       // degrade to "no filter this frame" rather than throwing; the FROM
       // side still renders normally (just without the transition blend),
       // and the next reconcile (once ready) picks up correctly.
+      // eslint-disable-next-line no-console
+      console.warn(`[SceneGraphAdapter] transitionGroup "${node.id}": GPU context not ready — rendering FROM side only, with NO transition blend, this frame`);
       container.filters = [];
       return;
     }
+
+    // DIAGNOSTIC (reported: transitions show a black/uninitialized-texture
+    // flash instead of a proper cross-fade): catches the "to" side being
+    // captured into `toTexture` before its own media has actually loaded —
+    // `Texture.EMPTY` (or any 0-dimension texture) sampled by the transition
+    // shader as `uTo` would read as black/transparent or garbage-colored
+    // GPU memory for the WHOLE transition, not a one-frame glitch, matching
+    // the reported symptom. Logged ONCE per node id (like the background
+    // diagnostic below) — this fires every `reconcile()` call, i.e. every
+    // RAF tick during live preview, so without rate-limiting a genuinely
+    // stuck (not just slow-to-load) asset spams the console indefinitely.
+    if (!this.loggedEmptyTransitionTexture.has(node.id)) {
+      const emptySprite = findEmptyTextureSprite(state.toContainer);
+      if (emptySprite) {
+        this.loggedEmptyTransitionTexture.add(node.id);
+        // Logged as a JSON STRING appended to the message, not a live array
+        // argument — Chrome's console collapses an object/array argument to
+        // "[{…}]" once copied as plain text (the exact loss that made an
+        // earlier diagnostic on this same investigation useless when pasted).
+        console.warn(
+          `[SceneGraphAdapter] transitionGroup "${node.id}": rendering its "to" side into toTexture while at least one Sprite still has an empty/zero-size texture — this frame's (and every subsequent frame's, until it loads) transition blend will show whatever that texture currently holds, likely a black or uninitialized flash. Assets referenced by this transition's "to" side: ` +
+            JSON.stringify(collectTexRefsForNode(node.to))
+        );
+      }
+    }
+
+    // DIAGNOSTIC — confirms the setBackground-before-reconcile ordering fix
+    // (renderer.ts) actually took effect: this is the exact background
+    // AbstractRenderer's own render() defaults `toTexture`'s clear to when
+    // no explicit clearColor is passed (the render() call right below).
+    // Logged once per transitionGroup id per this adapter instance, not
+    // every frame, to stay readable.
+    if (!this.loggedTransitionBackground.has(node.id)) {
+      this.loggedTransitionBackground.add(node.id);
+      const bg = (renderer as unknown as { background?: { color?: unknown; alpha?: number; colorRgba?: number[] } }).background;
+      if (bg) {
+        // eslint-disable-next-line no-console
+        console.log(`[SceneGraphAdapter] transitionGroup "${node.id}": toTexture clears using renderer.background =`, { color: String(bg.color), alpha: bg.alpha, colorRgba: bg.colorRgba });
+      }
+    }
+
     renderer.render({ container: state.toContainer, target: state.toTexture });
 
     const filter = resolveTransitionFilter(String(node.id), node.ref, node.uniforms, node.progress, state.toTexture);

@@ -84,6 +84,15 @@ export function resolveTransitionFilter(
     const filter = new Filter({ glProgram: program, resources });
     cached = { preset: ref, filter, progressUniforms, effectUniforms };
     filterCache.set(nodeId, cached);
+    // DIAGNOSTIC (reported: transitions look wrong / show a black flash):
+    // `filterCache` is a MODULE-LEVEL singleton shared across every
+    // SceneGraphAdapter/export run in this page load — this log lets us
+    // confirm a NEW export run creates a fresh Filter for this nodeId
+    // (expected) rather than something reusing a stale one from an earlier,
+    // possibly-destroyed run (which would sample a dead `toTexture`/GL
+    // resource — a real GPU-driver-dependent way to get garbage colors).
+    // eslint-disable-next-line no-console
+    console.log(`[transition-resolver] created NEW filter for transitionGroup "${nodeId}" (preset "${ref}")`);
   } else {
     // Reuse existing Filter — update uProgress in the existing UniformGroup
     // and call .update() so Pixi re-uploads to GPU this frame.

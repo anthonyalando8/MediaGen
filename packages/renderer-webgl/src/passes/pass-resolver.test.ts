@@ -1,6 +1,7 @@
 // packages/renderer-webgl/src/passes/pass-resolver.test.ts
 import { describe, expect, it } from "vitest";
 import { buildEffectUniforms, resolvePass } from "./pass-resolver";
+import { oklchToRgbFloat } from "../color";
 
 describe("resolvePass", () => {
   it("returns an empty array for an unrecognized pass ref (not yet implemented), rather than throwing", () => {
@@ -71,10 +72,32 @@ describe("buildEffectUniforms — the pure uniform-mapping logic (GL-independent
     expect(buildEffectUniforms({ enabled: false })).toEqual({ uEnabled: { value: 0, type: "f32" } });
   });
 
-  it("maps a ColorOKLCH-shaped prop (grade's lift/gamma/gain) to a vec3<f32> of [l, c, h]", () => {
-    expect(buildEffectUniforms({ lift: { l: 0.1, c: 0.2, h: 30 } })).toEqual({
-      uLift: { value: [0.1, 0.2, 30], type: "vec3<f32>" },
-    });
+  it("maps a ColorOKLCH-shaped prop (grade's lift/gamma/gain, a transition's dip color, etc.) to a vec3<f32> of real sRGB — NOT the raw [l, c, h] triple", () => {
+    // Bug this guards against: `h` alone ranges 0-360 (degrees). A shader
+    // declaring `uniform vec3 uColor` and using it directly as RGB (e.g.
+    // dip.ts's "Dip to Color" transition, or grade.ts's uLift/uGamma/uGain)
+    // got handed wildly out-of-range values if this ever regresses to
+    // packing the raw OKLCH triple — GPU-clamped into a color with nothing
+    // to do with the one actually configured (confirmed root cause of a dip
+    // transition rendering as a saturated blue flash instead of its
+    // intended dip color).
+    const oklch = { l: 0.1, c: 0.2, h: 30 };
+    const [r, g, b] = oklchToRgbFloat(oklch);
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
+
+    const result = buildEffectUniforms({ lift: oklch });
+    expect(result.uLift.type).toBe("vec3<f32>");
+    const [ur, ug, ub] = result.uLift.value as [number, number, number];
+    expect(ur).toBeCloseTo(r);
+    expect(ug).toBeCloseTo(g);
+    expect(ub).toBeCloseTo(b);
+    // Explicitly NOT the raw OKLCH triple this bug used to emit.
+    expect(result.uLift.value).not.toEqual([0.1, 0.2, 30]);
   });
 
   it("skips a prop with no GLSL-representable value (e.g. a string), rather than throwing or emitting a malformed uniform", () => {

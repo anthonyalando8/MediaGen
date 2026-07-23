@@ -73,7 +73,24 @@ export function hexStringToOklch(hex: string): ColorOKLCH {
 }
 
 export function oklchToHex(color: ColorOKLCH): number {
-  const [r, g, b] = oklchToLinearSrgb(color).map(linearToSrgb);
-  const toByte = (c: number) => Math.round(Math.min(Math.max(c, 0), 1) * 255);
+  const [r, g, b] = oklchToRgbFloat(color);
+  const toByte = (c: number) => Math.round(c * 255);
   return (toByte(r) << 16) | (toByte(g) << 8) | toByte(b);
+}
+
+/**
+ * OKLCH -> sRGB as clamped [0,1] floats — for GLSL `vec3` uniforms (e.g. a
+ * transition/effect's `uColor`), which need real RGB, not `oklchToHex`'s
+ * packed-integer shape. Without this, a raw `ColorOKLCH{l,c,h}` fed directly
+ * into a `vec3` uniform (as `pass-resolver.ts`'s `toUniformValue` used to)
+ * hands the shader completely wrong values — `h` alone ranges 0-360
+ * (degrees), not 0-1, so a shader expecting RGB reads a wildly out-of-range,
+ * GPU-clamped color that has nothing to do with the intended one (this is
+ * the confirmed cause of a "dip to color" transition rendering as a
+ * saturated blue flash instead of its configured dip color).
+ */
+export function oklchToRgbFloat(color: ColorOKLCH): [number, number, number] {
+  const [r, g, b] = oklchToLinearSrgb(color).map(linearToSrgb);
+  const clamp = (c: number) => Math.min(Math.max(c, 0), 1);
+  return [clamp(r), clamp(g), clamp(b)];
 }

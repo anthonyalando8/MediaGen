@@ -21,6 +21,7 @@ import { EffectRegistry, registerBuiltinEffects } from "effects";
 import type { EffectDef } from "effects";
 import { buildMatteFilter } from "./matte-pass";
 import type { MatteType } from "./matte-pass";
+import { oklchToRgbFloat } from "../color";
 
 export const DEFAULT_VERTEX = `in vec2 aPosition;
 out vec2 vTextureCoord;
@@ -94,8 +95,16 @@ function toUniformValue(value: Json): { value: unknown; type: string } | null {
   if (typeof value === "number") return { value, type: "f32" };
   if (typeof value === "boolean") return { value: value ? 1 : 0, type: "f32" };
   if (value && typeof value === "object" && !Array.isArray(value) && "l" in value && "c" in value && "h" in value) {
+    // CONFIRMED BUG (fixed here): this used to pack the raw OKLCH triple
+    // `[l, c, h]` straight into the uniform. `h` alone ranges 0-360
+    // (degrees) — a shader declaring `uniform vec3 uColor` and using it
+    // directly as RGB (e.g. dip.ts's "Dip to Color" transition) got handed
+    // wildly out-of-range values, GPU-clamped into a color that had nothing
+    // to do with the one actually configured — the confirmed cause of a
+    // dip transition rendering as a saturated blue flash instead of its
+    // intended (often near-black) dip color. Convert to real sRGB first.
     const c = value as { l: number; c: number; h: number };
-    return { value: [c.l, c.c, c.h], type: "vec3<f32>" };
+    return { value: oklchToRgbFloat(c), type: "vec3<f32>" };
   }
   return null;
 }

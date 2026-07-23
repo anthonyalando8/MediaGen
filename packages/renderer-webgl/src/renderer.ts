@@ -32,12 +32,30 @@ export interface Renderer {
   destroy(): void;
 }
 
-/** Recursively collects every `TexRef` referenced by an "image"/"video" node in `nodes`, descending into "group"/"effectGroup" children (contract's RenderNode union — see render-node.ts). */
-function collectTexRefs(nodes: RenderNode[]): { assetId: string; frame?: number }[] {
+/**
+ * Recursively collects every `TexRef` referenced by an "image"/"video" node
+ * in `nodes`, descending into "group"/"effectGroup" children AND
+ * "transitionGroup"'s `from`/`to` subtrees (contract's RenderNode union —
+ * see render-node.ts). The `from`/`to` case was missing entirely until
+ * found via a real bug report: unlike "group"/"effectGroup", a
+ * "transitionGroup" node has no `children` array — its content lives in two
+ * SINGLE `RenderNode` fields instead — so any image/video inside either side
+ * of a transition was never included in `prepareFrame()`'s awaited
+ * load/seek pass. Live preview never surfaced this (its `render()` loop
+ * repaints continuously, so a fire-and-forget load usually finishes before
+ * anyone notices); export captures exactly one frame per output frame with
+ * no chance to catch up, so a transition's video/image side was captured
+ * still on `Texture.EMPTY` (or a freshly-created, uncleared RenderTexture)
+ * for as many output frames as the load took — surfacing as a hard cut
+ * (the other side invisible) instead of a cross-fade, and an uninitialized-
+ * GPU-memory flash (commonly blue-tinted) on whichever side hadn't loaded yet.
+ */
+export function collectTexRefs(nodes: RenderNode[]): { assetId: string; frame?: number }[] {
   const refs: { assetId: string; frame?: number }[] = [];
   for (const node of nodes) {
     if (node.t === "image" || node.t === "video") refs.push(node.tex);
     if ("children" in node) refs.push(...collectTexRefs(node.children));
+    if (node.t === "transitionGroup") refs.push(...collectTexRefs([node.from, node.to]));
   }
   return refs;
 }
@@ -82,10 +100,23 @@ export function createWebGLRenderer(canvas: HTMLCanvasElement, media: MediaServi
       const timeForOverlays = wallTime ?? (frame / currentFps);
       setTimeContext({ frame, fps: currentFps, wallTime: timeForOverlays });
 
-      adapter.reconcile(treeWithFrame, playing);
+      // MUST run BEFORE `adapter.reconcile()`: a "transitionGroup" node's
+      // "to" side is rendered into its own offscreen `toTexture` from
+      // WITHIN `reconcile()` (scene-graph.ts's `reconcileTransitionGroup`),
+      // via a render call that — when no explicit clear color is passed —
+      // defaults to whatever `host`'s underlying Pixi renderer's OWN
+      // `background` is currently set to (AbstractRenderer's own default-
+      // clearColor logic). Setting the background AFTER reconcile() means
+      // every transitionGroup's "to" side for THIS frame clears using the
+      // PREVIOUS frame's background (or the renderer's initial default —
+      // transparent black — before `tree.background` is ever set for the
+      // first time), not this frame's own — a one-frame-stale clear color
+      // that can bleed through as a black or off-color flash anywhere the
+      // "to" side's content doesn't fully cover the frame.
       if (tree.background) {
         host.setBackground(oklchToHex(tree.background), tree.background.alpha ?? 1);
       }
+      adapter.reconcile(treeWithFrame, playing);
       host.renderFrame();
     },
     resize(width, height, dpr) {
