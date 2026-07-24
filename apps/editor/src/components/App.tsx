@@ -21,7 +21,7 @@ import { useUndoRedoShortcuts } from "../store/use-undo-redo-shortcuts";
 import { useDeleteShortcut } from "../store/use-delete-shortcut";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { AudioSelectionProvider } from "./audio-selection";
-import { ViewportBackdrop, ViewportEmptyOverlay } from "./ViewportBackdrop";
+import { ViewportBackdrop } from "./ViewportBackdrop";
 
 type Theme = "dark" | "light";
 
@@ -131,7 +131,6 @@ export function App() {
         <div className="viewport-stage">
           <Viewport />
         </div>
-        <ViewportEmptyOverlay />
         <SceneStartPanel />
         <ViewportStatusBar />
       </div>

@@ -185,7 +185,7 @@
 .span-sublane__row {
   position: relative;
   height: 22px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--tint-1);
   overflow: hidden;
 }
 
@@ -232,7 +232,7 @@
   gap: 5px;
   height: 22px;
   padding: 0 var(--space-2);
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--tint-1);
 }
 
 .span-sublane-header__indent {

@@ -1,19 +1,25 @@
 // apps/editor/src/components/CompSetupPanel.tsx
 //
-// The "start a composition" setup, shown in the right inspector panel as the
-// project's empty state (relocated out of the viewport). Production wiring:
-//   • Frame size  → setCompSizeOp (presets + custom W×H); the active size is
-//                   highlighted, so this doubles as a size switcher.
-//   • Import Media → real file import (fileToAssetRefViaServerOrLocal →
-//                   addAsset → addMediaNode → select) — tries apps/api's
-//                   upload+transcode pipeline first, falls back to the
-//                   local data: URL path if the backend is unreachable.
-//                   Same flow as MediaPalette's Upload.
-//   • New Composition → seeds the canvas with a full-frame background layer so
-//                   the empty state clears and there's something to build on.
+// Right-panel content when nothing is selected: composition-level settings
+// (frame size) plus quick actions to add the first layer. This is NOT the
+// project's onboarding moment — that's <SceneStartPanel/>, a one-time hero
+// over the viewport — so this panel intentionally reads as a plain settings
+// section (matches the `.panel__header` used by every other panel) rather
+// than a second "let's get started" pitch. It stays useful for the whole
+// life of the comp, since frame size can change at any time.
+//
+//   • Frame size    → setCompSizeOp (presets + custom W×H); the active size is
+//                     highlighted, so this doubles as a size switcher.
+//   • Import Media  → real file import (fileToAssetRefViaServerOrLocal →
+//                     addAsset → addMediaNode → select) — tries apps/api's
+//                     upload+transcode pipeline first, falls back to the
+//                     local data: URL path if the backend is unreachable.
+//                     Same flow as MediaPalette's Upload.
+//   • Add Background → seeds the canvas with a full-frame layer so the empty
+//                     state clears and there's something to build on.
 
 import { useRef, useState } from "react";
-import { Plus, Upload, ImagePlus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import type { Id } from "core";
 import { useRegistry } from "../bootstrap/registry-context";
 import { fileToAssetRefViaServerOrLocal } from "../persistence/asset-upload";
@@ -86,13 +92,7 @@ export function CompSetupPanel() {
 
   return (
     <div className="comp-setup">
-      <div className="comp-setup__lead">
-        <span className="comp-setup__badge"><ImagePlus size={17} /></span>
-        <div className="comp-setup__title">Start a composition</div>
-        <p className="comp-setup__sub">
-          Pick a frame size, then add a layer or drop media onto the canvas.
-        </p>
-      </div>
+      <div className="panel__header">Composition</div>
 
       <div className="comp-setup__group-label">Frame size</div>
       <div className="comp-setup__presets">
@@ -138,7 +138,7 @@ export function CompSetupPanel() {
 
       <div className="comp-setup__actions">
         <button className="btn btn-primary" style={{ width: "100%" }} onClick={newComposition}>
-          <Plus size={15} /> New Composition
+          <Plus size={15} /> Add Background Layer
         </button>
         <button
           className="btn btn-outline"

@@ -1,11 +1,12 @@
 /* apps/editor/src/styles/viewport-backdrop.css
  *
- * Viewport atmosphere + empty-state hint + the relocated composition-setup
- * panel + a couple of targeted fixes. Dark-theme only. Import after theme.css:
+ * Viewport atmosphere + the relocated composition-setup panel + the scene
+ * start card + a couple of targeted fixes. Theme-aware via theme.css's
+ * `--vp-*` / `--tint-*` tokens. Import after theme.css:
  *     import "./styles/viewport-backdrop.css";
  */
 
-/* ── Stacking: atmosphere (z0) · canvas stage (z1) · empty overlay (z2) ── */
+/* ── Stacking: atmosphere (z0) · canvas stage (z1) ─────────────────────── */
 .app-shell__viewport { position: relative; background: var(--surface-0); }
 .app-shell__viewport > .viewport-stage { position: relative; z-index: 1; }
 
@@ -20,18 +21,15 @@
 .sb-vp-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
 .sb-vp-backdrop > * { position: absolute; }
 
-/* Empty overlay sits ABOVE the canvas; the hint is non-interactive. */
-.sb-vp-empty-overlay { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-
 .sb-vp-vignette {
   inset: 0;
-  background: radial-gradient(130% 100% at 50% 36%, #141922 0%, #0d1015 48%, #08090c 100%);
+  background: radial-gradient(130% 100% at 50% 36%, var(--vp-vignette-a) 0%, var(--vp-vignette-b) 48%, var(--vp-vignette-c) 100%);
 }
 .sb-vp-grid {
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    linear-gradient(var(--vp-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--vp-grid-line) 1px, transparent 1px);
   background-size: 46px 46px;
   -webkit-mask: radial-gradient(74% 68% at 50% 44%, #000 28%, transparent 86%);
           mask: radial-gradient(74% 68% at 50% 44%, #000 28%, transparent 86%);
@@ -39,8 +37,8 @@
 .sb-vp-mesh {
   left: -30%; right: -30%; bottom: -14%; height: 64%;
   background-image:
-    linear-gradient(rgba(53, 214, 193, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(53, 214, 193, 0.06) 1px, transparent 1px);
+    linear-gradient(var(--vp-mesh-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--vp-mesh-line) 1px, transparent 1px);
   background-size: 46px 46px;
   transform: perspective(560px) rotateX(72deg);
   transform-origin: bottom center;
@@ -51,12 +49,12 @@
 .sb-vp-glow { filter: blur(48px); }
 .sb-vp-glow--a {
   left: 12%; top: 13%; width: 52%; height: 52%;
-  background: radial-gradient(closest-side, rgba(53, 214, 193, 0.20), transparent 72%);
+  background: radial-gradient(closest-side, var(--vp-glow-a), transparent 72%);
   animation: sb-vp-drift-a 15s ease-in-out infinite;
 }
 .sb-vp-glow--b {
   right: 8%; bottom: 11%; width: 50%; height: 50%;
-  background: radial-gradient(closest-side, rgba(224, 162, 58, 0.16), transparent 72%);
+  background: radial-gradient(closest-side, var(--vp-glow-b), transparent 72%);
   animation: sb-vp-drift-b 19s ease-in-out infinite;
 }
 
@@ -68,38 +66,67 @@
   .sb-vp-mesh, .sb-vp-glow--a, .sb-vp-glow--b { animation: none; }
 }
 
-/* ── Empty-project hint (light, no config) ─────────────────────────────── */
-.sb-vp-hint {
-  position: absolute; inset: 0; margin: auto;
-  width: max-content; max-width: 380px; height: max-content;
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  padding: 24px; pointer-events: none;
+/* ── Scene start card (one-time hero over an empty viewport) ───────────── */
+.scene-start-overlay {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; /* canvas tools stay usable around the card */
 }
-.sb-vp-hint__frame {
-  margin-bottom: 18px; border-radius: 12px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  transition: width var(--transition), height var(--transition);
+.scene-start-card {
+  pointer-events: auto; width: 560px; max-width: 80%;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 14px; padding: 30px 30px 26px;
+  box-shadow: var(--shadow-2); position: relative;
+  font-family: var(--font-ui); color: var(--text-0);
 }
-.sb-vp-hint__title { font-size: 15px; font-weight: 600; color: var(--text-1); letter-spacing: -0.01em; }
-.sb-vp-hint__sub { font-size: 12.5px; color: var(--text-2); margin-top: 7px; line-height: 1.55; }
+.scene-start-card__close {
+  position: absolute; top: 14px; right: 14px; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 7px; border: 1px solid var(--border); background: transparent;
+  color: var(--text-2); cursor: pointer; transition: background var(--transition), color var(--transition);
+}
+.scene-start-card__close:hover { background: var(--surface-3); color: var(--text-0); }
+.scene-start-card__eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-2); margin-bottom: 6px;
+}
+.scene-start-card__heading { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+.scene-start-card__sub { margin: 0 0 22px; font-size: 13.5px; color: var(--text-1); line-height: 1.5; }
+.scene-start-card__options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-/* ── Composition-setup panel (relocated to the right inspector) ────────── */
-.comp-setup { display: flex; flex-direction: column; padding: 20px 16px; gap: 0; }
-.comp-setup__lead { margin-bottom: 20px; }
-.comp-setup__badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; margin-bottom: 14px; border-radius: 11px;
-  background: var(--accent-soft); color: var(--accent);
-  border: 1px solid rgba(53, 214, 193, 0.28);
+.scene-start-option {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  text-align: left; padding: 16px 16px 14px; cursor: pointer;
+  border-radius: 11px; border: 1px solid var(--border-strong);
+  background: var(--surface-2); color: var(--text-0);
+  transition: border-color var(--transition), background var(--transition);
 }
-.comp-setup__title { font-size: 16px; font-weight: 700; color: var(--text-0); letter-spacing: -0.01em; }
-.comp-setup__sub { font-size: 12.5px; color: var(--text-1); margin-top: 6px; line-height: 1.5; }
+.scene-start-option:hover { border-color: var(--accent); background: var(--surface-3); }
+.scene-start-option--primary { border-color: var(--accent); background: var(--accent-soft); }
+.scene-start-option--primary:hover { background: var(--accent-soft); }
+.scene-start-option__icon {
+  display: flex; width: 34px; height: 34px; align-items: center; justify-content: center;
+  border-radius: 9px; background: var(--surface-3); color: var(--text-0);
+}
+.scene-start-option--primary .scene-start-option__icon { background: var(--accent); color: var(--accent-text); }
+.scene-start-option__label { font-size: 14.5px; font-weight: 700; }
+.scene-start-option__desc { font-size: 12px; color: var(--text-1); line-height: 1.4; }
+
+.scene-start-card__skip {
+  margin-top: 16px; display: inline-flex; align-items: center; gap: 7px;
+  background: transparent; border: none; color: var(--text-2);
+  font-size: 12.5px; cursor: pointer; padding: 0;
+}
+.scene-start-card__skip:hover { color: var(--text-0); }
+
+/* ── Composition settings panel (right inspector, no selection) ───────── */
+.comp-setup { display: flex; flex-direction: column; gap: 0; padding-bottom: 16px; }
 .comp-setup__group-label {
+  margin: 0 var(--space-4) 9px;
   font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-2); margin-bottom: 9px;
+  color: var(--text-2);
 }
-.comp-setup__presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.comp-setup__presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 var(--space-4) 10px; }
 .comp-setup__chip {
   display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
   padding: 11px 13px; border: 1px solid var(--border); border-radius: 10px;
@@ -114,7 +141,7 @@
 .comp-setup__chip-label { font-size: 13px; font-weight: 600; color: var(--text-0); }
 .comp-setup__chip-sub { font-family: var(--font-mono); font-size: 10px; color: var(--text-2); }
 
-.comp-setup__custom { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.comp-setup__custom { display: flex; align-items: center; gap: 6px; margin: 0 var(--space-4) 6px; }
 .comp-setup__custom input {
   width: 100%; min-width: 0; height: 32px; padding: 0 9px; text-align: center;
   background: var(--surface-1); border: 1px solid var(--border); border-radius: 7px;
@@ -130,8 +157,8 @@
 .comp-setup__custom-set:hover:not(:disabled) { border-color: var(--accent); color: var(--text-0); }
 .comp-setup__custom-set:disabled { opacity: 0.4; cursor: default; }
 
-.comp-setup__divider { height: 1px; background: var(--border); margin: 18px 0; }
-.comp-setup__actions { display: flex; flex-direction: column; gap: 8px; }
+.comp-setup__divider { height: 1px; background: var(--border); margin: 12px 0; }
+.comp-setup__actions { display: flex; flex-direction: column; gap: 8px; margin: 0 var(--space-4); }
 
 /* ── FIX (audio inspector scroll) ──────────────────────────────────────── */
 /* AudioInspectorPanel is a direct child of `.panel--right` (overflow:hidden,

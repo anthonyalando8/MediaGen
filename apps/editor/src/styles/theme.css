@@ -60,6 +60,28 @@
   --ruler-h: 28px;
 
   --transition: 110ms ease;
+
+  /* Row/hover tints — a translucent wash over `--surface-*`. Dark theme
+     lightens (white tint); light theme must darken instead, or the wash
+     is invisible on white. */
+  --tint-1: rgba(255, 255, 255, 0.03);
+  --tint-2: rgba(255, 255, 255, 0.018);
+  --tint-ghost: rgba(255, 255, 255, 0.12);
+  --tint-ghost-strong: rgba(255, 255, 255, 0.3);
+
+  /* Viewport atmosphere (behind the canvas) */
+  --vp-vignette-a: #141922;
+  --vp-vignette-b: #0d1015;
+  --vp-vignette-c: #08090c;
+  --vp-grid-line: rgba(255, 255, 255, 0.04);
+  --vp-mesh-line: rgba(53, 214, 193, 0.06);
+  --vp-glow-a: rgba(53, 214, 193, 0.2);
+  --vp-glow-b: rgba(224, 162, 58, 0.16);
+
+  /* ViewportFrame: dims the canvas area outside the comp bounds. */
+  --vp-frame-overlay: rgba(0, 0, 0, 0.55);
+  --vp-frame-border: rgba(255, 255, 255, 0.15);
+  --vp-frame-label: rgba(255, 255, 255, 0.35);
 }
 
 [data-theme="light"] {
@@ -85,6 +107,27 @@
 
   --shadow-1: 0 1px 3px rgba(20, 30, 45, 0.1);
   --shadow-2: 0 8px 24px rgba(20, 30, 45, 0.14);
+
+  /* Row/hover tints flip to a dark wash so they read against white surfaces. */
+  --tint-1: rgba(20, 30, 45, 0.035);
+  --tint-2: rgba(20, 30, 45, 0.02);
+  --tint-ghost: rgba(20, 30, 45, 0.1);
+  --tint-ghost-strong: rgba(20, 30, 45, 0.24);
+
+  /* Viewport atmosphere — soft daylight instead of the dark stage vignette. */
+  --vp-vignette-a: #f4f6f8;
+  --vp-vignette-b: #e9edf1;
+  --vp-vignette-c: #dfe4e9;
+  --vp-grid-line: rgba(20, 30, 45, 0.05);
+  --vp-mesh-line: rgba(12, 155, 137, 0.09);
+  --vp-glow-a: rgba(12, 155, 137, 0.14);
+  --vp-glow-b: rgba(224, 162, 58, 0.12);
+
+  /* A soft dim instead of dark theme's heavy black wash — a solid gray slab
+     would read as broken chrome against otherwise-white panels. */
+  --vp-frame-overlay: rgba(20, 30, 45, 0.1);
+  --vp-frame-border: rgba(20, 30, 45, 0.18);
+  --vp-frame-label: rgba(20, 30, 45, 0.4);
 }
 
 /* ── Reset / base ─────────────────────────────────────────────────────── */
@@ -1347,7 +1390,7 @@ input[type="range"]::-moz-range-track {
 }
 
 .track-header:hover {
-  background: rgba(255,255,255,0.03);
+  background: var(--tint-1);
 }
 
 .track-header.selected {
@@ -1461,7 +1504,7 @@ input[type="range"]::-moz-range-track {
 }
 
 .timeline-track__row--alt {
-  background: rgba(255,255,255,0.018);
+  background: var(--tint-2);
 }
 
 .timeline-track__row--selected {
@@ -2255,9 +2298,9 @@ input[type="range"]::-moz-range-track {
 }
 
 .timeline-transition-block--inactive .timeline-transition-block__chevron polygon {
-  fill: rgba(255,255,255,0.12);
+  fill: var(--tint-ghost);
   opacity: 0.6;
-  stroke: rgba(255,255,255,0.3);
+  stroke: var(--tint-ghost-strong);
   stroke-width: 1.5px;
   stroke-dasharray: 4 3;
 }

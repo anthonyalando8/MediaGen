@@ -48,87 +48,47 @@ function SceneStartPanelInner({ store }: { store: ReturnType<typeof useEditorSto
   }, [store]);
 
   return (
-    <div
-      style={{
-        position: "absolute", inset: 0, zIndex: 40, display: "flex",
-        alignItems: "center", justifyContent: "center",
-        pointerEvents: "none", // canvas tools stay usable around the card
-      }}
-    >
-      <div
-        style={{
-          pointerEvents: "auto", width: 560, maxWidth: "80%",
-          background: "var(--surface-1)", border: "1px solid var(--border)",
-          borderRadius: 14, padding: "30px 30px 26px",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.45)", position: "relative",
-          fontFamily: "var(--font-ui)", color: "var(--text-0)",
-        }}
-      >
+    <div className="scene-start-overlay">
+      <div className="scene-start-card">
         <button
           type="button" onClick={dismiss} aria-label="Start blank"
-          style={{
-            position: "absolute", top: 14, right: 14, width: 30, height: 30,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 7, border: "1px solid var(--border)", background: "transparent",
-            color: "var(--text-2)", cursor: "pointer",
-          }}
+          className="scene-start-card__close"
         >
           <X size={15} />
         </button>
 
-        <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "var(--text-2)", marginBottom: 6 }}>
-          New project
-        </div>
-        <h2 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700 }}>Start your video</h2>
-        <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "var(--text-1)", lineHeight: 1.5 }}>
+        <div className="scene-start-card__eyebrow">New project</div>
+        <h2 className="scene-start-card__heading">Start your video</h2>
+        <p className="scene-start-card__sub">
           Generate a complete scene from a topic — script, voiceover and visuals — or bring in a
           scene file. You can also just start placing layers on the canvas.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {/* Primary: Generate with AI */}
+        <div className="scene-start-card__options">
           <button
             type="button" onClick={() => openAIScene()}
-            style={{
-              display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start",
-              textAlign: "left", padding: "16px 16px 14px", cursor: "pointer",
-              borderRadius: 11, border: "1px solid var(--accent)",
-              background: "var(--accent-soft, rgba(53,214,193,0.12))", color: "var(--text-0)",
-            }}
+            className="scene-start-option scene-start-option--primary"
           >
-            <span style={{ display: "flex", width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 9, background: "var(--accent)", color: "var(--accent-text, #06201d)" }}>
+            <span className="scene-start-option__icon">
               <Sparkles size={18} />
             </span>
-            <span style={{ fontSize: 14.5, fontWeight: 700 }}>Generate with AI</span>
-            <span style={{ fontSize: 12, color: "var(--text-1)", lineHeight: 1.4 }}>Type a topic, get an editable scene.</span>
+            <span className="scene-start-option__label">Generate with AI</span>
+            <span className="scene-start-option__desc">Type a topic, get an editable scene.</span>
           </button>
 
-          {/* Secondary: Import a scene */}
           <button
             type="button" onClick={() => void importScene()}
-            style={{
-              display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start",
-              textAlign: "left", padding: "16px 16px 14px", cursor: "pointer",
-              borderRadius: 11, border: "1px solid var(--border-strong, var(--border))",
-              background: "var(--surface-2)", color: "var(--text-0)",
-            }}
+            className="scene-start-option"
           >
-            <span style={{ display: "flex", width: 34, height: 34, alignItems: "center", justifyContent: "center", borderRadius: 9, background: "var(--surface-3)", color: "var(--text-0)" }}>
+            <span className="scene-start-option__icon">
               <Upload size={18} />
             </span>
-            <span style={{ fontSize: 14.5, fontWeight: 700 }}>Import a scene</span>
-            <span style={{ fontSize: 12, color: "var(--text-1)", lineHeight: 1.4 }}>Load a scene.json / .seabytes file.</span>
+            <span className="scene-start-option__label">Import a scene</span>
+            <span className="scene-start-option__desc">Load a scene.json / .seabytes file.</span>
           </button>
         </div>
 
-        <button
-          type="button" onClick={dismiss}
-          style={{
-            marginTop: 16, display: "inline-flex", alignItems: "center", gap: 7,
-            background: "transparent", border: "none", color: "var(--text-2)",
-            fontSize: 12.5, cursor: "pointer", padding: 0,
-          }}
-        >
+        <button type="button" onClick={dismiss} className="scene-start-card__skip">
           <FilePlus2 size={14} /> Start with a blank canvas
         </button>
       </div>
