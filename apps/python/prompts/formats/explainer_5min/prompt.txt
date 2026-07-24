@@ -1,0 +1,153 @@
+Write a 5-MINUTE STRUCTURED EXPLAINER video script for YouTube/web (landscape).
+This is a longer, sectioned piece — an intro, 2-3 body sections (each covering
+one distinct sub-point), and a conclusion. Unlike a short-form script, this one
+is organized into SECTIONS, each with its own beats and its own pacing.
+
+TOPIC: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 8 words, plain and descriptive",
+  "thumbnail": "3-5 word descriptive phrase",
+  "style": "analytical | builder | calm | cinematic",
+
+  "global": {{
+    "theme":        "clean_modern | tech_blue | editorial_white | warm_amber | luxury_minimal",
+    "music_mood":   "minimal | ambient | upbeat",
+    "voice_style":  "analytical | storyteller | documentary",
+    "camera_style": "static | dynamic",
+    "subject":      "1-3 word concrete photographable noun anchoring every visual_query"
+  }},
+
+  "sections": [
+    {{
+      "id": "intro",
+      "pacing_arc": "build",
+      "beats": [
+        {{
+          "id":               "beat_01",
+          "type":             "hook | insight | tension | truth | flip | payoff | cta",
+          "keyword":          "2-4 WORD PHRASE",
+          "text":             "spoken sentence, 12-30 words",
+          "energy":           "high | mid | low",
+          "emotion":          "confident | serious | hopeful | surprised | playful",
+          "pace":             "slow | mid | fast",
+          "visual_intent":    "clean | minimal | documentary | cinematic",
+          "camera":           "static | push_in | pull_out | tilt_up",
+          "transition":       "cut | fade | dip_black | blur_wipe",
+          "background":       "solid | gradient | grid | glow",
+          "layout":           "left | center | right | full",
+          "visual_query":     "2-4 word LITERAL image search, subject-first, no mood words",
+          "intensity":        0.6,
+          "pattern_interrupt":"",
+          "composition":      ""
+        }}
+      ]
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+SECTION STRUCTURE — MANDATORY
+──────────────────────────────────────────────────────────────────────
+The TOP LEVEL has "sections", NOT a flat "beats" array. Each section is:
+  {{ "id": "<slug>", "pacing_arc": "build|steady|rise_fall|wind_down", "beats": [ ...same beat shape as short-form... ] }}
+
+1. "intro" section — `pacing_arc: "build"`. 3-5 beats. Names the question this
+   video answers and why it matters. Ends with a beat that previews the
+   sections to come (a light "here's what we'll cover", stated plainly, not
+   as a banned hype phrase).
+2. 2-3 BODY sections, each `pacing_arc: "steady"`, each covering ONE distinct
+   sub-point of the topic, 4-8 beats each. Give each a descriptive `id`
+   (e.g. "why-it-happens", "the-mechanism", "what-to-do"). Sections build on
+   each other in logical order — don't restate an earlier section.
+3. "conclusion" section — `pacing_arc: "wind_down"`. 3-5 beats. Synthesizes
+   the body sections into a clear takeaway or practical next step. NOT a
+   "follow for more" CTA.
+4. Total beats across ALL sections: 18-36. Total words: 480-750. Match the
+   count to how many genuine sub-points the topic has — don't pad a section
+   to hit a number, and don't cram unrelated sub-points into one section.
+
+──────────────────────────────────────────────────────────────────────
+WRITING RULES (same as every format)
+──────────────────────────────────────────────────────────────────────
+- Every beat text is 12-30 words.
+- Explain plainly. Prioritize clarity over hype — this is long-form, the
+  viewer already chose to watch 5 minutes; don't manufacture urgency.
+- BANNED PHRASES: "here's the thing" / "the truth is" / "most people" /
+  "follow for more" / "let's dive in".
+
+──────────────────────────────────────────────────────────────────────
+CINEMATIC FIELDS & VISUAL QUERY
+──────────────────────────────────────────────────────────────────────
+Same rules as the 1-minute explainer format: ≥3 cameras and ≥2 paces across
+the WHOLE script (all sections combined), no camera repeated 4+ beats running.
+`intensity` should roughly track each section's `pacing_arc`: "build" sections
+climb from ~0.5 to ~0.75, "steady" sections hold ~0.5-0.65, "wind_down" eases
+from ~0.6 down to ~0.45 by the final beat. Every `visual_query` leads with the
+global `subject` (or a concrete same-domain noun), 2-4 words, no mood words.
+
+──────────────────────────────────────────────────────────────────────
+EXAMPLE SHAPE (abbreviated — 2 beats per section shown; a real script has
+3-8 beats per section, following the SAME pattern for every beat)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Why Distributed Systems Are Hard",
+  "thumbnail": "The Hidden Complexity",
+  "style": "analytical",
+  "global": {{
+    "theme": "tech_blue", "music_mood": "minimal", "voice_style": "analytical",
+    "camera_style": "static", "subject": "server room"
+  }},
+  "sections": [
+    {{
+      "id": "intro", "pacing_arc": "build",
+      "beats": [
+        {{ "id": "beat_01", "type": "hook", "keyword": "WHY IT BREAKS",
+           "text": "Distributed systems fail in ways a single machine never *could*, and most engineers learn this the hard way.",
+           "energy": "high", "emotion": "confident", "pace": "fast", "visual_intent": "clean",
+           "camera": "push_in", "transition": "cut", "background": "glow", "layout": "left",
+           "visual_query": "server room lights night", "intensity": 0.65, "pattern_interrupt": "", "composition": "" }},
+        {{ "id": "beat_02", "type": "insight", "keyword": "THREE PARTS",
+           "text": "We'll cover why network calls fail silently, why clocks disagree, and how to design around both.",
+           "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "clean",
+           "camera": "static", "transition": "cut", "background": "solid", "layout": "center",
+           "visual_query": "network diagram screen", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }}
+      ]
+    }},
+    {{
+      "id": "network-failures", "pacing_arc": "steady",
+      "beats": [
+        {{ "id": "beat_03", "type": "insight", "keyword": "SILENT FAILURE",
+           "text": "A network call can fail without telling you it failed — the request might have succeeded on the *other end*.",
+           "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary",
+           "camera": "static", "transition": "cut", "background": "solid", "layout": "left",
+           "visual_query": "network cables data center", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }}
+      ]
+    }},
+    {{
+      "id": "conclusion", "pacing_arc": "wind_down",
+      "beats": [
+        {{ "id": "beat_18", "type": "cta", "keyword": "DESIGN FOR FAILURE",
+           "text": "Assume every call can fail twice — once for real, once by lying about it — and build accordingly.",
+           "energy": "mid", "emotion": "confident", "pace": "slow", "visual_intent": "minimal",
+           "camera": "pull_out", "transition": "dip_black", "background": "solid", "layout": "center",
+           "visual_query": "laptop code editor dark", "intensity": 0.5, "pattern_interrupt": "", "composition": "" }}
+      ]
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. Top level has "sections", each with "id", "pacing_arc", and "beats".
+2. intro (build) → 2-3 body sections (steady) → conclusion (wind_down).
+3. Total beats 18-36, total words 480-750, each beat 12-30 words.
+4. Body sections build in logical order, each covering ONE distinct sub-point.
+5. ≥3 cameras and ≥2 paces across the WHOLE script; no camera repeated 4+ in a row.
+6. Every beat has a numeric intensity roughly tracking its section's pacing_arc.
+7. Every visual_query is subject-first with no mood/abstraction words.
+
+Output the JSON only.

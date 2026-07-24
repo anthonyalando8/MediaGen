@@ -24,7 +24,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
-  Download, Film, ImageIcon, Loader2, Play, RotateCcw, Sparkles, Square, Trash2, X, XCircle,
+  Download, FileText, Film, ImageIcon, Loader2, Play, RotateCcw, Sparkles, Square,
+  Trash2, Upload, Wand2, X, XCircle,
 } from "lucide-react";
 import { useEditorStoreApi } from "../store/context";
 import {
@@ -37,7 +38,7 @@ import {
   SceneGenerateError,
   DEFAULT_FORMAT,
 } from "../persistence/scene-generate";
-import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual, VoiceOption } from "../persistence/scene-generate";
+import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual, SourceKind, VoiceOption } from "../persistence/scene-generate";
 import { closeAIScene, getAISceneState, subscribeAIScene } from "../store/ai-scene-handle";
 
 const overlay: React.CSSProperties = {
@@ -56,6 +57,19 @@ const MEDIA_MODES: { id: MediaMode; label: string }[] = [
   { id: "video", label: "Video" },
   { id: "hybrid", label: "Hybrid" },
 ];
+
+/** ArrayBuffer -> base64, chunked so a multi-MB PDF doesn't blow the call
+ * stack on `String.fromCharCode(...bytes)` (spreading a huge typed array as
+ * call args is the actual failure mode this avoids). */
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 /** Patches one beat's visual + its asset into a raw scene object (reroll response) — returns a new scene, never mutates the input. */
 function patchSceneVisual(scene: any, beatIndex: number, visual: SceneVisual, asset: SceneAsset): any {
@@ -93,9 +107,23 @@ function AISceneModalInner() {
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Format picker state.
+  // Source mode: a short topic phrase (default, unchanged) vs. existing
+  // content (article/blog/markdown/own script, or an uploaded file) that
+  // generation should be based on instead — see ingest.py server-side.
+  const [inputMode, setInputMode] = useState<"topic" | "content">("topic");
+  const [sourceText, setSourceText] = useState("");
+  const [sourceKind, setSourceKind] = useState<SourceKind>("plain_text");
+  const [sourcePdfBase64, setSourcePdfBase64] = useState<string | null>(null);
+  const [sourceFileName, setSourceFileName] = useState<string | null>(null);
+  const [sourceFileError, setSourceFileError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Format picker state. `autoFormat` (content mode only) means "let the
+  // server pick from the content's length" (ingest._suggest_format) instead
+  // of forcing whatever chip happens to be selected.
   const [formats, setFormats] = useState<SceneFormat[]>(FALLBACK_FORMATS);
   const [format, setFormat] = useState<string>(DEFAULT_FORMAT);
+  const [autoFormat, setAutoFormat] = useState(true);
   const [mediaMode, setMediaMode] = useState<MediaMode>("auto");
 
   // Voice picker state. voiceId === "" means "Automatic" (today's genre/LLM-driven choice).
@@ -114,7 +142,7 @@ function AISceneModalInner() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
 
-  useEffect(() => { if (phase === "input") inputRef.current?.focus(); }, [phase]);
+  useEffect(() => { if (phase === "input" && inputMode === "topic") inputRef.current?.focus(); }, [phase, inputMode]);
   useEffect(() => () => { abortRef.current?.abort(); audioRef.current?.pause(); previewAudioRef.current?.pause(); }, []);
 
   // Load the available formats once when the modal mounts.
@@ -225,9 +253,46 @@ function AISceneModalInner() {
     setProgress(null);
   }, []);
 
+  // Reads a dropped/picked file client-side: .pdf -> base64 (server extracts
+  // text via pypdf), anything else -> read as text with the kind guessed
+  // from extension (.md/.markdown -> markdown, else -> plain_text; the user
+  // can still override the kind dropdown after).
+  const handleFileChosen = useCallback(async (file: File) => {
+    setSourceFileError("");
+    setSourceFileName(file.name);
+    const lower = file.name.toLowerCase();
+    try {
+      if (lower.endsWith(".pdf")) {
+        const buf = await file.arrayBuffer();
+        setSourcePdfBase64(arrayBufferToBase64(buf));
+        setSourceText("");
+      } else {
+        const text = await file.text();
+        setSourceText(text);
+        setSourcePdfBase64(null);
+        setSourceKind(lower.endsWith(".md") || lower.endsWith(".markdown") ? "markdown" : "plain_text");
+      }
+    } catch (e) {
+      setSourceFileError(`Could not read "${file.name}": ${e instanceof Error ? e.message : String(e)}`);
+      setSourceFileName(null);
+      setSourcePdfBase64(null);
+    }
+  }, []);
+
+  const clearSourceFile = useCallback(() => {
+    setSourceFileName(null);
+    setSourcePdfBase64(null);
+    setSourceText("");
+    setSourceFileError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const hasContent = inputMode === "content" && !!(sourcePdfBase64 || sourceText.trim());
+
   const run = useCallback(async () => {
     const t = topic.trim();
-    if (!t || busy) return;
+    if (busy) return;
+    if (inputMode === "topic" ? !t : !hasContent) return;
     setError("");
     setProgress({ state: "queued", step: 0, total_steps: 5, label: "Queued", pct: 0 });
     setPhase("running");
@@ -235,8 +300,11 @@ function AISceneModalInner() {
     abortRef.current = controller;
     try {
       const { scene: raw, title: tt, jobId: id } = await generateScene({
-        topic: t,
-        format,
+        topic: inputMode === "topic" ? t : undefined,
+        ...(inputMode === "content" && sourcePdfBase64 ? { sourcePdfBase64 } : {}),
+        ...(inputMode === "content" && !sourcePdfBase64 && sourceText.trim()
+          ? { sourceText, sourceKind } : {}),
+        format: inputMode === "content" && autoFormat ? undefined : format,
         mediaMode,
         voiceId: voiceId || undefined,
         signal: controller.signal,
@@ -258,7 +326,7 @@ function AISceneModalInner() {
     } finally {
       abortRef.current = null;
     }
-  }, [topic, busy, format, mediaMode, voiceId]);
+  }, [topic, busy, format, mediaMode, voiceId, inputMode, hasContent, sourceText, sourceKind, sourcePdfBase64, autoFormat]);
 
   // ── Asset review: reroll / convert / reject ──────────────────────────────
   const handleReroll = useCallback(async (beatIndex: number, mode?: "image" | "video") => {
@@ -351,18 +419,63 @@ function AISceneModalInner() {
         <div style={{ padding: 18 }}>
           {phase === "input" && (
             <>
+              {/* Source mode: a short topic phrase vs. existing content */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 16, padding: 3,
+                background: "var(--surface-0)", border: "1px solid var(--border)", borderRadius: 9 }}>
+                {([
+                  { id: "topic" as const, label: "Topic", icon: Wand2 },
+                  { id: "content" as const, label: "Your own content", icon: FileText },
+                ]).map(({ id, label, icon: Icon }) => {
+                  const selected = inputMode === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setInputMode(id)}
+                      style={{
+                        flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                        padding: "7px 10px", borderRadius: 7, fontSize: 12.5, fontWeight: 600,
+                        cursor: "pointer", fontFamily: "var(--font-ui)", border: "none",
+                        background: selected ? "var(--surface-1)" : "transparent",
+                        color: selected ? "var(--text-0)" : "var(--text-2)",
+                        boxShadow: selected ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
+                      }}
+                    >
+                      <Icon size={13} /> {label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Format picker */}
               <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
                 Video format
               </label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 6 }}>
+                {inputMode === "content" && (
+                  <button
+                    type="button"
+                    onClick={() => setAutoFormat(true)}
+                    title="Let the server pick a format from how long your content is"
+                    style={{
+                      display: "flex", alignItems: "center", gap: 5,
+                      padding: "7px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                      cursor: "pointer", fontFamily: "var(--font-ui)",
+                      border: `1px solid ${autoFormat ? "var(--accent)" : "var(--border)"}`,
+                      background: autoFormat ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "var(--surface-0)",
+                      color: autoFormat ? "var(--accent)" : "var(--text-1)",
+                    }}
+                  >
+                    <Wand2 size={12} /> Auto
+                  </button>
+                )}
                 {formats.map((f) => {
-                  const selected = f.id === format;
+                  const selected = f.id === format && !(inputMode === "content" && autoFormat);
                   return (
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => setFormat(f.id)}
+                      onClick={() => { setFormat(f.id); setAutoFormat(false); }}
                       title={f.description}
                       style={{
                         padding: "7px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
@@ -378,9 +491,11 @@ function AISceneModalInner() {
                 })}
               </div>
               <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "0 2px 6px", minHeight: 16 }}>
-                {activeFormat?.description || "\u00a0"}
+                {inputMode === "content" && autoFormat
+                  ? "Picked automatically once generation starts, based on how long your content is."
+                  : activeFormat?.description || "\u00a0"}
               </p>
-              {activeFormat?.profile_summary && (
+              {!(inputMode === "content" && autoFormat) && activeFormat?.profile_summary && (
                 <p style={{ fontSize: 11, color: "var(--text-2)", lineHeight: 1.5, margin: "0 2px 16px",
                   fontFamily: "var(--font-mono)", opacity: 0.85 }}>
                   voice: {activeFormat.profile_summary.voice} \u00b7 motion: {activeFormat.profile_summary.motion} \u00b7 media: {activeFormat.profile_summary.media}
@@ -449,24 +564,102 @@ function AISceneModalInner() {
                 </button>
               </div>
 
-              {/* Topic */}
-              <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
-                What should the video be about?
-              </label>
-              <input
-                ref={inputRef}
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
-                placeholder="e.g. why linux beats windows for developers"
-                style={{ width: "100%", height: 42, padding: "0 12px", boxSizing: "border-box",
-                  borderRadius: 8, border: "1px solid var(--border-strong, var(--border))",
-                  background: "var(--surface-0)", color: "var(--text-0)", fontSize: 14, fontFamily: "var(--font-ui)" }}
-              />
-              <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "10px 2px 0" }}>
-                Writes a script in the chosen format, generates the voiceover, fetches matching visuals,
-                then shows a preview here before importing. Takes up to a couple of minutes.
-              </p>
+              {inputMode === "topic" ? (
+                <>
+                  {/* Topic */}
+                  <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
+                    What should the video be about?
+                  </label>
+                  <input
+                    ref={inputRef}
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
+                    placeholder="e.g. why linux beats windows for developers"
+                    style={{ width: "100%", height: 42, padding: "0 12px", boxSizing: "border-box",
+                      borderRadius: 8, border: "1px solid var(--border-strong, var(--border))",
+                      background: "var(--surface-0)", color: "var(--text-0)", fontSize: 14, fontFamily: "var(--font-ui)" }}
+                  />
+                  <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "10px 2px 0" }}>
+                    Writes a script in the chosen format, generates the voiceover, fetches matching visuals,
+                    then shows a preview here before importing. Takes up to a couple of minutes.
+                  </p>
+                </>
+              ) : (
+                <>
+                  {/* Existing content: paste text, or upload a file */}
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-2)" }}>
+                      Paste an article, blog post, or your own script
+                    </label>
+                    <select
+                      value={sourceKind}
+                      onChange={(e) => setSourceKind(e.target.value as SourceKind)}
+                      disabled={!!sourcePdfBase64}
+                      title="How to read the pasted/uploaded text"
+                      style={{ height: 24, padding: "0 6px", borderRadius: 6, fontSize: 11,
+                        border: "1px solid var(--border)", background: "var(--surface-0)",
+                        color: "var(--text-1)", fontFamily: "var(--font-ui)",
+                        opacity: sourcePdfBase64 ? 0.5 : 1 }}
+                    >
+                      <option value="plain_text">Article / blog</option>
+                      <option value="markdown">Markdown</option>
+                      <option value="script">My own script (line per beat)</option>
+                    </select>
+                  </div>
+
+                  {sourcePdfBase64 ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 42, padding: "0 12px",
+                      borderRadius: 8, border: "1px solid var(--border-strong, var(--border))", background: "var(--surface-0)" }}>
+                      <FileText size={15} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: "var(--text-0)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                        {sourceFileName}
+                      </span>
+                      <button type="button" onClick={clearSourceFile} title="Remove file"
+                        style={{ display: "flex", background: "transparent", border: "none", color: "var(--text-2)", cursor: "pointer", padding: 2 }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ) : (
+                    <textarea
+                      value={sourceText}
+                      onChange={(e) => { setSourceText(e.target.value); setSourceFileName(null); }}
+                      placeholder="Paste the full text here — the AI restructures it into beats, it doesn't just read it verbatim…"
+                      rows={6}
+                      style={{ width: "100%", padding: "10px 12px", boxSizing: "border-box", resize: "vertical",
+                        borderRadius: 8, border: "1px solid var(--border-strong, var(--border))",
+                        background: "var(--surface-0)", color: "var(--text-0)", fontSize: 13, lineHeight: 1.5,
+                        fontFamily: "var(--font-ui)" }}
+                    />
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="btn btn-outline"
+                      style={{ gap: 6, fontSize: 12 }}
+                    >
+                      <Upload size={13} /> {sourcePdfBase64 || sourceFileName ? "Replace file" : "Upload a file instead"}
+                    </button>
+                    <span style={{ fontSize: 11, color: "var(--text-2)" }}>.txt · .md · .pdf</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.md,.markdown,.pdf"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFileChosen(f); }}
+                      style={{ display: "none" }}
+                    />
+                  </div>
+                  {sourceFileError && (
+                    <p style={{ fontSize: 11.5, color: "var(--danger, #f0654a)", margin: "8px 2px 0" }}>{sourceFileError}</p>
+                  )}
+                  <p style={{ fontSize: 11.5, color: "var(--text-2)", lineHeight: 1.5, margin: "10px 2px 0" }}>
+                    Restructures your content into a video script (same meaning, video-ready pacing),
+                    then generates voiceover + visuals same as the Topic mode.
+                  </p>
+                </>
+              )}
             </>
           )}
 
@@ -616,7 +809,13 @@ function AISceneModalInner() {
           ) : (
             <>
               <button type="button" onClick={close} className="btn btn-outline">Close</button>
-              <button type="button" onClick={() => void run()} disabled={!topic.trim()} className="btn btn-primary" style={{ gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => void run()}
+                disabled={inputMode === "topic" ? !topic.trim() : !hasContent}
+                className="btn btn-primary"
+                style={{ gap: 6 }}
+              >
                 <Sparkles size={14} /> Generate
               </button>
             </>

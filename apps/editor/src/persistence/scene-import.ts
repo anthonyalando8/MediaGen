@@ -52,6 +52,32 @@ interface SceneVisual {
   fit?: "cover" | "contain" | "fill";
   opacity?: number;
 }
+// scene/3.0 (see docs/architecture/scene-3.0-schema.md): a beat can carry an
+// explicit `layers[]` composition instead of relying on the flat fields
+// below. Only read when `archetype !== "text_over_dimmed"` — see
+// `compileSceneToProject`'s dispatch. `text_over_dimmed` (the default every
+// beat gets when nothing assigns an archetype) always compiles via the
+// original flat-field path (`buildBeatGroup`), untouched, so every scene
+// generated before this existed renders identically.
+interface SceneLayerSource {
+  query?: string;   // unresolved — scene_export.py couldn't/didn't resolve a stock asset for this layer
+}
+interface SceneLayer {
+  role: "background" | "foreground" | "scrim" | "text" | "shape" | "icon" | "overlay" | "lower_third";
+  source?: SceneLayerSource;
+  fit?: "cover" | "contain" | "fill";
+  slot?: "left" | "right" | "top" | "bottom" | "pip";  // sub-region of the frame; absent = full-bleed
+  shape?: string;                                // role "shape": "divider" (comparison) — more shapes later
+  opacity?: number;                             // scrim target opacity
+  text?: string;
+  reveal?: string;
+  size?: "hero" | "normal";                     // role "text": font-scale hint (title_card/stat_callout use "hero")
+  anchor_y?: number;                            // role "text": vertical center as a fraction of frame height; absent = 0.5
+  asset_id?: string;                            // resolved by scene_export.py, mirrors SceneVisual.asset_id
+  kind?: "image" | "video";
+  in: number;         // beat-relative ms
+  out: number | null; // beat-relative ms; null = runs to beat end
+}
 interface SceneBeat {
   id?: string;
   hud_tag?: string;
@@ -70,6 +96,8 @@ interface SceneBeat {
   background?: string;                  // scene-motion: bg treatment (glow/noise/…)
   pattern_interrupt?: string | null;    // scene-motion: punch effect (chroma/…)
   intensity?: number;                   // 0..1 master magnitude for moves/effects
+  archetype?: string;                   // scene/3.0: composition family — see scene-3.0-schema.md
+  layers?: SceneLayer[];                // scene/3.0: explicit layer stack (only for archetype !== "text_over_dimmed")
 }
 interface SceneAsset {
   id: string;
@@ -489,19 +517,34 @@ function textNode(opts: {
  * fills the vertical frame (letterbox-free) — the right default for TikTok-
  * style backgrounds.
  */
-function mediaNode(opts: {
-  assetId: string;
-  kind: "image" | "video";
-  fit: "cover" | "contain" | "fill";
-  opacity: number;
-  start: number;
-  duration: number;
-  /** Ken Burns / motion channels (scale vec2, position vec3). */
-  channels?: any[];
-  /** Static effects (background treatment). */
-  effects?: any[];
-}): Node {
-  const props = opts.kind === "video" ? { fit: opts.fit, volume: 0 } : { fit: opts.fit };
+/** Fractional (0..1) sub-region of the comp frame a media node should occupy
+ * instead of the full frame — read by `imageBox()` (packages/nodekinds/src/
+ * image.ts) via `props.boxX/boxY/boxW/boxH`. Absent → today's full-bleed
+ * behavior, unchanged. Used for split_screen (scene/3.0). */
+interface BoxRect { x: number; y: number; w: number; h: number; }
+
+function mediaNode(
+  opts: {
+    assetId: string;
+    kind: "image" | "video";
+    fit: "cover" | "contain" | "fill";
+    opacity: number;
+    start: number;
+    duration: number;
+    /** Ken Burns / motion channels (scale vec2, position vec3). */
+    channels?: any[];
+    /** Static effects (background treatment). */
+    effects?: any[];
+  },
+  box?: BoxRect
+): Node {
+  const props: Record<string, unknown> = opts.kind === "video" ? { fit: opts.fit, volume: 0 } : { fit: opts.fit };
+  if (box) {
+    props.boxX = box.x;
+    props.boxY = box.y;
+    props.boxW = box.w;
+    props.boxH = box.h;
+  }
   return {
     id: createId(),
     kind: opts.kind,
@@ -516,6 +559,31 @@ function mediaNode(opts: {
     ...(opts.effects && opts.effects.length ? { effects: opts.effects } : {}),
     source: { assetId: opts.assetId },
   } as unknown as Node;
+}
+
+/** slot → fractional box (see `BoxRect`). `undefined` slot = full-bleed (no box override). */
+function slotRect(slot: SceneLayer["slot"]): BoxRect | undefined {
+  switch (slot) {
+    case "left": return { x: 0, y: 0, w: 0.5, h: 1 };
+    case "right": return { x: 0.5, y: 0, w: 0.5, h: 1 };
+    case "top": return { x: 0, y: 0, w: 1, h: 0.5 };
+    case "bottom": return { x: 0, y: 0.5, w: 1, h: 0.5 };
+    // Picture-in-picture inset — bottom-right corner, ~38% width. A fixed
+    // fraction regardless of orientation (PiP framing reads the same way on
+    // portrait or landscape — it's a corner overlay, not a frame split).
+    case "pip": return { x: 0.58, y: 0.60, w: 0.38, h: 0.24 };
+    default: return undefined;
+  }
+}
+
+/** Which axis a set of layer slots splits the frame on — used to orient a
+ * "divider" shape layer (comparison) at the actual boundary between the two
+ * panels, whatever slots they used. */
+function splitAxis(layers: SceneLayer[]): "horizontal" | "vertical" | undefined {
+  const slots = layers.map((l) => l.slot).filter(Boolean);
+  if (slots.includes("top") || slots.includes("bottom")) return "horizontal";
+  if (slots.includes("left") || slots.includes("right")) return "vertical";
+  return undefined;
 }
 
 // ── Beat → layer group ──────────────────────────────────────────────────────
@@ -836,6 +904,335 @@ function buildBeatGroup(
   } as Node;
 }
 
+// ── scene/3.0: layer-based beat compiler ─────────────────────────────────────
+// Only reached for archetype !== "text_over_dimmed" (see compileSceneToProject's
+// dispatch) — `buildBeatGroup` above is untouched and keeps handling every
+// beat generated before `layers[]` existed, byte-for-byte.
+
+/** A scrim: a full-frame (or slotted) rect that fades in, holds, and fades
+ * out at the layer's own in/out — the "dim panel disappears once the text's
+ * been read" composition a static background/dim field couldn't express. */
+function scrimNode(layer: SceneLayer, start: number, dur: number, W: number, H: number): Node {
+  const target = layer.opacity ?? 0.4;
+  const fadeF = Math.min(6, Math.max(2, Math.round(dur * 0.15)));
+  const box = slotRect(layer.slot);
+  const keys = eased([
+    { frame: start, value: 0 },
+    { frame: start + fadeF, value: target },
+    { frame: Math.max(start + fadeF + 1, start + dur - fadeF), value: target },
+    { frame: start + dur, value: 0 },
+  ]).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp }));
+  return {
+    id: createId(),
+    kind: "shape",
+    name: "Scrim",
+    transform: {
+      position: { x: box ? box.x * W : 0, y: box ? box.y * H : 0, z: 0 },
+      scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 },
+    },
+    opacity: 0,
+    blend: "normal",
+    time: { start: toFrame(start), duration: toFrame(dur) },
+    origin: "user",
+    props: { shape: "rect", width: box ? box.w * W : W, height: box ? box.h * H : H, radius: 0, fill: { l: 0, c: 0, h: 0 } },
+    channels: [{ id: createId(), path: "opacity", type: "scalar" as const, keys }],
+  } as unknown as Node;
+}
+
+/** A thin accent bar at the exact boundary between two split/comparison
+ * panels — the visual cue that reads as "these are being weighed against
+ * each other," not just "two clips, stacked." Orientation comes from
+ * whichever axis the OTHER layers in the beat actually split on
+ * (`splitAxis`), so it's correct regardless of portrait/landscape slot
+ * choice upstream. */
+function dividerNode(axis: "horizontal" | "vertical", start: number, dur: number, W: number, H: number, accent: ColorOKLCH): Node {
+  const thickness = Math.max(2, Math.round(Math.min(W, H) * 0.006));
+  const horizontal = axis === "horizontal";
+  const width = horizontal ? W : thickness;
+  const height = horizontal ? thickness : H;
+  const x = horizontal ? 0 : W / 2 - thickness / 2;
+  const y = horizontal ? H / 2 - thickness / 2 : 0;
+  const fadeF = Math.min(8, Math.max(3, Math.round(dur * 0.1)));
+  return {
+    id: createId(),
+    kind: "shape",
+    name: "Divider",
+    transform: { position: { x, y, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
+    opacity: 0,
+    blend: "normal",
+    time: { start: toFrame(start), duration: toFrame(dur) },
+    origin: "user",
+    props: { shape: "rect", width, height, radius: 0, fill: accent },
+    channels: [{
+      id: createId(), path: "opacity", type: "scalar" as const,
+      keys: eased([
+        { frame: start, value: 0 },
+        { frame: start + fadeF, value: 1 },
+      ]).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
+    }],
+  } as unknown as Node;
+}
+
+/** A centered, wrapped block of text (whole lines, not word-synced — quote/stat
+ * treatments read as a single composed statement, not spoken captions).
+ * `centerY` (fraction of frame height, default 0.5) lets two text layers on
+ * the same beat (stat_callout's hero figure + label) stack without
+ * overlapping instead of both centering on the frame's vertical middle. */
+function layerTextNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, fontScale: number, centerY = 0.5): Node[] {
+  const margin = Math.round(W * 0.1);
+  const colWidth = W - margin * 2;
+  const fs = Math.round(W * fontScale);
+  const space = spaceWidth(fs, 700);
+  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
+
+  const lines: { text: string; width: number }[] = [];
+  let lineWords: string[] = [];
+  let lineWidth = 0;
+  const flush = () => {
+    if (lineWords.length) lines.push({ text: lineWords.join(" "), width: lineWidth });
+    lineWords = [];
+    lineWidth = 0;
+  };
+  for (const w of words) {
+    const ww = measureText(w, fs, 700);
+    if (lineWords.length > 0 && lineWidth + space + ww > colWidth) flush();
+    lineWords.push(w);
+    lineWidth += (lineWords.length > 1 ? space : 0) + ww;
+  }
+  flush();
+
+  const lineH = fs * 1.3;
+  const totalH = lines.length * lineH;
+  const top = Math.round(H * centerY - totalH / 2);
+  const entF = Math.min(10, Math.max(4, Math.round(dur * 0.15)));
+
+  return lines.map((ln, li) => {
+    const x = Math.round((W - ln.width) / 2);
+    const y = top + li * lineH;
+    const rise = Math.round(H * 0.02);
+    return textNode({
+      name: `quote · line ${li + 1}`,
+      text: ln.text,
+      x, y, fontSize: fs, weight: 700, align: "left", fill,
+      start, duration: dur,
+      posKeys: [
+        { frame: start, value: { x, y: y + rise, z: 0 } },
+        { frame: start + entF, value: { x, y, z: 0 } },
+      ],
+      opacityKeys: [
+        { frame: start, value: 0 },
+        { frame: start + entF, value: 1 },
+      ],
+    });
+  });
+}
+
+/** Kinetic typography: same wrapping as `layerTextNodes`, but each LINE
+ * pops in on its own staggered beat (not all at once) with a scale bounce,
+ * not just a fade+rise — the punchier "kinetic_type" reveal distinct from
+ * quote_card's calmer single fade. */
+function kineticTextNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, fontScale: number): Node[] {
+  const margin = Math.round(W * 0.1);
+  const colWidth = W - margin * 2;
+  const fs = Math.round(W * fontScale);
+  const space = spaceWidth(fs, 800);
+  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
+
+  const lines: { text: string; width: number }[] = [];
+  let lineWords: string[] = [];
+  let lineWidth = 0;
+  const flush = () => {
+    if (lineWords.length) lines.push({ text: lineWords.join(" "), width: lineWidth });
+    lineWords = [];
+    lineWidth = 0;
+  };
+  for (const w of words) {
+    const ww = measureText(w, fs, 800);
+    if (lineWords.length > 0 && lineWidth + space + ww > colWidth) flush();
+    lineWords.push(w);
+    lineWidth += (lineWords.length > 1 ? space : 0) + ww;
+  }
+  flush();
+
+  const lineH = fs * 1.3;
+  const totalH = lines.length * lineH;
+  const top = Math.round((H - totalH) / 2);
+  // Each line's pop starts `staggerF` frames after the previous one, capped
+  // so a long block doesn't take forever to finish landing.
+  const staggerF = Math.min(6, Math.max(2, Math.round(dur * 0.06)));
+  const popF = Math.min(10, Math.max(4, Math.round(dur * 0.12)));
+
+  return lines.map((ln, li) => {
+    const x = Math.round((W - ln.width) / 2);
+    const y = top + li * lineH;
+    const lineStart = start + li * staggerF;
+    return textNode({
+      name: `kinetic · line ${li + 1}`,
+      text: ln.text,
+      x, y, fontSize: fs, weight: 800, align: "left", fill,
+      start, duration: dur,
+      scaleKeys: [
+        { frame: lineStart, value: { x: 0.7, y: 0.7 } },
+        { frame: lineStart + popF, value: { x: 1.08, y: 1.08 } },
+        { frame: lineStart + popF + 4, value: { x: 1, y: 1 } },
+      ],
+      opacityKeys: [
+        { frame: lineStart, value: 0 },
+        { frame: lineStart + Math.max(1, Math.round(popF * 0.4)), value: 1 },
+      ],
+    });
+  });
+}
+
+/** Broadcast-style lower-third: left-aligned label near the bottom, backed
+ * by a semi-transparent bar confined to that band (not a full scrim). */
+function lowerThirdNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, accent: ColorOKLCH): Node[] {
+  const margin = Math.round(W * 0.08);
+  const fs = Math.round(W * 0.042);
+  const bandH = Math.round(fs * 2.2);
+  const bandY = Math.round(H * 0.8);
+  const entF = Math.min(8, Math.max(3, Math.round(dur * 0.1)));
+
+  const bar: Node = {
+    id: createId(),
+    kind: "shape",
+    name: "Lower third bar",
+    transform: { position: { x: 0, y: bandY, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
+    opacity: 0,
+    blend: "normal",
+    time: { start: toFrame(start), duration: toFrame(dur) },
+    origin: "user",
+    props: { shape: "rect", width: W, height: bandH, radius: 0, fill: { l: 0, c: 0, h: 0 } },
+    channels: [{
+      id: createId(), path: "opacity", type: "scalar" as const,
+      keys: eased([{ frame: start, value: 0 }, { frame: start + entF, value: 0.55 }])
+        .map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
+    }],
+  } as unknown as Node;
+
+  const label = textNode({
+    name: "Lower third label",
+    text,
+    x: margin, y: bandY + Math.round((bandH - fs) / 2),
+    fontSize: fs, weight: 700, align: "left", fill: fill === accent ? accent : fill,
+    start, duration: dur,
+    posKeys: [
+      { frame: start, value: { x: margin - Math.round(W * 0.03), y: bandY + Math.round((bandH - fs) / 2), z: 0 } },
+      { frame: start + entF, value: { x: margin, y: bandY + Math.round((bandH - fs) / 2), z: 0 } },
+    ],
+    opacityKeys: [{ frame: start, value: 0 }, { frame: start + entF, value: 1 }],
+  });
+
+  return [bar, label];
+}
+
+function buildBeatGroupFromLayers(
+  beat: SceneBeat,
+  archetype: string,
+  beatIndex: number,
+  startFrame: number,
+  durationFrames: number,
+  fps: number,
+  size: { width: number; height: number },
+  palette: { accent: ColorOKLCH; spike: ColorOKLCH; fg: ColorOKLCH },
+  brand: string,
+  ensureBgAsset: (type: string) => string,
+  lingerFrames: number,
+  transitionIn: { preset: string; durationF: Frame; props: Record<string, unknown> } | undefined
+): Node {
+  durationFrames = durationFrames + lingerFrames;
+  const W = size.width, H = size.height;
+  const margin = Math.round(W * 0.08);
+  const intensity = typeof beat.intensity === "number" ? Math.max(0, Math.min(1, beat.intensity)) : 0.65;
+  const k = 0.6 + 0.8 * intensity;
+  const children: Node[] = [];
+  const layers = beat.layers ?? [];
+  const axis = splitAxis(layers);   // undefined unless this beat actually has left/right/top/bottom panels
+
+  for (const layer of layers) {
+    const layerStart = startFrame + Math.round(((layer.in ?? 0) / 1000) * fps);
+    const layerEnd = layer.out != null ? startFrame + Math.round((layer.out / 1000) * fps) : startFrame + durationFrames;
+    const layerDur = Math.max(1, layerEnd - layerStart);
+
+    if (layer.role === "shape" && layer.shape === "divider") {
+      if (axis) children.push(dividerNode(axis, layerStart, layerDur, W, H, palette.accent));
+    } else if (layer.role === "background" || layer.role === "foreground") {
+      if (layer.asset_id && (layer.kind === "image" || layer.kind === "video")) {
+        children.push(
+          mediaNode(
+            { assetId: layer.asset_id, kind: layer.kind, fit: layer.fit ?? "cover", opacity: layer.opacity ?? 1, start: layerStart, duration: layerDur },
+            slotRect(layer.slot)
+          )
+        );
+      } else if (!layer.source?.query) {
+        // No source to resolve at all (e.g. quote_card's typographic
+        // background) — a generated gradient wash, same asset every such
+        // beat reuses (see compileSceneToProject's `ensureBgAsset`).
+        children.push(mediaNode({ assetId: ensureBgAsset("gradient"), kind: "image", fit: "cover", opacity: 1, start: layerStart, duration: layerDur }));
+      }
+      // else: had a query but scene_export.py couldn't resolve/embed it — no
+      // node rather than a broken asset reference.
+    } else if (layer.role === "scrim") {
+      children.push(scrimNode(layer, layerStart, layerDur, W, H));
+    } else if (layer.role === "text" && layer.text) {
+      const fill = beat.accent_override === "spike" ? palette.spike : palette.fg;
+      const fontScale = layer.size === "hero" ? 0.13 : 0.075;
+      if (layer.reveal === "kinetic") {
+        children.push(...kineticTextNodes(layer.text, layerStart, layerDur, W, H, fill, fontScale));
+      } else {
+        children.push(...layerTextNodes(layer.text, layerStart, layerDur, W, H, fill, fontScale, layer.anchor_y ?? 0.5));
+      }
+    } else if (layer.role === "lower_third" && layer.text) {
+      children.push(...lowerThirdNodes(layer.text, layerStart, layerDur, W, H, palette.fg, palette.accent));
+    }
+  }
+
+  if (brand) {
+    const fs = Math.round(W * 0.028);
+    children.push(
+      textNode({
+        name: `${beat.id ?? "beat"} · brand`, text: brand,
+        x: margin, y: Math.round(H * 0.94),
+        fontSize: fs, weight: 600, align: "left", fill: palette.accent,
+        start: startFrame, duration: durationFrames, tracking: 3,
+      })
+    );
+  }
+
+  const fadeF = Math.min(6, Math.max(2, Math.round(durationFrames * 0.08)));
+  const groupChannels: any[] = [];
+  if (!transitionIn && beatIndex > 0) {
+    groupChannels.push({
+      id: createId(), path: "opacity", type: "scalar" as const,
+      keys: [
+        { frame: toFrame(startFrame), value: 0, interp: "bezier" as const, ...EASE_OUT },
+        { frame: toFrame(startFrame + fadeF), value: 1, interp: "linear" as const },
+      ],
+    });
+  }
+  groupChannels.push(...cameraChannels(beat.camera, startFrame, durationFrames, W, H, k));
+
+  const groupEffects: any[] = [];
+  const pe = patternBurst(beat.pattern_interrupt, startFrame, durationFrames, fps, k);
+  if (pe) groupEffects.push(pe);
+
+  return {
+    id: createId(),
+    kind: "group",
+    name: `Beat ${beatIndex + 1} · ${archetype}`,
+    transform: { position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
+    opacity: 1,
+    blend: "normal",
+    time: { start: toFrame(startFrame), duration: toFrame(durationFrames) },
+    origin: "user",
+    props: {},
+    channels: groupChannels,
+    children,
+    ...(groupEffects.length ? { effects: groupEffects } : {}),
+    ...(transitionIn ? { transitionIn } : {}),
+  } as Node;
+}
+
 // ── Compile ─────────────────────────────────────────────────────────────────
 
 /** Compiles a validated `SceneDoc` into an editable `Project`. */
@@ -939,7 +1336,18 @@ export function compileSceneToProject(scene: SceneDoc): Project {
         ? { preset: def.preset, durationF: toFrame(overlaps[i]) as Frame, props: def.props }
         : undefined;
 
-    root.push(buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, bgAssetId, linger, transitionIn));
+    // scene/3.0 dispatch: only an archetype OTHER than "text_over_dimmed"
+    // with a populated `layers[]` takes the new layer compiler. Every beat
+    // generated before archetypes existed (and every "text_over_dimmed"
+    // beat, which is still the default) keeps compiling via the exact same
+    // `buildBeatGroup` call as before this feature existed — parity is
+    // structural, not incidental.
+    const archetype = beat.archetype ?? "text_over_dimmed";
+    const node =
+      archetype !== "text_over_dimmed" && beat.layers && beat.layers.length > 0
+        ? buildBeatGroupFromLayers(beat, archetype, i, cursor, durFrames, fps, size, palette, brand, ensureBgAsset, linger, transitionIn)
+        : buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, bgAssetId, linger, transitionIn);
+    root.push(node);
 
     // One voiceover AudioTrack per beat, placed at the beat's start (sequential;
     // NOT extended by linger, so voiceovers never overlap).

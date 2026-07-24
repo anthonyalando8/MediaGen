@@ -80,6 +80,7 @@ class MediaPlan:
     background: str = "auto"
     mood: list = field(default_factory=list)
     allow_illustration: bool = True
+    orientation: str = "portrait"  # portrait|landscape|square — target delivery aspect for stock lookups
 
 
 @dataclass
@@ -152,6 +153,7 @@ def _media_plan_from(meta: dict) -> MediaPlan:
         background=str(m.get("background", "auto")),
         mood=list(m.get("mood") or []),
         allow_illustration=bool(m.get("allow_illustration", True)),
+        orientation=str(m.get("orientation", "portrait")),
     )
 
 

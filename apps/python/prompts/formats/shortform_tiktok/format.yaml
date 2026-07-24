@@ -19,6 +19,13 @@ variety:
   min_backgrounds: 2
   max_consecutive_camera: 2
   max_consecutive_layout: 2
+  # scene/3.0 composer pass (llm.py assign_composition): opts this format
+  # into archetype diversification — at least 3 distinct archetypes across
+  # the script (text_over_dimmed + 2 more), no archetype more than 2 beats
+  # in a row. listicle/calm_narrative don't set these — they stay 100%
+  # text_over_dimmed until they opt in too.
+  min_archetypes: 3
+  max_consecutive_archetype: 2
 
 # Genre profile — the feel, not just the words (see formats.py VoiceProfile /
 # VisualProfile). aggressive voice, exaggerated intensity swings, and more

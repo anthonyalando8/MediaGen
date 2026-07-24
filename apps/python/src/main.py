@@ -23,6 +23,12 @@ Usage (from project root — MediaGen/):
   # process every topic in a subject file  (--limit N caps it)
   python src/main.py --source tech --batch --limit 10 --format shortform_tiktok
 
+  # turn existing content into a script instead of a bare topic phrase
+  # (.md -> markdown structure, .pdf -> extracted text, anything else -> a
+  # user-written script, line-preserving — see ingest.py)
+  python src/main.py --ingest article.md
+  python src/main.py --ingest report.pdf --format explainer_5min
+
   # rebuild from an existing workspace (creates a NEW run, never overwrites)
   python src/main.py --rebuild 015
   python src/main.py --rebuild 015 --from tts        # redo voice → … → scene
@@ -50,6 +56,32 @@ from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
 from scene_export import build_scene
 from utils    import make_run_dir, load_topics, random_topic
+import ingest
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Content ingest (phase 6): --ingest <path> turns a file into the topic
+# ─────────────────────────────────────────────────────────────────────────────
+
+_INGEST_KIND_BY_SUFFIX = {".md": "markdown", ".markdown": "markdown"}
+
+
+def load_ingest_brief(path_str: str) -> "ingest.SourceBrief":
+    """Read `path_str` (markdown/.txt/.pdf/any plain text — a bare .txt or
+    unrecognised extension is treated as a user-written script, since that's
+    the more useful default for a local file someone wrote by hand) and
+    normalize it. Raises FileNotFoundError / ValueError with a message
+    that's fine to print straight to stderr."""
+    path = pathlib.Path(path_str)
+    if not path.is_file():
+        raise FileNotFoundError(f"--ingest file not found: {path}")
+
+    if path.suffix.lower() == ".pdf":
+        text = ingest.extract_pdf_text(path)
+        return ingest.normalize_source(text, kind="plain_text")
+
+    kind = _INGEST_KIND_BY_SUFFIX.get(path.suffix.lower(), "script")
+    return ingest.normalize_source(path.read_text(encoding="utf-8"), kind=kind)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -424,6 +456,12 @@ def _parse_args(args: list[str]) -> dict:
             del topic_words[i:i + 2]
         return {"mode": "direct", "topic": " ".join(topic_words), "format": format_id}
 
+    if "--ingest" in args:
+        idx = args.index("--ingest")
+        if idx + 1 >= len(args):
+            return {"mode": "error", "msg": "--ingest requires a file path (e.g. --ingest article.md)"}
+        return {"mode": "ingest", "path": args[idx + 1], "format": format_id, "format_explicit": fmt_val is not None}
+
     if args[0] == "--rebuild":
         if len(args) < 2:
             return {"mode": "error", "msg": "Usage: main.py --rebuild <prefix> [--from tts|captions|scene]"}
@@ -497,6 +535,18 @@ if __name__ == "__main__":
 
     elif mode == "direct":
         run_one(parsed["topic"], cfg, parsed["format"])
+
+    elif mode == "ingest":
+        try:
+            brief = load_ingest_brief(parsed["path"])
+        except (FileNotFoundError, ValueError, RuntimeError) as e:
+            print(f"[main] Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        # Explicit --format wins; otherwise use the ingest step's own
+        # length-based suggestion instead of the hardcoded default.
+        format_id = parsed["format"] if parsed["format_explicit"] else brief.suggested_format
+        print(f"[main] Ingested '{parsed['path']}' ({brief.word_count} words) → format={format_id}")
+        run_one(brief.brief_text, cfg, format_id)
 
     elif mode == "random":
         subject_path = resolve_source(cfg, parsed["source"])

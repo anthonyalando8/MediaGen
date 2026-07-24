@@ -15,3 +15,12 @@ variety:
   min_cameras: 2
   min_layouts: 2
   max_consecutive_camera: 3
+  # scene/3.0 composer pass (llm.py assign_composition) — same "looser than
+  # shortform" philosophy as the camera/layout gates above: 2 archetypes
+  # (not 3) is enough for a numbered rundown that's SUPPOSED to keep items
+  # parallel in shape, and item beats can run 3 in a row before forcing a
+  # break. `truth`/`payoff` beats (this format's own type vocabulary — see
+  # prompt.txt) are what the composer has to work with, so most scripts will
+  # pick up one split_screen or quote_card moment on the payoff/reveal beat.
+  min_archetypes: 2
+  max_consecutive_archetype: 3

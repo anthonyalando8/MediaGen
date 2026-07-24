@@ -88,29 +88,43 @@ def _get_json(url: str, headers: dict | None = None) -> dict | None:
 
 _ILLUSTRATION_HINTS = {"illustration", "vector", "clipart", "clip-art", "icon", "cartoon", "drawing", "graphic"}
 
+# Delivery aspect ratio (width/height) each format's `media.orientation` maps
+# to. Unknown/missing orientation falls back to portrait — the pre-existing
+# behavior, so any format that doesn't opt in is unaffected.
+_TARGET_AR = {"portrait": 9 / 16, "landscape": 16 / 9, "square": 1.0}
+
 
 def _tokens(s: str) -> set:
     return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
 
 
-def _score_candidate(query_tokens: set, text: str, tags: str, width, height, allow_illustration: bool):
+def _score_candidate(query_tokens: set, text: str, tags: str, width, height, allow_illustration: bool, target_ar: float = 9 / 16):
     """Term-overlap score in [0, ~1.15]. Returns None to exclude the candidate
     outright (illustration hint present and allow_illustration is False)."""
     cand_tokens = _tokens(text) | _tokens(tags)
     if not allow_illustration and (cand_tokens & _ILLUSTRATION_HINTS):
         return None
     score = len(query_tokens & cand_tokens) / max(1, len(query_tokens))
-    if width and height and height > width:
-        score += 0.15  # portrait bonus — matches the orientation we request anyway
+    if width and height:
+        # Distance to the DELIVERY aspect, not a flat "portrait is good"
+        # bonus — an exact match to target_ar scores the same +0.15 the old
+        # flat portrait bonus gave (back-compat for the default portrait
+        # target), tapering to a mild penalty the further off-aspect a
+        # candidate is.
+        ar = width / height
+        score += 0.15 - min(0.3, abs(ar - target_ar) * 0.5)
     return score
 
 
-def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, exclude: set | None = None):
+def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, target_ar: float = 9 / 16, exclude: set | None = None):
     best, best_score = None, -1.0
     for c in candidates:
-        if exclude and c.get("url") in exclude:
-            continue  # already shown to the user via a prior reroll — skip
-        score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration)
+        # Skip anything already used — by provider asset id (stable across
+        # size/crop variants of the same photo) or, failing that, by exact
+        # URL (a prior reroll, or a provider with no id).
+        if exclude and (c.get("id") in exclude or c.get("url") in exclude):
+            continue
+        score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration, target_ar)
         if score is None:
             continue
         if score > best_score:
@@ -120,28 +134,40 @@ def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, e
 
 # ── Per-provider candidate fetch (image) ────────────────────────────────────
 
-def _pexels_image_candidates(q: str) -> list:
+# orientation ("portrait"|"landscape"|"square") → each provider's own query
+# vocabulary. Missing/unknown orientation falls back to portrait everywhere,
+# reproducing the pre-existing hardcoded behavior.
+_PEXELS_ORIENT = {"portrait": "portrait", "landscape": "landscape", "square": "square"}
+_UNSPLASH_ORIENT = {"portrait": "portrait", "landscape": "landscape", "square": "squarish"}
+_PIXABAY_ORIENT = {"portrait": "vertical", "landscape": "horizontal", "square": "all"}
+
+
+def _pexels_image_candidates(q: str, orientation: str = "portrait") -> list:
     if not _PEXELS:
         return []
+    orient = _PEXELS_ORIENT.get(orientation, "portrait")
     u = ("https://api.pexels.com/v1/search?query=" + urllib.parse.quote(q)
-         + "&orientation=portrait&per_page=8&size=medium")
+         + f"&orientation={orient}&per_page=8&size=medium")
     data = _get_json(u, {"Authorization": _PEXELS})
     out = []
     for p in (data or {}).get("photos", []) or []:
         src = p.get("src", {}) or {}
-        url = src.get("portrait") or src.get("large2x") or src.get("large")
+        # Pexels pre-crops each photo per orientation under matching src keys
+        # — use the one that matches what we asked for, not always "portrait".
+        url = src.get(orient) or src.get("large2x") or src.get("large")
         if not url:
             continue
-        out.append({"url": url, "text": p.get("alt", ""), "tags": "",
+        out.append({"url": url, "id": f"pexels:{p.get('id')}", "text": p.get("alt", ""), "tags": "",
                     "width": p.get("width"), "height": p.get("height"), "source": "Pexels"})
     return out
 
 
-def _unsplash_image_candidates(q: str) -> list:
+def _unsplash_image_candidates(q: str, orientation: str = "portrait") -> list:
     if not _UNSPLASH:
         return []
+    orient = _UNSPLASH_ORIENT.get(orientation, "portrait")
     u = ("https://api.unsplash.com/search/photos?query=" + urllib.parse.quote(q)
-         + f"&orientation=portrait&content_filter=high&per_page=8&order_by=relevant&client_id={_UNSPLASH}")
+         + f"&orientation={orient}&content_filter=high&per_page=8&order_by=relevant&client_id={_UNSPLASH}")
     data = _get_json(u, {"Accept-Version": "v1"})
     out = []
     for r in (data or {}).get("results", []) or []:
@@ -150,24 +176,25 @@ def _unsplash_image_candidates(q: str) -> list:
         if not url:
             continue
         tags = " ".join(t.get("title", "") for t in (r.get("tags") or []) if isinstance(t, dict))
-        out.append({"url": url, "text": r.get("alt_description") or r.get("description") or "", "tags": tags,
+        out.append({"url": url, "id": f"unsplash:{r.get('id')}", "text": r.get("alt_description") or r.get("description") or "", "tags": tags,
                     "width": r.get("width"), "height": r.get("height"), "source": "Unsplash"})
     return out
 
 
-def _pixabay_image_candidates(q: str) -> list:
+def _pixabay_image_candidates(q: str, orientation: str = "portrait") -> list:
     if not _PIXABAY:
         return []
+    orient = _PIXABAY_ORIENT.get(orientation, "vertical")
     u = ("https://pixabay.com/api/?key=" + urllib.parse.quote(_PIXABAY)
          + "&q=" + urllib.parse.quote(q)
-         + "&image_type=photo&orientation=vertical&safesearch=true&per_page=8&order=relevant")
+         + f"&image_type=photo&orientation={orient}&safesearch=true&per_page=8&order=relevant")
     data = _get_json(u)
     out = []
     for h in (data or {}).get("hits", []) or []:
         url = h.get("webformatURL") or h.get("largeImageURL")
         if not url:
             continue
-        out.append({"url": url, "text": h.get("tags", ""), "tags": h.get("tags", ""),
+        out.append({"url": url, "id": f"pixabay:{h.get('id')}", "text": h.get("tags", ""), "tags": h.get("tags", ""),
                     "width": h.get("webformatWidth"), "height": h.get("webformatHeight"), "source": "Pixabay"})
     return out
 
@@ -175,35 +202,38 @@ def _pixabay_image_candidates(q: str) -> list:
 _IMAGE_PROVIDERS = (_pexels_image_candidates, _unsplash_image_candidates, _pixabay_image_candidates)
 
 
-def _best_image_candidate(query: str, mood: list, allow_illustration: bool, exclude: set | None = None) -> dict | None:
+def _best_image_candidate(query: str, mood: list, allow_illustration: bool, orientation: str = "portrait",
+                           target_ar: float = 9 / 16, exclude: set | None = None) -> dict | None:
     full_q = " ".join([query, *mood]).strip()
     q_tokens = _tokens(full_q)
 
     candidates = []
     for fn in _IMAGE_PROVIDERS:
-        candidates.extend(fn(full_q))
+        candidates.extend(fn(full_q, orientation))
     if not candidates:
         # One-retry fallback on the bare subject — mirrors the legacy
         # per-provider retry, now applied once across all providers.
         subject = " ".join(query.split()[:2])
         if subject and subject != full_q:
             for fn in _IMAGE_PROVIDERS:
-                candidates.extend(fn(subject))
+                candidates.extend(fn(subject, orientation))
 
-    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, exclude)
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, target_ar, exclude)
     if best is None:
         return None
     print(f"[media] {best['source']} ✓ (score={best_score:.2f}) \"{full_q}\"")
-    return {"kind": "image", "url": best["url"], "relevance": round(min(1.0, max(0.0, best_score)), 2), "query": full_q}
+    return {"kind": "image", "url": best["url"], "id": best.get("id"),
+            "relevance": round(min(1.0, max(0.0, best_score)), 2), "query": full_q}
 
 
 # ── Per-provider candidate fetch (video) ────────────────────────────────────
 
-def _pexels_video_candidates(q: str) -> list:
+def _pexels_video_candidates(q: str, orientation: str = "portrait") -> list:
     if not _PEXELS:
         return []
+    orient = _PEXELS_ORIENT.get(orientation, "portrait")
     u = ("https://api.pexels.com/videos/search?query=" + urllib.parse.quote(q)
-         + "&orientation=portrait&per_page=8")
+         + f"&orientation={orient}&per_page=8")
     data = _get_json(u, {"Authorization": _PEXELS})
     out = []
     for v in (data or {}).get("videos", []) or []:
@@ -214,12 +244,15 @@ def _pexels_video_candidates(q: str) -> list:
         if not files:
             continue
         f = files[0]  # smallest file that still meets the floor — keeps the embed small
-        out.append({"url": f["link"], "text": "", "tags": "", "width": f.get("width"), "height": f.get("height"),
+        out.append({"url": f["link"], "id": f"pexels_video:{v.get('id')}", "text": "", "tags": "",
+                    "width": f.get("width"), "height": f.get("height"),
                     "duration_ms": int((v.get("duration") or 0) * 1000), "source": "Pexels"})
     return out
 
 
-def _pixabay_video_candidates(q: str) -> list:
+def _pixabay_video_candidates(q: str, orientation: str = "portrait") -> list:
+    # Pixabay's video search API has no orientation param — target_ar-aware
+    # scoring in _best_candidate still prefers the best-fit clip returned.
     if not _PIXABAY:
         return []
     u = ("https://pixabay.com/api/videos/?key=" + urllib.parse.quote(_PIXABAY)
@@ -234,7 +267,7 @@ def _pixabay_video_candidates(q: str) -> list:
         v = videos.get("tiny") or videos.get("small") or videos.get("medium")
         if not v or not v.get("url"):
             continue
-        out.append({"url": v["url"], "text": h.get("tags", ""), "tags": h.get("tags", ""),
+        out.append({"url": v["url"], "id": f"pixabay_video:{h.get('id')}", "text": h.get("tags", ""), "tags": h.get("tags", ""),
                     "width": v.get("width"), "height": v.get("height"),
                     "duration_ms": int((h.get("duration") or 0) * 1000), "source": "Pixabay"})
     return out
@@ -249,20 +282,22 @@ _VIDEO_PROVIDERS = (_pexels_video_candidates, _pixabay_video_candidates)
 _MAX_VIDEO_DURATION_MS = 30_000
 
 
-def _best_video_candidate(query: str, mood: list, allow_illustration: bool, exclude: set | None = None) -> dict | None:
+def _best_video_candidate(query: str, mood: list, allow_illustration: bool, orientation: str = "portrait",
+                           target_ar: float = 9 / 16, exclude: set | None = None) -> dict | None:
     full_q = " ".join([query, *mood]).strip()
     q_tokens = _tokens(full_q)
 
     candidates = []
     for fn in _VIDEO_PROVIDERS:
-        candidates.extend(fn(full_q))
+        candidates.extend(fn(full_q, orientation))
     candidates = [c for c in candidates if c.get("duration_ms", 0) <= _MAX_VIDEO_DURATION_MS]
 
-    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, exclude)
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, target_ar, exclude)
     if best is None:
         return None
     print(f"[media] {best['source']} video ✓ (score={best_score:.2f}) \"{full_q}\"")
-    return {"kind": "video", "url": best["url"], "relevance": round(min(1.0, max(0.0, best_score)), 2),
+    return {"kind": "video", "url": best["url"], "id": best.get("id"),
+            "relevance": round(min(1.0, max(0.0, best_score)), 2),
             "query": full_q, "duration_ms": best.get("duration_ms", 0)}
 
 
@@ -278,6 +313,7 @@ def resolve_visual(
     allow_illustration: bool = True,
     pace: str = "",
     exclude: set | None = None,
+    orientation: str = "portrait",
 ) -> dict | None:
     """
     Resolve `query` to a visual — scored across every provider that has a
@@ -294,23 +330,29 @@ def resolve_visual(
                   doesn't set `media.mode`, so it reproduces the exact
                   pre-v2 output shape (image, never video) unless a format
                   opts in.
-    `exclude` — URLs to skip (already shown to the user via a prior reroll).
+    `exclude` — provider asset ids and/or URLs to skip (already shown to the
+                user via a prior reroll, or already used by an earlier beat
+                in the same scene — see scene_export.py's per-scene `used` set).
+    `orientation` — "portrait" (default, back-compat) | "landscape" | "square".
+                    Threaded to each provider's own orientation query param
+                    and into scoring as the delivery aspect target.
 
-    Returns {"kind", "url", "relevance", "query", "duration_ms"?} or None.
+    Returns {"kind", "url", "id", "relevance", "query", "duration_ms"?} or None.
     """
     if not query:
         return None
     mood = mood or []
+    target_ar = _TARGET_AR.get(orientation, _TARGET_AR["portrait"])
 
     want_video = mode == "video" or (mode == "hybrid" and pace in _MOTION_PACES)
     if want_video:
-        result = _best_video_candidate(query, mood, allow_illustration, exclude)
+        result = _best_video_candidate(query, mood, allow_illustration, orientation, target_ar, exclude)
         if result:
             return result
         # No video candidate cleared the bar — fall through to image so the
         # beat still gets a visual.
 
-    result = _best_image_candidate(query, mood, allow_illustration, exclude)
+    result = _best_image_candidate(query, mood, allow_illustration, orientation, target_ar, exclude)
     if result:
         return result
     print(f"[media] ✗ no visual for \"{query}\"")

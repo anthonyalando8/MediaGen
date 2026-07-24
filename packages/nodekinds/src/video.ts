@@ -18,7 +18,15 @@ export const videoKind: NodeKind = {
   displayName: "Video",
   category: "media",
   schema: {
-    props: z.object({ fit: FitSchema, volume: z.number().min(0).max(1) }),
+    props: z.object({
+      fit: FitSchema,
+      volume: z.number().min(0).max(1),
+      // scene/3.0: fractional (0..1) sub-region of the frame — see image.ts's imageBox().
+      boxX: z.number().min(0).max(1).optional(),
+      boxY: z.number().min(0).max(1).optional(),
+      boxW: z.number().min(0).max(1).optional(),
+      boxH: z.number().min(0).max(1).optional(),
+    }),
     channels: [],
     inspector: [
       { path: "source.assetId", label: "Video", control: "asset" },

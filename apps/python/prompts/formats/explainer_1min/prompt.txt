@@ -1,0 +1,139 @@
+Write a 1-MINUTE EXPLAINER video script for YouTube/web (landscape, not a
+TikTok hook-reel). Calmer pacing than a short-form reel: develop ONE idea in a
+few clear steps instead of chasing constant scroll-stopping tension.
+
+TOPIC: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 6 words, plain and descriptive — this is an explainer, not a hook",
+  "thumbnail": "3-5 word descriptive phrase",
+  "style": "analytical | builder | calm | cinematic",
+
+  "global": {{
+    "theme":        "clean_modern | tech_blue | editorial_white | warm_amber | luxury_minimal",
+    "music_mood":   "minimal | ambient | upbeat | playful",
+    "voice_style":  "analytical | storyteller | documentary",
+    "camera_style": "static | dynamic",
+    "subject":      "1-3 word concrete photographable noun anchoring every visual_query"
+  }},
+
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook | insight | tension | truth | flip | payoff | cta",
+      "keyword":          "2-4 WORD PHRASE — a label for this step, not a punchline",
+      "text":             "spoken sentence, 12-30 words",
+      "energy":           "high | mid | low",
+      "emotion":          "confident | serious | hopeful | surprised | playful",
+      "pace":             "slow | mid | fast",
+      "visual_intent":    "clean | minimal | documentary | cinematic",
+      "camera":           "static | push_in | pull_out | tilt_up",
+      "transition":       "cut | fade | dip_black | blur_wipe",
+      "background":       "solid | gradient | grid | glow",
+      "layout":           "left | center | right | full",
+      "visual_query":     "2-4 word LITERAL image search, subject-first, no mood words",
+      "intensity":        0.6,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURE — MANDATORY
+──────────────────────────────────────────────────────────────────────
+1. Beat 1 opens by naming the question or idea the video answers — curiosity,
+   not shock. No manufactured outrage; this is an explainer, not a reel.
+2. The middle beats develop the idea in ORDER: cause → mechanism → implication,
+   or problem → why it happens → what to do about it. Each beat should teach
+   ONE new piece of the picture — don't restate the previous beat.
+3. The final beat is a clear takeaway or a practical next step — not a
+   "follow for more" CTA.
+4. Beat count: 8-16, matched to how many distinct steps the topic actually
+   has. Don't pad to hit a number.
+
+──────────────────────────────────────────────────────────────────────
+WRITING RULES
+──────────────────────────────────────────────────────────────────────
+- Every beat text is 12-30 words. Total across all beats: under 170 words.
+- Explain plainly. Use "you" where natural, but prioritize CLARITY over hype.
+- BANNED PHRASES: "here's the thing" / "the truth is" / "most people" /
+  "follow for more" / "let's dive in".
+- Optional: wrap ONE word per sentence in *asterisks* to mark the landing word.
+
+──────────────────────────────────────────────────────────────────────
+CINEMATIC FIELDS
+──────────────────────────────────────────────────────────────────────
+- Give the video at least 3 different `camera` values and at least 2 `pace`
+  values across the whole script. Don't run the same camera 4+ beats in a row.
+- camera: hook=push_in; explanatory beats=static; payoff/cta=pull_out.
+- transition: cut as the neutral default between explanatory beats,
+  dip_black/fade into the payoff.
+- intensity: hook ~0.7-0.8, explanatory beats ~0.45-0.65 (this is a calmer
+  format than a TikTok reel — don't push everything to 0.9), payoff ~0.7.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL — it ignores emotion and metaphor. Every visual_query:
+1. LEADS WITH the global `subject` (or a concrete same-domain noun) — the
+   literal thing on screen, present in EVERY beat.
+2. Adds at most 1-2 VISUAL modifiers (lighting, angle, setting).
+3. NEVER uses feeling/abstraction words ("struggle", "journey", "freedom") —
+   they return generic nature/abstract stock instead of your topic.
+4. 2-4 words. Concrete + visual. Template: [subject] + [setting or lighting].
+
+──────────────────────────────────────────────────────────────────────
+EXAMPLE (9 beats — subject "server room")
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Why Your App Feels Slow",
+  "thumbnail": "The Hidden Latency Cost",
+  "style": "analytical",
+  "global": {{
+    "theme":        "tech_blue",
+    "music_mood":   "minimal",
+    "voice_style":  "analytical",
+    "camera_style": "static",
+    "subject":      "server room"
+  }},
+  "beats": [
+    {{
+      "id": "beat_01", "type": "hook", "keyword": "WHY IT LAGS",
+      "text": "Every time your app feels slow, there is one *specific* cause behind it almost nobody explains clearly.",
+      "energy": "high", "emotion": "confident", "pace": "fast", "visual_intent": "clean",
+      "camera": "push_in", "transition": "cut", "background": "glow", "layout": "left",
+      "visual_query": "server room lights night", "intensity": 0.75, "pattern_interrupt": "", "composition": ""
+    }},
+    {{
+      "id": "beat_02", "type": "insight", "keyword": "IT'S LATENCY",
+      "text": "It is almost always latency — the round-trip time between your device and the server doing the work.",
+      "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary",
+      "camera": "static", "transition": "cut", "background": "solid", "layout": "center",
+      "visual_query": "network cables data center", "intensity": 0.55, "pattern_interrupt": "", "composition": ""
+    }},
+    {{
+      "id": "beat_09", "type": "cta", "keyword": "CHECK YOUR PING",
+      "text": "Next time something feels slow, check the network tab before you blame the code.",
+      "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "minimal",
+      "camera": "pull_out", "transition": "dip_black", "background": "solid", "layout": "center",
+      "visual_query": "laptop browser devtools screen", "intensity": 0.7, "pattern_interrupt": "", "composition": ""
+    }}
+  ]
+}}
+(the full script has 9 beats — steps 3-8 omitted here for brevity, follow the same
+pattern: one new piece of the explanation per beat, in logical order)
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. Beat 1 names the question; last beat is a takeaway/next step, not a follow CTA.
+2. Beats build the explanation in order — no restating a prior beat.
+3. Each beat 12-30 words; total under 170.
+4. ≥3 cameras and ≥2 paces across the script; no camera repeated 4+ beats in a row.
+5. Every beat has a numeric intensity in [0.0, 1.0].
+6. Every visual_query is subject-first with no mood/abstraction words.
+
+Output the JSON only.

@@ -365,6 +365,21 @@ def _build_beat_contracts(
             "background":      bg,
             "visual_intent":   beat.get("visual_intent", ""),
             "visual_query":    beat.get("visual_query", ""),
+            # scene/3.0: which composition family this beat belongs to. Every
+            # beat defaults to "text_over_dimmed" (see llm.py's
+            # _normalise_schema) — today's only archetype, so this is a
+            # passthrough that doesn't change behavior on its own. Downstream
+            # (scene_export.py) uses it to decide whether to synthesize a
+            # `layers[]` breakdown for the beat.
+            "archetype":       beat.get("archetype", "text_over_dimmed"),
+            # scene/3.0 (phase 5): which SECTION this beat came from, and
+            # that section's pacing_arc (build|steady|rise_fall|wind_down) —
+            # see llm.py's _flatten_sections. Absent for every format that
+            # emits flat beats[] directly (i.e. everything except a
+            # sections-based long-form format). Forward-compat metadata only
+            # — nothing downstream reads it yet.
+            "section_id":      beat.get("section_id"),
+            "pacing_arc":      beat.get("pacing_arc"),
             "composition":     beat.get("composition") or None,
             "pattern_interrupt": beat.get("pattern_interrupt") or None,
             "intensity":       beat["intensity"] if isinstance(beat.get("intensity"), (int, float)) else None,

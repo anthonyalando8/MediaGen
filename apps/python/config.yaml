@@ -1,5 +1,42 @@
 llm:
   model: "gemma4:31b-cloud"     # llama3:8b or gemma4:31b-cloud or qwen3.5:2b qwen3-vl:235b-cloud
+  # ── Multi-provider fallback (apps/python/src/generation.py) ──────────────
+  # Script generation tries every ENABLED provider below, highest `priority`
+  # first, falling back to the next one on failure. Ollama is always the
+  # baseline/default: it's enabled with the highest priority even if this
+  # `providers:` block were removed entirely, and it uses the `model:` line
+  # above (omit `model:` here to keep that — set it explicitly to override).
+  # Every non-Ollama provider below starts DISABLED — free-tier providers
+  # only for now; flip `enabled: true` and set the matching env var (or
+  # apps/python/.env) to opt in. See docs/architecture/llm-provider-fallback.md.
+  providers:
+    ollama:
+      enabled: true
+      priority: 100
+      timeout_s: 180
+
+    # OpenRouter — free-tier models exist (IDs ending in ":free"; the free
+    # catalog rotates, check https://openrouter.ai/models?max_price=0).
+    openrouter:
+      enabled: false
+      priority: 80
+      model: "meta-llama/llama-3.1-8b-instruct:free"
+      api_key: ${OPENROUTER_API_KEY}
+
+    # Groq — generous free tier, fast inference on open models.
+    groq:
+      enabled: false
+      priority: 70
+      model: "llama-3.1-8b-instant"
+      api_key: ${GROQ_API_KEY}
+
+    # Google Gemini — free API tier (check https://ai.google.dev/pricing for
+    # current limits/models).
+    gemini:
+      enabled: false
+      priority: 60
+      model: "gemini-2.0-flash"
+      api_key: ${GEMINI_API_KEY}
 
 tts:
   voice: "auto"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel

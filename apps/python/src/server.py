@@ -62,6 +62,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))
 
 from llm import generate_script
 from formats import load_format, list_formats, DEFAULT_FORMAT
+import ingest
 from tts import synthesize, beat_durations, synthesize_preview, ENGLISH_VOICES, _ENGLISH_VOICE_IDS
 from captions.captions import generate_captions
 from captions.timeline import build_timeline, write_timeline
@@ -216,7 +217,8 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
              # For /api/scene/reroll: the effective media plan (mood/
              # allow_illustration) and a per-beat "already shown" set so a
              # reroll doesn't just hand back the same top candidate.
-             media_plan={"mood": media_plan.mood, "allow_illustration": media_plan.allow_illustration, "mode": media_plan.mode},
+             media_plan={"mood": media_plan.mood, "allow_illustration": media_plan.allow_illustration,
+                         "mode": media_plan.mode, "orientation": media_plan.orientation},
              reroll_seen={})
         LOG.info("job %s · DONE in %ss (%d beats)", job_id[:8], elapsed, len(scene.get("beats", [])))
     except Exception as e:
@@ -260,10 +262,26 @@ app.add_middleware(
 
 
 class GenerateRequest(BaseModel):
-    topic: str
+    # Either `topic` (a short phrase — today's behavior, unchanged) OR one of
+    # the `source_*` fields (existing content to turn into a script — see
+    # ingest.py) must be set. When a source is given, it takes priority: the
+    # extracted brief becomes the effective topic passed to generate_script,
+    # so no prompt.txt needs to change to support ingest.
+    topic: str = ""
+    # Article/blog/markdown/plain-text/user-written-script content, already
+    # decoded to text by the caller. `source_kind` picks the normalizer
+    # (see ingest.py's _NORMALIZERS): "markdown" | "plain_text" | "script".
+    source_text: str | None = None
+    source_kind: str = "plain_text"
+    # A PDF, base64-encoded by the caller (binary can't ride in JSON text).
+    # Extracted server-side via ingest.extract_pdf_text, then normalized the
+    # same way as source_text/"plain_text".
+    source_pdf_base64: str | None = None
     # Which format recipe to use (folder name under prompts/formats/). Defaults
     # to the original TikTok format so existing callers keep working unchanged.
-    format: str = DEFAULT_FORMAT
+    # Omit (leave unset) when ingesting a source and you want the ingest
+    # step's own length-based suggestion (see ingest._suggest_format) instead.
+    format: str | None = None
     resolve_visuals: bool = True
     # Optional editor override for the format's own media.mode (image/video/
     # hybrid/auto) — the picker's manual media-mode control. None (the
@@ -299,13 +317,50 @@ def formats() -> list[dict]:
     return list_formats(_PROMPTS_ROOT)
 
 
+def _ingest_source(req: "GenerateRequest") -> ingest.SourceBrief | None:
+    """Normalize whichever `source_*` field the request set, or None if it
+    set none (the plain-`topic` path — unchanged). Raises HTTPException on
+    bad/empty/unparseable source input so the caller gets a clear 400
+    instead of a pipeline failure three steps later."""
+    if req.source_pdf_base64:
+        try:
+            raw_bytes = base64.b64decode(req.source_pdf_base64)
+            text = ingest.extract_pdf_text(raw_bytes)
+        except RuntimeError as e:   # pypdf not installed
+            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Could not read PDF: {e}")
+        try:
+            return ingest.normalize_source(text, kind="plain_text")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    if req.source_text and req.source_text.strip():
+        try:
+            return ingest.normalize_source(req.source_text, kind=req.source_kind)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    return None
+
+
 @app.post("/api/scene/generate")
 def generate(req: GenerateRequest) -> dict:
-    topic = (req.topic or "").strip()
-    if not topic:
-        raise HTTPException(status_code=400, detail="topic is required")
+    brief = _ingest_source(req)
 
-    format_id = (req.format or DEFAULT_FORMAT).strip() or DEFAULT_FORMAT
+    if brief:
+        # An ingested source is more specific than a bare topic phrase —
+        # its brief_text (title/key points/quotes/stats) becomes the
+        # effective topic. req.topic, if also set, is ignored: mixing "here's
+        # an article" with an unrelated topic phrase would just confuse the
+        # prompt, not steer it.
+        topic = brief.brief_text
+    else:
+        topic = (req.topic or "").strip()
+        if not topic:
+            raise HTTPException(status_code=400, detail="topic is required (or provide source_text / source_pdf_base64)")
+
+    format_id = (req.format or (brief.suggested_format if brief else None) or DEFAULT_FORMAT).strip() or DEFAULT_FORMAT
     # Fail fast with a clear error if the format doesn't exist, rather than
     # surfacing it mid-job three steps later.
     try:
@@ -404,6 +459,7 @@ def reroll(req: RerollRequest) -> dict:
     found = resolve_visual(
         query, mood=media_plan["mood"], mode=mode,
         allow_illustration=media_plan["allow_illustration"], pace=pace, exclude=exclude,
+        orientation=media_plan.get("orientation", "portrait"),
     )
     if not found:
         raise HTTPException(status_code=404, detail="no alternative visual found for this beat")
@@ -412,7 +468,8 @@ def reroll(req: RerollRequest) -> dict:
     if not data and is_video:
         # Oversized/failed clip — same fallback scene_export.py uses.
         found = resolve_visual(query, mood=media_plan["mood"], mode="image",
-                                allow_illustration=media_plan["allow_illustration"], exclude=exclude)
+                                allow_illustration=media_plan["allow_illustration"], exclude=exclude,
+                                orientation=media_plan.get("orientation", "portrait"))
         if not found:
             raise HTTPException(status_code=404, detail="no alternative visual found for this beat")
         is_video = False
@@ -421,9 +478,11 @@ def reroll(req: RerollRequest) -> dict:
         raise HTTPException(status_code=502, detail="could not download the resolved visual")
 
     new_iid = f"{'vid' if is_video else 'img'}_{req.beat_index}"
+    # width/height deliberately omitted — see scene_export.py's matching note.
+    # Setting them makes imageBox() contain-fit to native aspect, which
+    # defeats fit:"cover"'s full-bleed crop whenever the photo's aspect
+    # isn't an exact match for the frame.
     new_asset = {"id": new_iid, "kind": found["kind"], "url": data["url"]}
-    if data.get("width") and data.get("height"):
-        new_asset["width"], new_asset["height"] = data["width"], data["height"]
     if is_video and found.get("duration_ms"):
         new_asset["duration_ms"] = found["duration_ms"]
     new_visual = {

@@ -7,6 +7,9 @@ pillow
 numpy
 soundfile
 
+# ── content ingest (articles/PDF -> script input, see ingest.py) ────────────
+pypdf
+
 # ── TTS (replaces piper) ──────────────────────────────────────────────────────
 kokoro-onnx
 

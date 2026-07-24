@@ -18,12 +18,12 @@ The CINEMATIC VOCABULARY below (`_ALLOWED`, `_DEFAULTS_BY_TYPE`,
 contract every format must normalise toward, so it stays shared here.
 """
 
-import subprocess
 import pathlib
 import json
 import re
 import sys
 from llm_fix_duplicates import fix_duplicate_word_fragments
+from generation import generate
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cinematic vocabulary — must match renderer/inject.js + scenes contracts.
@@ -66,17 +66,119 @@ _TRANSITION_BY_TYPE = {
     "truth": "cut",     "insight": "cut",
 }
 
+# scene/3.0 archetype registry — see docs/scene-3.0-schema.md. Only
+# "text_over_dimmed" is consumed by the renderer today (it's the shim that
+# reproduces current beat-contract behavior exactly); the rest are declared
+# here so a future composer pass (phase 4) can assign them without a second
+# vocabulary edit, and so _normalise_schema can validate the field instead of
+# silently accepting typos.
+_ALLOWED_ARCHETYPES = {
+    "text_over_dimmed", "full_bleed_video", "bare_visual", "split_screen",
+    "pip", "quote_card", "stat_callout", "comparison", "broll_montage",
+    "title_card", "kinetic_type", "lower_third",
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# scene/3.0 composer pass — archetype assignment ("cut-list")
+# ─────────────────────────────────────────────────────────────────────────────
+# Deterministic and format-agnostic on purpose: no extra LLM call, no
+# network, fully unit-testable. It's the "anti-repetition rule in code, not
+# just prompt" the design doc calls for — a format opts in by adding
+# `variety.min_archetypes` to its format.yaml (see formats.py's
+# ValidationProfile.variety); omitting it (every format today except
+# shortform_tiktok) leaves every beat on the "text_over_dimmed" default,
+# unchanged. Only archetypes with an actual layer synthesizer AND renderer
+# support are candidates — assigning one nothing can render would silently
+# no-op (scene_export.py falls back to flat-field rendering for an
+# unrecognized archetype), defeating the point.
+_ARCHETYPE_TYPE_AFFINITY = {
+    # archetype -> beat `type`s it suits, checked in this priority order.
+    # (many entries overlap on purpose — a script with several eligible
+    # beats gets a different archetype on each, in this priority order,
+    # rather than all beats of one type collapsing to the same look.)
+    "comparison":       {"flip", "truth"},          # "weighing two things" — the divider IS the point
+    "split_screen":     {"payoff"},                 # plain two-panel reveal, no divider framing needed
+    "pip":              {"tension", "climax"},      # a simultaneous-view moment (reaction over action, etc.)
+    "title_card":       {"hook"},                   # the video's own opening beat AS a title card, not a caption
+    "full_bleed_video":  {"climax", "tension"},      # a pure motion moment, no text competing for attention
+    "bare_visual":      {"insight", "tension"},     # explanatory beats that can breathe without text
+    "stat_callout":     {"insight", "truth"},       # a number/short claim worth making large
+    "quote_card":       {"truth", "payoff"},        # punchy, quotable statements
+    # Lower priority — fire only when higher-priority archetypes above
+    "broll_montage":    {"insight", "climax"},      # energetic explanatory or peak-impact beats
+    "kinetic_type":     {"flip", "climax"},         # a punchy reframe/reveal moment
+    "lower_third":       {"insight", "truth"},       # an identifying/informational caption over visuals
+}
+
+
+def assign_composition(data: dict, profile) -> dict:
+    """
+    Overrides a handful of beats' default "text_over_dimmed" archetype based
+    on their rhetorical `type`, so a script doesn't render as an unbroken run
+    of the same composition. No-ops entirely if the format's
+    `variety.min_archetypes` isn't set (>1) — matches `calm_narrative`'s
+    existing "variety: {}" opt-out convention: a format that doesn't ask for
+    variety gates doesn't get archetype diversification either.
+    """
+    variety = getattr(profile, "variety", None) or {}
+    min_archetypes = int(variety.get("min_archetypes", 0) or 0)
+    max_consecutive = int(variety.get("max_consecutive_archetype", 0) or 0)
+    beats = data.get("beats", [])
+    if min_archetypes <= 1 or len(beats) < 2:
+        return data
+
+    assigned = {"text_over_dimmed"}
+    for archetype, wanted_types in _ARCHETYPE_TYPE_AFFINITY.items():
+        if len(assigned) >= min_archetypes:
+            break
+        for beat in beats:
+            if beat.get("archetype", "text_over_dimmed") != "text_over_dimmed":
+                continue  # already claimed by a higher-priority archetype this pass
+            if beat.get("type") not in wanted_types:
+                continue
+            beat["archetype"] = archetype
+            assigned.add(archetype)
+            break
+
+    # Code-level guarantee (not just a prompt hope): no archetype repeats
+    # more than `max_consecutive` beats in a row. With ≤1 pick per archetype
+    # above this can't actually fire today, but it's the enforcement point
+    # once assignment gets smarter (e.g. an LLM-driven cut-list pass).
+    if max_consecutive > 0:
+        run_val, run_len = None, 0
+        for beat in beats:
+            a = beat.get("archetype", "text_over_dimmed")
+            if a == run_val:
+                run_len += 1
+            else:
+                run_val, run_len = a, 1
+            if run_len > max_consecutive:
+                beat["archetype"] = "text_over_dimmed"
+                run_val, run_len = "text_over_dimmed", 1
+
+    return data
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_script(topic: str, fmt, model: str) -> dict:
+def generate_script(topic: str, fmt, model: str | None = None) -> dict:
     """
-    Generate a structured script via Ollama for the given format.
+    Generate a structured script via the configured LLM provider (see
+    generation.py — provider + model selection now live entirely in
+    config.yaml's `llm` block, with automatic priority-ordered fallback
+    across every enabled provider).
 
     `fmt` is a formats.Format (prompt + validation profile). Retries up to 3
-    times on bad output OR profile-gate failure.
+    times on bad output OR profile-gate failure — each attempt re-runs
+    generation.generate()'s own fallback chain from the top, so a transient
+    failure on every provider doesn't burn the whole retry budget in one shot.
+
+    `model` is accepted for back-compat with existing callers (main.py/
+    server.py currently pass `CFG["llm"]["model"]`) but is IGNORED — model
+    selection is config.yaml's job now, not the caller's.
     """
     prompt = fmt.prompt.format(topic=topic)
     profile = fmt.profile
@@ -85,13 +187,9 @@ def generate_script(topic: str, fmt, model: str) -> dict:
     for attempt in range(1, 4):
         print(f"[llm] Generating script (format={fmt.id}, attempt {attempt}/3)…")
         try:
-            raw = subprocess.check_output(
-                ["ollama", "run", model, prompt],
-                text=True,
-                stderr=subprocess.DEVNULL,
-                timeout=180,   # hard guard: a wedged model call fails → retry, not hang
-            )
+            raw = generate(prompt)
             data = _parse_json(raw.strip())
+            data = assign_composition(data, profile)
             _validate(data, profile)
             print(f"[llm] ✓ Script OK — \"{data['title']}\"")
             _print_cinematic_summary(data)
@@ -208,9 +306,55 @@ def _normalise_schema(data: dict) -> dict:
             if beat.get(field) and beat[field] not in _ALLOWED[field]:
                 beat[field] = ""   # silently fall back; visuals.py will re-pick
 
+        # scene/3.0: composition family. No format/prompt emits this yet, so
+        # every beat lands on "text_over_dimmed" — today's only archetype,
+        # equivalent to current output. A later composer pass (cut-list,
+        # phase 4) can set beat["archetype"] before this runs; this only
+        # fills the gap when it's absent.
+        if beat.get("archetype") not in _ALLOWED_ARCHETYPES:
+            beat["archetype"] = "text_over_dimmed"
+
     # top-level optional fields
     data.setdefault("thumbnail", data.get("keyword", ""))
     data.setdefault("style", "analytical")
+    return data
+
+
+# ---------------------------------------------------------------------------
+# Internals — section hierarchy (phase 5: long-form)
+# ---------------------------------------------------------------------------
+
+def _flatten_sections(data: dict) -> dict:
+    """
+    Canonicalize a script's beat list. A long-form format's prompt MAY ask
+    the model for `sections: [{id, pacing_arc, beats: [...]}]` instead of a
+    flat top-level `beats[]` — grouping an intro/body/conclusion (or
+    chapters) so a 5-30 minute script has real structure instead of one
+    undifferentiated beat list. This flattens `sections[]` into ONE
+    top-level `data["beats"]`, in order, stamping each beat with
+    `section_id`/`pacing_arc` from its section — so every downstream
+    consumer (_normalise_schema, _validate, visuals.py, scene_export.py)
+    keeps working off a flat beat list and never has to know sections exist.
+    `pacing_arc` rides along as forward-compat metadata (same pattern as
+    `archetype` before phase 4 consumed it) — nothing reads it yet.
+
+    Back-compat: `sections` absent (every format before this existed, and
+    any format that just emits `beats[]` directly) is a no-op — `data`
+    passes through untouched.
+    """
+    sections = data.get("sections")
+    if not sections:
+        return data
+
+    flat: list[dict] = []
+    for si, section in enumerate(sections):
+        pacing_arc = section.get("pacing_arc") or "steady"
+        section_id = section.get("id") or f"section_{si}"
+        for beat in section.get("beats", []) or []:
+            beat.setdefault("pacing_arc", pacing_arc)
+            beat.setdefault("section_id", section_id)
+            flat.append(beat)
+    data["beats"] = flat
     return data
 
 
@@ -230,6 +374,7 @@ def _parse_json(raw: str) -> dict:
     blob = _sanitize_json_strings(blob)
 
     data = json.loads(blob)
+    data = _flatten_sections(data)
     data = _clean_beat_texts(data)
     data = _normalise_schema(data)
     return data

@@ -1,0 +1,36 @@
+id: explainer_1min
+label: "Explainer (1 minute)"
+description: "A single-topic explainer for YouTube/web — landscape, calmer pacing than a TikTok hook, still tight. One clear idea, developed in a few steps, no numbered-list structure required."
+
+default_resolve_visuals: true
+
+beats: { min: 8, max: 16 }
+words_per_beat: { min: 12, max: 30 }
+total_words: { max: 170 }
+require_emphasis: false
+
+# A notch looser than shortform_tiktok (this is landscape/web, not a
+# TikTok hook-reel) but still wants real variety — it's twice the beat
+# count of shortform, so a stiff repeat run is more noticeable, not less.
+variety:
+  min_cameras: 3
+  min_paces: 2
+  min_layouts: 2
+  max_consecutive_camera: 3
+  # scene/3.0 composer pass — same mechanism shortform_tiktok/listicle use.
+  min_archetypes: 3
+  max_consecutive_archetype: 3
+
+voice:
+  style: analytical
+
+visuals:
+  intensity_curve: normal
+  looseness: 0.15
+
+# landscape delivery — see docs/architecture/scene-3.0-schema.md's Phase 1
+# note: this is what makes media_resolve.py request landscape-oriented
+# stock instead of the portrait default.
+media:
+  mode: image
+  orientation: landscape

@@ -33,6 +33,12 @@ export interface SceneFormat {
 
 export type MediaMode = "auto" | "image" | "video" | "hybrid";
 
+/** How to interpret pasted/uploaded `sourceText` — mirrors ingest.py's
+ * `_NORMALIZERS` keys. "plain_text" for an article/blog paste, "markdown"
+ * for a doc with #/## headings, "script" for the user's own draft narration
+ * (kept line-for-line rather than summarized). */
+export type SourceKind = "plain_text" | "markdown" | "script";
+
 /** One English voice option for the picker (GET /api/voice/list). */
 export interface VoiceOption {
   id: string;
@@ -78,8 +84,22 @@ export interface GenerateProgress {
 export class SceneGenerateError extends Error {}
 
 interface GenerateOptions {
-  topic: string;
-  /** Format recipe id (folder under prompts/formats/). Defaults server-side. */
+  /** A short topic phrase. Required UNLESS `sourceText`/`sourcePdfBase64` is
+   * given — an ingested source takes priority over `topic` server-side (see
+   * server.py's `_ingest_source`), so this is optional in content mode. */
+  topic?: string;
+  /** Existing content to generate from instead of a bare topic — an article,
+   * blog post, markdown doc, or the user's own draft script (see
+   * `sourceKind`). Mutually exclusive with `sourcePdfBase64` (send at most
+   * one); if both are set the server ignores `sourceText`. */
+  sourceText?: string;
+  sourceKind?: SourceKind;
+  /** A PDF, base64-encoded client-side (binary can't ride in JSON text).
+   * Extracted + normalized server-side the same as `sourceText`. */
+  sourcePdfBase64?: string;
+  /** Format recipe id (folder under prompts/formats/). Omit to let the
+   * server decide: today's flat default, OR — when a source is given —
+   * ingest's own length-based suggestion (see ingest._suggest_format). */
   format?: string;
   resolveVisuals?: boolean;
   /** Override the format's own media.mode for this generation. Omitted = format's own choice. */
@@ -128,7 +148,10 @@ export async function listFormats(signal?: AbortSignal): Promise<SceneFormat[]> 
 export async function generateScene(opts: GenerateOptions): Promise<{ scene: any; title?: string; jobId: string }> {
   const {
     topic,
-    format = DEFAULT_FORMAT,
+    sourceText,
+    sourceKind,
+    sourcePdfBase64,
+    format,
     resolveVisuals = true,
     mediaMode,
     voiceId,
@@ -137,14 +160,24 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
     pollMs = 1200,
   } = opts;
 
+  const hasSource = !!(sourcePdfBase64 || (sourceText && sourceText.trim()));
+  if (!hasSource && !(topic && topic.trim())) {
+    throw new SceneGenerateError("topic is required (or provide sourceText / sourcePdfBase64)");
+  }
+
   const { job_id } = await j<{ job_id: string }>(
     await fetch(`${SCENE_API_BASE}/api/scene/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        topic, format, resolve_visuals: resolveVisuals,
+        topic: topic ?? "", resolve_visuals: resolveVisuals,
+        ...(format ? { format } : {}),
         ...(mediaMode ? { media_mode: mediaMode } : {}),
         ...(voiceId ? { voice_id: voiceId } : {}),
+        // At most one of these two — sourcePdfBase64 takes priority
+        // server-side if somehow both were set.
+        ...(sourcePdfBase64 ? { source_pdf_base64: sourcePdfBase64 } : {}),
+        ...(!sourcePdfBase64 && sourceText?.trim() ? { source_text: sourceText, source_kind: sourceKind ?? "plain_text" } : {}),
       }),
       signal,
     })

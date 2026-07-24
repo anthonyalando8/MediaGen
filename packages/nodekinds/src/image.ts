@@ -14,7 +14,14 @@ export const imageKind: NodeKind = {
   displayName: "Image",
   category: "media",
   schema: {
-    props: z.object({ fit: FitSchema }),
+    props: z.object({
+      fit: FitSchema,
+      // scene/3.0: fractional (0..1) sub-region of the frame — see imageBox().
+      boxX: z.number().min(0).max(1).optional(),
+      boxY: z.number().min(0).max(1).optional(),
+      boxW: z.number().min(0).max(1).optional(),
+      boxH: z.number().min(0).max(1).optional(),
+    }),
     channels: [],
     inspector: [
       { path: "source.assetId", label: "Image", control: "asset" },
@@ -55,9 +62,22 @@ export const imageKind: NodeKind = {
  * function was introduced to fix).
  */
 export function imageBox(node: Node, ctx: EvalCtx): Rect {
+  const { width: frameW, height: frameH } = ctx.size;
+
+  // scene/3.0 archetypes (split_screen today; PiP later): a node can claim a
+  // fractional sub-region of the frame instead of the whole comp via
+  // `props.boxX/boxY/boxW/boxH` (0..1 of frame). When present it IS the
+  // target box outright — `fit` still crops/covers the asset into it exactly
+  // like the full-frame case below, just smaller. Absent (every node before
+  // this existed, and every node that doesn't opt in) falls through to the
+  // unchanged full-frame behavior.
+  const { boxX, boxY, boxW, boxH } = node.props;
+  if (typeof boxX === "number" && typeof boxY === "number" && typeof boxW === "number" && typeof boxH === "number") {
+    return { x: boxX * frameW, y: boxY * frameH, width: boxW * frameW, height: boxH * frameH };
+  }
+
   const assetId = node.source?.assetId;
   const dims = assetId ? ctx.resolveAsset?.(assetId) : undefined;
-  const { width: frameW, height: frameH } = ctx.size;
 
   if (!dims || dims.width <= 0 || dims.height <= 0) {
     return { x: 0, y: 0, width: frameW, height: frameH };
