@@ -41,6 +41,50 @@ def _wav_data_url(path: pathlib.Path) -> str:
     return f"data:audio/wav;base64,{b64}"
 
 
+# ── Background music (flat volume — see docs/architecture/
+# phase5-6-longform-ingest-audio.md's "Background music" section for what
+# this is and isn't) ─────────────────────────────────────────────────────
+_BGM_EXTS = (".mp3", ".wav", ".m4a", ".ogg", ".flac")
+_BGM_MIME = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".ogg": "audio/ogg", ".flac": "audio/flac"}
+
+
+def _select_bgm(bgm_dir: pathlib.Path, mood: str) -> pathlib.Path | None:
+    """
+    Picks one file from `bgm_dir` for this script's music, or None if the
+    directory doesn't exist / is empty — background music is entirely
+    opt-in by dropping files in, never a hard requirement (a script
+    generated before any BGM files exist behaves exactly as it always has).
+
+    Selection: an exact `<mood>.<ext>` match (case-insensitive) for the
+    script's `global.music_mood` first (see assets/bgm/README.md for the
+    mood vocabulary every format actually generates); falling back to a
+    file literally named `default.<ext>`; falling back to the first file
+    alphabetically — so dropping in even ONE file already gets background
+    music working, no mood-matching required.
+    """
+    if not bgm_dir.is_dir():
+        return None
+    files = sorted(p for p in bgm_dir.iterdir() if p.is_file() and p.suffix.lower() in _BGM_EXTS)
+    if not files:
+        return None
+
+    mood_norm = (mood or "").strip().lower()
+    if mood_norm:
+        for p in files:
+            if p.stem.lower() == mood_norm:
+                return p
+    for p in files:
+        if p.stem.lower() == "default":
+            return p
+    return files[0]
+
+
+def _bgm_data_url(path: pathlib.Path) -> str:
+    b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+    mime = _BGM_MIME.get(path.suffix.lower(), "audio/mpeg")
+    return f"data:{mime};base64,{b64}"
+
+
 def _composition_size(cfg: dict, orientation: str) -> tuple[int, int]:
     """
     The scene's actual canvas width/height — derived from config.yaml's
@@ -503,6 +547,16 @@ def build_scene(
             beat_durations_ms, [c.get("word_times", []) for c in contracts],
         )
 
+    # Background music — entirely opt-in (see assets/bgm/README.md): no-ops
+    # to today's exact behavior (no bgm asset, no bgm track) whenever the
+    # directory is missing/empty, which it is until someone drops files in.
+    bgm_entry = None
+    bgm_dir = pathlib.Path(cfg.get("paths", {}).get("bgm", "assets/bgm"))
+    bgm_path = _select_bgm(bgm_dir, (script.get("global", {}) or {}).get("music_mood", ""))
+    if bgm_path:
+        assets.append({"id": "bgm", "kind": "audio", "url": _bgm_data_url(bgm_path)})
+        bgm_entry = {"asset_id": "bgm", "volume": cfg.get("video", {}).get("bgm_volume", 0.1)}
+
     comp_w, comp_h = _composition_size(cfg, media_plan.orientation)
     scene = {
         "video_id": out_dir.name,
@@ -522,11 +576,14 @@ def build_scene(
     }
     if music_automation is not None:
         scene["music_automation"] = music_automation
+    if bgm_entry is not None:
+        scene["bgm"] = bgm_entry
 
     scene_path = pathlib.Path(out_dir) / "scene.json"
     scene_path.write_text(json.dumps(scene, indent=2, ensure_ascii=False), encoding="utf-8")
 
     n_img = sum(1 for a in assets if a["kind"] == "image")
     n_aud = sum(1 for a in assets if a["kind"] == "audio")
-    print(f"[scene] ✓ scene.json — {len(contracts)} beats, {n_img} images, {n_aud} VO clips embedded")
+    bgm_note = f", bgm={bgm_path.name}" if bgm_path else ""
+    print(f"[scene] ✓ scene.json — {len(contracts)} beats, {n_img} images, {n_aud} audio clips embedded{bgm_note}")
     return scene_path

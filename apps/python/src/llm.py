@@ -18,6 +18,8 @@ The CINEMATIC VOCABULARY below (`_ALLOWED`, `_DEFAULTS_BY_TYPE`,
 contract every format must normalise toward, so it stays shared here.
 """
 
+import hashlib
+import math
 import pathlib
 import json
 import re
@@ -78,6 +80,24 @@ _ALLOWED_ARCHETYPES = {
     "title_card", "kinetic_type", "lower_third",
 }
 
+# Text-bearing vs textless split of the registry above — used by the composer
+# pass below to protect on-screen meaning. Textless archetypes (scene_export.py
+# synthesizers with no `role: "text"` layer) rely entirely on the image +
+# narration audio to carry the beat; text-bearing ones still show a caption/
+# label. Must partition _ALLOWED_ARCHETYPES exactly (see test_generation.py).
+_TEXT_BEARING_ARCHETYPES = {
+    "text_over_dimmed", "title_card", "quote_card",
+    "stat_callout", "kinetic_type", "lower_third",
+}
+_TEXTLESS_ARCHETYPES = {
+    "bare_visual", "split_screen", "comparison",
+    "pip", "full_bleed_video", "broll_montage",
+}
+# Beat `type`s where the caption text itself carries the point being made
+# (as opposed to hook/tension/climax/flip/payoff/cta, which are more about
+# pacing/structure and read fine — sometimes better — without a caption).
+_CONTENT_CARRYING_TYPES = {"insight", "truth"}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # scene/3.0 composer pass — archetype assignment ("cut-list")
@@ -112,14 +132,66 @@ _ARCHETYPE_TYPE_AFFINITY = {
 }
 
 
+_DENSITY_PER_MIN_ARCHETYPE = 0.10
+
+
+def _diversification_budget(n_beats: int, min_archetypes: int) -> int:
+    """How many beats `assign_composition` should move off the default
+    archetype, total. Scales with script length (via `n_beats`) and with how
+    aggressively the format asks for variety (via `min_archetypes`, now a
+    density dial rather than a hard distinct-archetype target — see
+    `assign_composition`'s docstring). `min_archetypes - 1` — today's old
+    fixed cap — becomes a FLOOR, and `n_beats // 3` is a ceiling so
+    diversified beats always stay a clear minority against `text_over_dimmed`."""
+    if min_archetypes <= 1:
+        return 0
+    raw = math.ceil(n_beats * _DENSITY_PER_MIN_ARCHETYPE * min_archetypes)
+    floor_val = min_archetypes - 1
+    cap_val = n_beats // 3
+    return max(0, min(cap_val, max(floor_val, raw)))
+
+
+def _candidates_for(beat_type: str, content_safe: bool) -> list[str]:
+    """Archetypes (in _ARCHETYPE_TYPE_AFFINITY priority order) that suit this
+    beat `type`. `content_safe=True` restricts to _TEXT_BEARING_ARCHETYPES —
+    used for insight/truth beats, where the caption itself carries the point
+    and a textless archetype would silently delete it."""
+    return [
+        a for a, wanted in _ARCHETYPE_TYPE_AFFINITY.items()
+        if beat_type in wanted and (not content_safe or a in _TEXT_BEARING_ARCHETYPES)
+    ]
+
+
+def _stable_pick(candidates: list[str], beat: dict) -> str:
+    """Deterministic choice among tied candidates, seeded from the beat's own
+    text — NOT Python's unseeded `random` — so `assign_composition` stays
+    reproducible (same script in -> same archetypes out) without needing a
+    threaded-through seed."""
+    key = (beat.get("text") or beat.get("keyword") or "").encode("utf-8")
+    return candidates[int(hashlib.md5(key).hexdigest(), 16) % len(candidates)]
+
+
 def assign_composition(data: dict, profile) -> dict:
     """
-    Overrides a handful of beats' default "text_over_dimmed" archetype based
-    on their rhetorical `type`, so a script doesn't render as an unbroken run
-    of the same composition. No-ops entirely if the format's
+    Overrides a length-scaled BUDGET of beats' default "text_over_dimmed"
+    archetype based on their rhetorical `type`, so a script doesn't render as
+    an unbroken run of the same composition. No-ops entirely if the format's
     `variety.min_archetypes` isn't set (>1) — matches `calm_narrative`'s
     existing "variety: {}" opt-out convention: a format that doesn't ask for
     variety gates doesn't get archetype diversification either.
+
+    `min_archetypes` is a density dial now, not a guaranteed distinct-
+    archetype count (see `_diversification_budget`) — a low-type-diversity
+    script (e.g. every beat typed "cta", which no archetype in
+    `_ARCHETYPE_TYPE_AFFINITY` wants) can legitimately end up with FEWER
+    than `min_archetypes` distinct archetypes used; nothing downstream
+    validates against this value (`_validate_cinematic_variety` doesn't
+    recognise it), so that's safe.
+
+    Budget is spent on structural beats (hook/tension/climax/flip/payoff/cta)
+    first, then on content-carrying beats (insight/truth) restricted to
+    text-bearing archetypes only — spending it the other way round would
+    strip captions from exactly the beats whose caption IS the content.
     """
     variety = getattr(profile, "variety", None) or {}
     min_archetypes = int(variety.get("min_archetypes", 0) or 0)
@@ -128,23 +200,41 @@ def assign_composition(data: dict, profile) -> dict:
     if min_archetypes <= 1 or len(beats) < 2:
         return data
 
-    assigned = {"text_over_dimmed"}
-    for archetype, wanted_types in _ARCHETYPE_TYPE_AFFINITY.items():
-        if len(assigned) >= min_archetypes:
+    budget = _diversification_budget(len(beats), min_archetypes)
+    if budget <= 0:
+        return data
+
+    def _is_default(b):
+        return b.get("archetype", "text_over_dimmed") == "text_over_dimmed"
+
+    structural_idx = [
+        i for i, b in enumerate(beats)
+        if _is_default(b) and b.get("type") not in _CONTENT_CARRYING_TYPES
+        and _candidates_for(b.get("type"), content_safe=False)
+    ]
+    content_idx = [
+        i for i, b in enumerate(beats)
+        if _is_default(b) and b.get("type") in _CONTENT_CARRYING_TYPES
+        and _candidates_for(b.get("type"), content_safe=True)
+    ]
+
+    spent = 0
+    for i in structural_idx:
+        if spent >= budget:
             break
-        for beat in beats:
-            if beat.get("archetype", "text_over_dimmed") != "text_over_dimmed":
-                continue  # already claimed by a higher-priority archetype this pass
-            if beat.get("type") not in wanted_types:
-                continue
-            beat["archetype"] = archetype
-            assigned.add(archetype)
+        b = beats[i]
+        b["archetype"] = _stable_pick(_candidates_for(b.get("type"), content_safe=False), b)
+        spent += 1
+    for i in content_idx:
+        if spent >= budget:
             break
+        b = beats[i]
+        b["archetype"] = _stable_pick(_candidates_for(b.get("type"), content_safe=True), b)
+        spent += 1
 
     # Code-level guarantee (not just a prompt hope): no archetype repeats
-    # more than `max_consecutive` beats in a row. With ≤1 pick per archetype
-    # above this can't actually fire today, but it's the enforcement point
-    # once assignment gets smarter (e.g. an LLM-driven cut-list pass).
+    # more than `max_consecutive` beats in a row — now actually exercised,
+    # since a real budget of beats gets reassigned above.
     if max_consecutive > 0:
         run_val, run_len = None, 0
         for beat in beats:

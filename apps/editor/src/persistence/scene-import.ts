@@ -124,6 +124,15 @@ export interface SceneDoc {
   brand?: string;
   assets?: SceneAsset[];                 // NEW (v2): resolved media library
   beats?: SceneBeat[];
+  /** Background music (see assets/bgm/README.md — entirely opt-in
+   * server-side, absent unless a bgm file matched). Flat volume only for
+   * now — no ducking-during-playback yet, see music_automation below. */
+  bgm?: { asset_id: string; volume?: number };
+  /** Reserved — gain-over-time keyframes for ducking `bgm` under narration
+   * (audio_mix.py). Not read here yet: AudioTrack has no time-varying gain
+   * concept to sample this into. See docs/architecture/
+   * phase5-6-longform-ingest-audio.md's audio-automation section. */
+  music_automation?: { at_ms: number; gain_db: number }[];
 }
 
 /** A beat's visual after its asset kind has been resolved against `assets[]`. */
@@ -1374,6 +1383,31 @@ export function compileSceneToProject(scene: SceneDoc): Project {
     cursor += durFrames;
   }
   const totalFrames = Math.max(1, cursor);
+
+  // Background music (see assets/bgm/README.md — entirely opt-in
+  // server-side; `scene.bgm` is absent unless a file matched). Flat volume,
+  // looped across the whole composition — `loop: true` because a several-
+  // minute-long generated video will usually outlast a shorter music bed.
+  // No ducking-during-playback yet — see SceneDoc.music_automation's doc
+  // comment for exactly why not.
+  if (scene.bgm?.asset_id && assetKind.get(scene.bgm.asset_id) === "audio") {
+    audioTracks.push({
+      id: createId(),
+      assetId: scene.bgm.asset_id,
+      name: "Background music",
+      startFrame: 0,
+      endFrame: totalFrames,
+      trimIn: 0,
+      trimOut: undefined,
+      volume: scene.bgm.volume ?? 0.1,
+      fadeIn: 0,
+      fadeOut: 0,
+      loop: true,
+      muted: false,
+      solo: false,
+      lane: 1,
+    });
+  }
 
   const comp: Composition = {
     id: createId(),

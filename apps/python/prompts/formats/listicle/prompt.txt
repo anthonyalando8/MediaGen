@@ -34,7 +34,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "transition":    "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
       "background":    "solid | gradient | grid | glow | lines",
       "layout":        "left | center | right | full",
-      "visual_query":  "2-4 word LITERAL image search, subject-first, no mood words",
+      "visual_query":  "2-4 word LITERAL image search: concrete same-domain noun (beat-specific preferred), no mood words",
       "intensity":     0.7
     }}
   ]
@@ -74,13 +74,17 @@ CINEMATIC FIELDS
 VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
 ──────────────────────────────────────────────────────────────────────
 Image search is LITERAL — it ignores emotion and metaphor. Every visual_query:
-1. LEADS WITH the global `subject` (or a concrete same-domain noun) — the literal
-   thing on screen, present in EVERY beat.
+1. Is a concrete, same-domain noun — the literal thing on screen. It does NOT have
+   to repeat the global `subject` string itself: prefer the noun closest to THIS
+   beat's specific item over reusing the same subject phrase beat after beat
+   (repeating it every beat produces one narrow, generic-looking stock genre
+   instead of each item's own moment). Fall back to `subject` only when the beat
+   has no concrete noun of its own.
 2. Adds at most 1-2 VISUAL modifiers (lighting, angle, setting): "night", "close up",
    "macro", "overhead", "office", "screen glow".
 3. NEVER uses feeling/abstraction words ("struggle", "journey", "freedom", "mind") —
    they return generic nature/abstract stock instead of your topic.
-4. 2-4 words. Concrete + visual. Template: [subject] + [setting or lighting].
+4. 2-4 words. Concrete + visual. Template: [beat-specific noun, or subject as fallback] + [setting or lighting].
 
 ──────────────────────────────────────────────────────────────────────
 FINAL CHECKLIST (rewrite if any fail):
@@ -90,6 +94,7 @@ FINAL CHECKLIST (rewrite if any fail):
 3. Each beat 10-28 words; total under 240.
 4. ≥2 cameras and ≥2 layouts across the script; no camera repeated 4+ beats in a row.
 5. Every beat has a numeric intensity in [0.0, 1.0].
-6. Every visual_query is subject-first with no mood/abstraction words.
+6. Every visual_query is a concrete same-domain noun (not necessarily the literal
+   subject) with no mood/abstraction words.
 
 Output the JSON only.

@@ -31,7 +31,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "transition":       "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
       "background":       "solid | gradient | noise | grid | glow | lines | abstract",
       "layout":           "left | center | right | full",
-      "visual_query":     "2-4 word LITERAL image search. Lead with a concrete photographable subject from the topic domain. No mood/emotion words. See VISUAL QUERY rules.",
+      "visual_query":     "2-4 word LITERAL image search: concrete same-domain noun (beat-specific preferred over the global subject). No mood/emotion words. See VISUAL QUERY rules.",
       "intensity":        0.55,
       "pattern_interrupt":"",
       "composition":      ""
@@ -123,9 +123,13 @@ your topic. A query that is too niche returns ZERO results and the API falls bac
 to a random unrelated photo. Both are why a coding video shows a mountain.
 
 RULES (all mandatory):
-1. SUBJECT FIRST. Every visual_query MUST begin with the global `subject` (or a
-   concrete photographable noun from the same topic domain) — the literal thing on
-   screen, not the feeling. The topic subject must be present in EVERY beat.
+1. SAME-DOMAIN CONCRETE NOUN. Every visual_query must be a concrete, photographable
+   noun from the topic's domain — the literal thing on screen, not the feeling. It
+   does NOT have to repeat the global `subject` string itself: prefer whatever
+   concrete noun is closest to THIS beat's specific content (a calendar for a
+   scheduling beat, a phone for a tracking beat, a mirror for a self-assessment
+   beat) over reusing the same subject phrase beat after beat. Fall back to the
+   literal `subject` only when the beat has no concrete noun of its own to reach for.
 2. Then add AT MOST 1-2 VISUAL modifiers only: lighting, angle, or setting
    ("night", "close up", "macro", "blue light", "office", "screen glow", "overhead").
 3. BANNED in queries — emotions and abstractions: "solitude", "struggle", "journey",
@@ -135,7 +139,7 @@ RULES (all mandatory):
    use the nearest common, photographable proxy.
 5. 2-4 words. Concrete + visual. No mood.
 
-Template:  [subject] + [setting or lighting]
+Template:  [beat-specific noun, or the subject as fallback] + [setting or lighting]
 
 For a PROGRAMMING topic (subject "laptop code"):
   Good: "laptop code screen night" / "developer dark office" / "server room blue"
@@ -143,10 +147,19 @@ For a PROGRAMMING topic (subject "laptop code"):
   Bad:  "dark solitude" / "mountain journey" / "abstract struggle" / "deep focus"
         / "mind racing" / "digital freedom"   ← all return landscapes/abstract
 
-Every beat, regardless of emotion, stays ON the topic subject. Emotion is carried by
+For a FITNESS topic (subject "fitness athlete"):
+  Also bad — repeating the identical subject phrase on every beat: "fitness athlete
+  stretching" / "fitness athlete calendar" / "fitness athlete phone" / "fitness
+  athlete mirror"... Technically concrete, but the whole video ends up as one
+  narrow genre of generic athlete stock instead of each beat's own moment.
+  Prefer: "workout calendar planner" / "phone fitness app screen" / "mirror gym
+  reflection" — same domain, but each beat's own noun leads.
+
+Every beat, regardless of emotion, stays ON the topic domain. Emotion is carried by
 the MOTION system (camera, intensity, grain, tint) — NOT by the photo. The photo's
 only job is to keep the viewer inside the topic's world. If you cannot write a
-concrete on-topic query for a beat, reuse the subject with a different setting/angle.
+concrete on-topic query for a beat, fall back to the subject with a different
+setting/angle rather than repeating the exact same subject phrase every beat.
 
 ──────────────────────────────────────────────────────────────────────
 INTENSITY — 0.0 to 1.0, REQUIRED on every beat
@@ -431,7 +444,7 @@ FINAL CHECKLIST before outputting (rewrite if any fail):
 9. At most ONE beat has a non-empty composition value.
 10. Every per-beat field present and from the allowed vocabulary.
 11. global.subject is a concrete photographable noun (not a feeling).
-12. EVERY visual_query leads with that subject (or a same-domain concrete noun)
-    and contains NO mood/emotion/abstraction words.
+12. EVERY visual_query is a concrete same-domain noun (beat-specific preferred over
+    repeating the literal subject) and contains NO mood/emotion/abstraction words.
 
 Output the JSON only.

@@ -1,9 +1,13 @@
 # Phase 5 & 6 — long-form, content ingest, audio automation
 
 > Status: **section hierarchy + 2 new format recipes + content ingest all
-> shipped and tested with fixtures.** Music-ducking **envelope computation**
-> shipped and tested; renderer-side playback of that envelope is explicitly
-> **not** built — see "Audio automation" below. This doc complements
+> shipped and tested with fixtures.** **Background music is now real** — an
+> opt-in `assets/bgm/` folder (empty by default; drop your own royalty-free
+> files in), embedded + compiled into a real looped `AudioTrack` at flat
+> volume. Music-**ducking** (making that track duck under narration) is a
+> separate, still-unfinished piece: the envelope is computed correctly, but
+> nothing applies it to playback yet — see "What's explicitly NOT done"
+> under Phase 6b. This doc complements
 > [scene-3.0-schema.md](./scene-3.0-schema.md) (archetypes/layers) — read
 > that first if you haven't; this doc doesn't repeat that material.
 
@@ -225,13 +229,47 @@ whenever a `timeline` is provided (i.e. whenever `word_times` exist) and
 attaches it as `scene["music_automation"]` — **additive**: omitted entirely
 when no timeline is given, so nothing about existing output changes.
 
+### Background music (added in a later pass — closes a real gap)
+
+The first version of this doc undersold the gap here: `media.orientation`-
+style, `music_automation` wasn't just unwired from playback, there was **no
+music track at all** anywhere in the scene.json pipeline. `config.yaml`
+still had `paths.bgm`/`video.bgm_volume` keys, but nothing read them — the
+only reference to `bgm_volume` anywhere in the codebase was inside a stale
+compiled `.pyc` for an `assemble.py` module that doesn't exist in source
+anymore (the old Playwright+ffmpeg pipeline's BGM mixer, never ported when
+the scene.json/editor pipeline replaced it).
+
+Fixed — but **entirely opt-in on real audio files that don't ship in this
+repo** (can't generate music; this needs you to drop files in):
+
+- `apps/python/assets/bgm/` — empty by default, with a `README.md`
+  documenting the convention. `scene_export.py::_select_bgm(bgm_dir, mood)`
+  picks a file by exact `<mood>.<ext>` match against the script's
+  `global.music_mood` (case-insensitive stem match), falling back to
+  `default.<ext>`, falling back to the first file alphabetically — so even
+  ONE file, named anything, gets background music working.
+- The picked file is embedded as a real `data:` audio asset and
+  `scene.json` gets a top-level `bgm: { asset_id, volume }` field
+  (`volume` from `config.yaml`'s `video.bgm_volume`, default 0.10).
+- `scene-import.ts::compileSceneToProject` compiles `scene.bgm` into a real
+  `AudioTrack` — `loop: true`, spanning `[0, totalFrames]` (the WHOLE
+  composition, not just one beat), on its own lane (1) separate from the
+  per-beat VO tracks (lane 0) so they don't visually collide in the
+  timeline. **Flat volume only** — see below for why it doesn't duck yet.
+- Fully back-compat: no files in `assets/bgm/` (today's actual state) →
+  `_select_bgm` returns `None` → no `bgm` asset, no `scene.bgm` field, no
+  AudioTrack — byte-for-byte the same output as every generation before
+  this shipped.
+
 ### What's explicitly NOT done
 
 The editor's `AudioTrack` type (`packages/core`) has a flat `volume` +
 `fadeIn`/`fadeOut` today — no time-varying gain keyframes at all, on any
 track kind. Neither the playback engine (Viewport's RAF loop) nor the
 export pipeline has ANY audio-gain-automation concept to sample from.
-Making `music_automation` actually change what's heard requires:
+Making `music_automation` actually duck the (now real) background-music
+track requires:
 
 1. A gain-channel concept on `AudioTrack` (or a dedicated automation node) —
    a `core` package type change plus evaluator support to sample it per
@@ -262,13 +300,25 @@ the ducking work, not a harder one.
 
 ### Verified
 
-Fixtures covering: a single beat's narration window ducking and recovering
-correctly around attack/release padding, back-to-back beats merging into
-one continuous ducked window (no flicker), a genuine pause between beats
-recovering to 0dB, silent beats (no `word_times`) producing a flat
-envelope, and an empty scene not crashing. Confirmed additive via
-`scene_export.py`: `music_automation` is present when a timeline is passed,
-absent entirely otherwise — no existing scene.json output changes shape.
+**Ducking envelope**: fixtures covering a single beat's narration window
+ducking and recovering correctly around attack/release padding, back-to-back
+beats merging into one continuous ducked window (no flicker), a genuine
+pause between beats recovering to 0dB, silent beats (no `word_times`)
+producing a flat envelope, and an empty scene not crashing. Confirmed
+additive via `scene_export.py`: `music_automation` is present when a
+timeline is passed, absent entirely otherwise — no existing scene.json
+output changes shape.
+
+**Background music**: `_select_bgm` tested with a synthesized placeholder
+tone (numpy/soundfile — already project dependencies, no new one added;
+the tone lived in a temp dir, never committed) covering exact mood match,
+fallback to `default.<ext>`, and the fully-back-compat no-directory case
+(no `bgm` key at all, matching every scene generated before this shipped).
+TS-side compilation verified with 4 new vitest tests
+(`scene-import-bgm.test.ts`): a real looped `AudioTrack` compiles from
+`scene.bgm` with the right volume/loop/frame-span/lane, volume defaults to
+0.1 when omitted, and — the back-compat case — no track at all when
+`scene.bgm` is absent or points at a non-audio/missing asset id.
 
 ## What's still not done (from the original 6-phase doc)
 

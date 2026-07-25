@@ -38,7 +38,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
           "transition":       "cut | fade | dip_black | blur_wipe",
           "background":       "solid | gradient | grid | glow",
           "layout":           "left | center | right | full",
-          "visual_query":     "2-4 word LITERAL image search, subject-first, no mood words",
+          "visual_query":     "2-4 word LITERAL image search: concrete same-domain noun (beat-specific preferred), no mood words",
           "intensity":        0.6,
           "pattern_interrupt":"",
           "composition":      ""
@@ -85,8 +85,11 @@ Same rules as the 1-minute explainer format: ≥3 cameras and ≥2 paces across
 the WHOLE script (all sections combined), no camera repeated 4+ beats running.
 `intensity` should roughly track each section's `pacing_arc`: "build" sections
 climb from ~0.5 to ~0.75, "steady" sections hold ~0.5-0.65, "wind_down" eases
-from ~0.6 down to ~0.45 by the final beat. Every `visual_query` leads with the
-global `subject` (or a concrete same-domain noun), 2-4 words, no mood words.
+from ~0.6 down to ~0.45 by the final beat. Every `visual_query` is a concrete
+same-domain noun, 2-4 words, no mood words — prefer the noun closest to THIS
+beat's specific content over reusing the global `subject` string on every beat
+(see the worked example below: none of its queries repeat "server room"
+verbatim, they each pick the concrete noun that matches THAT beat).
 
 ──────────────────────────────────────────────────────────────────────
 EXAMPLE SHAPE (abbreviated — 2 beats per section shown; a real script has
@@ -148,6 +151,7 @@ FINAL CHECKLIST (rewrite if any fail):
 4. Body sections build in logical order, each covering ONE distinct sub-point.
 5. ≥3 cameras and ≥2 paces across the WHOLE script; no camera repeated 4+ in a row.
 6. Every beat has a numeric intensity roughly tracking its section's pacing_arc.
-7. Every visual_query is subject-first with no mood/abstraction words.
+7. Every visual_query is a concrete same-domain noun (not necessarily the literal
+   subject) with no mood/abstraction words.
 
 Output the JSON only.

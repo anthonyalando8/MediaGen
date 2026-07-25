@@ -35,7 +35,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "transition":    "fade | dip_black | cut | blur_wipe",
       "background":    "gradient | solid | glow | noise",
       "layout":        "center | left",
-      "visual_query":  "2-4 word LITERAL image search, subject-first, no mood words",
+      "visual_query":  "2-4 word LITERAL image search: concrete same-domain noun (beat-specific preferred), no mood words",
       "intensity":     0.45
     }}
   ]
@@ -65,12 +65,17 @@ MOTION (deliberately restrained)
 VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
 ──────────────────────────────────────────────────────────────────────
 Image search is LITERAL — it ignores emotion and metaphor. Every visual_query:
-1. LEADS WITH the global `subject` (or a concrete same-domain noun) — present in EVERY beat.
+1. Is a concrete, same-domain noun — the literal thing on screen. It does NOT have
+   to repeat the global `subject` string itself: prefer the noun closest to THIS
+   beat's specific content over reusing the same subject phrase beat after beat
+   (repeating it every beat produces one narrow, generic-looking stock genre
+   instead of each beat's own moment). Fall back to `subject` only when the beat
+   has no concrete noun of its own.
 2. Adds at most 1-2 VISUAL modifiers (lighting, angle, setting): "morning", "window light",
    "close up", "overhead", "soft focus", "dusk".
 3. NEVER uses feeling/abstraction words ("solitude", "journey", "peace", "soul") — they
    return generic landscape/abstract stock instead of your topic.
-4. 2-4 words. Concrete + visual. Template: [subject] + [setting or lighting].
+4. 2-4 words. Concrete + visual. Template: [beat-specific noun, or subject as fallback] + [setting or lighting].
 
 ──────────────────────────────────────────────────────────────────────
 FINAL CHECKLIST (rewrite if any fail):
@@ -79,6 +84,7 @@ FINAL CHECKLIST (rewrite if any fail):
 2. Opens quietly; ends on a settled thought or open question (no CTA).
 3. All intensity values low (mostly 0.35-0.60; peak up to ~0.7).
 4. pace only slow/mid; transitions only fade/dip_black/cut/blur_wipe.
-5. Every visual_query is subject-first with no mood/abstraction words.
+5. Every visual_query is a concrete same-domain noun (not necessarily the literal
+   subject) with no mood/abstraction words.
 
 Output the JSON only.
