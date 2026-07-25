@@ -41,6 +41,27 @@ def _wav_data_url(path: pathlib.Path) -> str:
     return f"data:audio/wav;base64,{b64}"
 
 
+def _composition_size(cfg: dict, orientation: str) -> tuple[int, int]:
+    """
+    The scene's actual canvas width/height — derived from config.yaml's
+    `video.width`/`video.height` (treated as the PORTRAIT baseline; that's
+    what they've always meant — 1080x1920) and the format's
+    `media.orientation`. Fixes a real gap: orientation used to only steer
+    which stock photos got REQUESTED (media_resolve.py), never the actual
+    composition size, so a landscape-media format still rendered into a
+    portrait canvas. Portrait (the default; every format that doesn't set
+    `media.orientation`) is byte-for-byte unchanged — this only branches for
+    "landscape" (swap) and "square" (shorter side, both dimensions).
+    """
+    w, h = cfg["video"]["width"], cfg["video"]["height"]
+    if orientation == "landscape":
+        return h, w
+    if orientation == "square":
+        side = min(w, h)
+        return side, side
+    return w, h
+
+
 # ── scene/3.0 shim: express legacy contracts as layers[] ─────────────────────
 # See docs/scene-3.0-schema.md. Today every beat is the "text_over_dimmed"
 # archetype (llm.py defaults it), so this function is the ONLY archetype
@@ -482,14 +503,15 @@ def build_scene(
             beat_durations_ms, [c.get("word_times", []) for c in contracts],
         )
 
+    comp_w, comp_h = _composition_size(cfg, media_plan.orientation)
     scene = {
         "video_id": out_dir.name,
         "schema":   "scene/2.0",
         "theme":    theme,
         "layout":   contracts[0]["layout"] if contracts else "left",
         "fps":      cfg["video"]["fps"],
-        "width":    cfg["video"]["width"],
-        "height":   cfg["video"]["height"],
+        "width":    comp_w,
+        "height":   comp_h,
         "palette": {
             "accent": pal["accent"], "spike": pal["spike"],
             "bg": pal["bg"], "fg": pal["fg"],

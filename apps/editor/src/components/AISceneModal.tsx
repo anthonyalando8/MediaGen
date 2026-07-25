@@ -393,7 +393,9 @@ function AISceneModalInner() {
   const wide = phase === "preview";
 
   const card: React.CSSProperties = {
-    width: wide ? 760 : 480, maxWidth: "94vw", background: "var(--surface-1)",
+    width: wide ? 760 : 480, maxWidth: "94vw", maxHeight: "90vh",
+    display: "flex", flexDirection: "column",
+    background: "var(--surface-1)",
     border: "1px solid var(--border)", borderRadius: "var(--radius-lg, 10px)",
     boxShadow: "0 24px 70px rgba(0,0,0,0.55)", color: "var(--text-0)",
     fontFamily: "var(--font-ui)", overflow: "hidden",
@@ -402,8 +404,8 @@ function AISceneModalInner() {
   return (
     <div style={overlay} role="dialog" aria-modal="true" aria-label="Generate AI scene" onMouseDown={close}>
       <div style={card} onMouseDown={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
+        {/* Header — pinned; body scrolls independently below */}
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
           <span style={{ color: "var(--accent)", display: "flex" }}><Sparkles size={18} /></span>
           <span style={{ fontWeight: 700, fontSize: 15 }}>{phase === "preview" ? "Preview scene" : "Generate AI Scene"}</span>
           <span style={{ flex: 1 }} />
@@ -415,8 +417,10 @@ function AISceneModalInner() {
           </button>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: 18 }}>
+        {/* Body — the scrollable region. flex:1 + minHeight:0 is load-bearing:
+            without minHeight:0 a flex child never shrinks below its content
+            size, so overflowY:auto would never actually kick in. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18 }}>
           {phase === "input" && (
             <>
               {/* Source mode: a short topic phrase vs. existing content */}
@@ -793,8 +797,8 @@ function AISceneModalInner() {
           )}
         </div>
 
-        {/* Footer */}
-        <div style={{ display: "flex", gap: 9, justifyContent: "flex-end", padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
+        {/* Footer — pinned, same as the header */}
+        <div style={{ flexShrink: 0, display: "flex", gap: 9, justifyContent: "flex-end", padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
           {phase === "running" ? (
             <button type="button" onClick={cancel} className="btn btn-outline">Cancel</button>
           ) : phase === "preview" ? (
