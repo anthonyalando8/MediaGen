@@ -351,7 +351,7 @@ def _build_beat_contracts(
             "scene":           scene,
             "hud_tag":         _beat_hud(beat, i, total, profile.hud),
             "keyword":         beat["keyword"],
-            "body":            beat["text"],
+            "body":            beat.get("text", ""),  # absent for a `silent: true` beat (tts.py)
             "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
             "accent_override": "spike" if beat.get("type", "") == "climax" else None,
             "beat_index":      i + 1,

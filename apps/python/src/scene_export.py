@@ -305,6 +305,32 @@ def _synthesize_title_card_layers(contract: dict) -> list[dict]:
     return layers
 
 
+def _synthesize_poster_card_layers(contract: dict) -> list[dict]:
+    """A static "print-ad" panel — product/brand photo behind a bold
+    headline (`keyword`) and a supporting line (`body`), held with no
+    per-word sync (unlike text_over_dimmed). Pairs naturally with a beat's
+    `silent` field (tts.py) for an ad's paused-narration product-reveal
+    moment, but doesn't require it — the archetype itself is just
+    title_card's photo+scrim plus a second text layer, same
+    background/scrim/multi-text-layer primitives stat_callout already
+    uses. No new renderer work."""
+    duration_ms = contract.get("duration_ms") or 3000
+    q = contract.get("visual_query") or contract.get("keyword", "")
+    headline = (contract.get("keyword") or "").strip()
+    subtext = (contract.get("body") or "").strip()
+    layers: list[dict] = [
+        {"role": "background", "source": {"query": q}, "fit": "cover", "in": 0, "out": None},
+        {"role": "scrim", "shape": "rect", "opacity": 0.55, "in": 0, "out": None},
+    ]
+    if headline:
+        layers.append({"role": "text", "text": headline, "reveal": "fade", "size": "hero",
+                        "anchor_y": 0.38, "in": 0, "out": duration_ms})
+    if subtext:
+        layers.append({"role": "text", "text": subtext, "reveal": "fade", "size": "normal",
+                        "anchor_y": 0.62, "in": 0, "out": duration_ms})
+    return layers
+
+
 def _synthesize_stat_callout_layers(contract: dict) -> list[dict]:
     """Big number/phrase + a smaller supporting label — reuses `keyword` as
     the hero stat (formats already write short, number-led keywords, e.g.
@@ -384,6 +410,7 @@ _ARCHETYPE_SYNTHESIZERS = {
     "pip": lambda c, orientation: _synthesize_pip_layers(c),
     "full_bleed_video": lambda c, orientation: _synthesize_full_bleed_video_layers(c),
     "title_card": lambda c, orientation: _synthesize_title_card_layers(c),
+    "poster_card": lambda c, orientation: _synthesize_poster_card_layers(c),
     "stat_callout": lambda c, orientation: _synthesize_stat_callout_layers(c),
     "broll_montage": lambda c, orientation: _synthesize_broll_montage_layers(c),
     "kinetic_type": lambda c, orientation: _synthesize_kinetic_type_layers(c),
@@ -393,10 +420,10 @@ _ARCHETYPE_SYNTHESIZERS = {
 
 def _synthesize_layers(contracts: list[dict], orientation: str = "portrait") -> None:
     """In place: fill `layers[]` for every beat that doesn't already carry
-    one, dispatched on `archetype`. All 12 registry archetypes have a
+    one, dispatched on `archetype`. All 13 registry archetypes have a
     synthesizer now — this fallback (leave `layers` unset; scene-import.ts
     and the visual-resolution loop below both fall back to the pre-layers
-    flat-field path) only matters for a future 13th archetype added here
+    flat-field path) only matters for a future 14th archetype added here
     without a matching entry in `_ARCHETYPE_SYNTHESIZERS` yet."""
     for c in contracts:
         if "layers" in c:

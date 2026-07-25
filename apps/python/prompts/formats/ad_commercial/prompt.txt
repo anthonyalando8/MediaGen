@@ -1,0 +1,206 @@
+Write a SHORT PRODUCT/SERVICE AD script — the kind of vertical ad you'd see
+as a Reels/TikTok/Stories placement. Not a rant, not an explainer: a real ad
+with a problem, a product, proof, and a close.
+
+TOPIC / PRODUCT: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 6 words, plain product/ad name",
+  "thumbnail": "2-4 word hook phrase",
+  "style": "contrarian | builder | intense | cinematic | calm | analytical | humorous",
+
+  "global": {{
+    "theme":        "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white | tech_blue | cyber_noir",
+    "music_mood":   "tense | cinematic | ambient | dark | aggressive | suspense | minimal | emotional | playful | upbeat",
+    "voice_style":  "calm_intense | storyteller | aggressive | documentary | dramatic | analytical | comedic",
+    "camera_style": "static | dynamic | handheld",
+    "subject":      "1-3 word concrete photographable noun for the product/topic's literal on-screen world. Used to anchor every visual_query."
+  }},
+
+  "beats": [
+    {{
+      "id":                "beat_01",
+      "type":              "hook | insight | tension | truth | flip | climax | payoff | cta",
+      "keyword":           "2-4 WORD PHRASE (or the headline — see POSTER BEATS)",
+      "text":              "spoken sentence, 10-25 words (short/empty ONLY on a silent beat — see SILENT BEATS)",
+      "energy":            "high | mid | low",
+      "emotion":           "urgent | confident | serious | playful | surprised | amused | hopeful",
+      "pace":              "slow | mid | fast | explosive",
+      "visual_intent":     "clean | minimal | documentary | cinematic | quirky",
+      "camera":            "static | push_in | pull_out | handheld | snap_zoom | tilt_up",
+      "transition":        "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
+      "background":        "solid | gradient | noise | grid | glow | lines",
+      "layout":            "left | center | right | full",
+      "visual_query":      "2-4 word LITERAL image search: concrete same-domain noun (beat-specific preferred), no mood words",
+      "intensity":         0.6,
+      "pattern_interrupt": "",
+      "composition":       "",
+      "archetype":         "OPTIONAL — omit on most beats, the composer assigns those automatically. Set literally to \"poster_card\" on the product-reveal and/or price/CTA beat — see POSTER BEATS.",
+      "silent":            "OPTIONAL boolean — omit on most beats. true on AT MOST ONE beat (usually product reveal) for a music-only pause — see SILENT BEATS."
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURE — MANDATORY (this is what makes it read as an AD, not a rant)
+──────────────────────────────────────────────────────────────────────
+1. HOOK — name the relatable problem or pain point. type: "hook".
+2. AGITATE — make the problem feel urgent, costly, or embarrassing. type: "tension".
+3. PRODUCT REVEAL — introduce the product/solution by name. type: "payoff" or
+   "truth". This is usually BOTH the POSTER BEAT and the SILENT BEAT below —
+   a real ad's voiceover often pauses right here and lets the music carry
+   the reveal.
+4. 2-3 FEATURE BEATS — fast, one concrete benefit each, no filler. type: "insight".
+5. SOCIAL PROOF — one testimonial-style or credibility line. type: "truth"
+   (the composer already turns truth/payoff beats into quote_card/comparison
+   on its own — no archetype override needed for this beat).
+6. PRICE / CTA CLOSE — the offer and the ask, together. type: "cta". Often
+   ALSO a POSTER BEAT (price/offer as the headline). Fast or explosive pace.
+
+Beat count 6-10 — use only as many FEATURE beats as the product genuinely
+has distinct benefits for; don't pad.
+
+──────────────────────────────────────────────────────────────────────
+POSTER BEATS — set "archetype": "poster_card" directly on the beat
+──────────────────────────────────────────────────────────────────────
+Real ads have "poster" pages — one bold headline, one supporting line, held
+statically like a print-ad panel, not a spoken caption. Use this on 1-2
+beats total (usually PRODUCT REVEAL and/or the PRICE/CTA close):
+  - "keyword" becomes the big headline — short, 2-5 words: the product
+    name, or the offer itself (e.g. "40% OFF TODAY", "MEET AURA").
+  - "text" becomes the smaller supporting line underneath. Still write a
+    real sentence — it's shown on screen, and is ALSO the spoken line
+    unless this beat is silent.
+
+Example:
+  {{ "keyword": "40% OFF TODAY", "text": "Every plan, every feature, one weekend only.",
+     "archetype": "poster_card", "type": "cta", ... }}
+
+──────────────────────────────────────────────────────────────────────
+SILENT BEATS — set "silent": true
+──────────────────────────────────────────────────────────────────────
+Real ads pause the voiceover under a dramatic product shot and let the
+MUSIC carry the moment. Use "silent": true on AT MOST ONE beat — almost
+always the PRODUCT REVEAL, never the hook or the close:
+  - Still write "keyword" and "text" — they're shown on screen (especially
+    when this beat is also poster_card), just never spoken. "text" can be
+    much shorter than the usual 10-25 words here, even a few words or
+    empty — it is not read aloud and not counted toward the word budget.
+  - Optionally set "silent_duration_s" (a number, e.g. 2.5) for how long
+    the beat holds before the next one starts. Omit to use the default.
+  - Never mark more than one beat silent — most of the ad still needs a
+    voice carrying it.
+
+Example:
+  {{ "keyword": "INTRODUCING AURA", "text": "", "silent": true, "silent_duration_s": 3,
+     "archetype": "poster_card", "type": "payoff", ... }}
+
+──────────────────────────────────────────────────────────────────────
+TONE
+──────────────────────────────────────────────────────────────────────
+Sound like a real ad, not a lecture. Direct, confident, a little urgent.
+Name the product. Use "you". Short sentences on the hook/agitate/CTA beats;
+the feature beats can breathe slightly more.
+
+BANNED PHRASES — generic ad-copy filler that reads as fake: "industry-leading" /
+"revolutionary" / "game-changing" / "unlock your potential" / "take it to the
+next level" / "in today's world" / "here's the thing".
+
+──────────────────────────────────────────────────────────────────────
+GLOBAL FIELDS — pick one value per field based on the product.
+──────────────────────────────────────────────────────────────────────
+- theme/music_mood/voice_style/camera_style: the visual and sonic register
+  that matches the product category (a premium product reads luxury_minimal
+  + cinematic; a tech/app product reads tech_hud/tech_blue + dynamic).
+- subject: the literal, photographable noun at the centre of the product —
+  the anchor every visual_query builds on. The physical product itself if
+  it has one; the nearest common concrete proxy if it's a service/app
+  (an app → "phone screen app"; a service → the thing the service touches).
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT VARIETY — MANDATORY
+──────────────────────────────────────────────────────────────────────
+⚠ A stiff, repetitive render reads as a bad ad. Across the full script:
+   1. Use at least 3 different `camera` values total
+   2. Use at least 2 different `pace` values total
+   3. Use at least 2 different `layout` values total
+   4. Use at least 2 different `background` values total
+   5. Never repeat the same `camera` for 3 consecutive beats
+   6. Never repeat the same `layout` for 3 consecutive beats
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL. It does not understand emotion or metaphor.
+
+RULES (all mandatory):
+1. SAME-DOMAIN CONCRETE NOUN. Every visual_query must be a concrete,
+   photographable noun from the product's domain — the literal thing on
+   screen. It does NOT have to repeat the global `subject` string itself:
+   prefer whatever noun is closest to THIS beat's specific content (the
+   product in use for a feature beat, a person's reaction for the social-
+   proof beat) over reusing the same subject phrase beat after beat —
+   repeating it every beat produces one narrow, generic stock genre instead
+   of each beat's own moment.
+2. Then add AT MOST 1-2 VISUAL modifiers only: lighting, angle, setting.
+3. BANNED — emotions and abstractions: "solitude", "journey", "powerful",
+   "freedom", "success", "abstract". These return generic/nature stock.
+4. 2-4 words. Concrete + visual. No mood.
+
+Template: [beat-specific noun, or subject as fallback] + [setting or lighting]
+
+──────────────────────────────────────────────────────────────────────
+INTENSITY — 0.0 to 1.0, REQUIRED on every beat
+──────────────────────────────────────────────────────────────────────
+  hook:        0.85 - 0.95
+  tension:     0.65 - 0.80
+  payoff/truth (product reveal): 0.55 - 0.75 (lower if also silent — let
+               the music carry it, not camera shake)
+  insight (features): 0.55 - 0.70
+  climax:      0.90 - 1.00
+  cta:         0.80 - 0.95
+
+──────────────────────────────────────────────────────────────────────
+EMPHASIS WORDS — one per spoken sentence (skip on a silent beat's text)
+──────────────────────────────────────────────────────────────────────
+Wrap ONE word/short phrase per sentence in *asterisks* — the word the
+audience should land on. Example: "Most cleaners just *hide* the smell."
+
+──────────────────────────────────────────────────────────────────────
+WORKED EXAMPLE (7 beats — a coffee subscription product)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Fresh Coffee, No Errands",
+  "thumbnail": "Stale Coffee Again",
+  "style": "cinematic",
+  "global": {{
+    "theme": "warm_amber", "music_mood": "upbeat", "voice_style": "aggressive",
+    "camera_style": "dynamic", "subject": "coffee beans bag"
+  }},
+  "beats": [
+    {{ "id": "beat_01", "type": "hook", "keyword": "STALE AGAIN", "text": "You just opened another bag of coffee that's been sitting on a shelf for *months*.", "energy": "high", "emotion": "urgent", "pace": "fast", "visual_intent": "clean", "camera": "push_in", "transition": "slam_cut", "background": "glow", "layout": "left", "visual_query": "coffee bag kitchen counter", "intensity": 0.9, "pattern_interrupt": "slam", "composition": "" }},
+    {{ "id": "beat_02", "type": "tension", "keyword": "YOU CAN TASTE IT", "text": "Grocery-store coffee is roasted *weeks* before it even reaches the shelf, and it shows in every cup.", "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary", "camera": "static", "transition": "cut", "background": "lines", "layout": "center", "visual_query": "coffee shelf grocery store", "intensity": 0.72, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_03", "type": "payoff", "keyword": "MEET ROASTLINE", "text": "", "energy": "mid", "emotion": "confident", "pace": "slow", "visual_intent": "cinematic", "camera": "static", "transition": "fade", "background": "solid", "layout": "center", "visual_query": "coffee beans fresh roast", "intensity": 0.6, "pattern_interrupt": "", "composition": "", "archetype": "poster_card", "silent": true, "silent_duration_s": 2.5 }},
+    {{ "id": "beat_04", "type": "insight", "keyword": "ROASTED TO ORDER", "text": "Every bag ships within *24 hours* of being roasted, not months before.", "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "clean", "camera": "handheld", "transition": "cut", "background": "gradient", "layout": "right", "visual_query": "coffee roaster machine beans", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_05", "type": "insight", "keyword": "YOUR SCHEDULE", "text": "Pick weekly, biweekly, or monthly — it just *shows up* before you run out.", "energy": "mid", "emotion": "playful", "pace": "fast", "visual_intent": "clean", "camera": "snap_zoom", "transition": "whip_pan", "background": "grid", "layout": "left", "visual_query": "phone app delivery schedule", "intensity": 0.65, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_06", "type": "truth", "keyword": "REAL CUSTOMERS", "text": "Thousands of people switched and said the same *thing*: they didn't know coffee could taste like this.", "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary", "camera": "static", "transition": "cut", "background": "solid", "layout": "center", "visual_query": "person drinking coffee morning", "intensity": 0.68, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_07", "type": "cta", "keyword": "20% OFF FIRST BAG", "text": "Your next cup could be the best one you've *ever* had. First bag, twenty percent off.", "energy": "high", "emotion": "confident", "pace": "explosive", "visual_intent": "cinematic", "camera": "pull_out", "transition": "dip_black", "background": "glow", "layout": "full", "visual_query": "coffee beans bag close up", "intensity": 0.92, "pattern_interrupt": "flash", "composition": "", "archetype": "poster_card" }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST before outputting (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1. Word count: total under 180, each spoken beat 10-25 words (silent beats exempt).
+2. Structure: hook → agitate → product reveal → 2-3 features → social proof → price/CTA.
+3. Exactly 1-2 beats have "archetype": "poster_card" (reveal and/or CTA).
+4. At most ONE beat has "silent": true, and it's the product reveal.
+5. Variety: ≥3 cameras, ≥2 paces, ≥2 layouts, ≥2 backgrounds across the script.
+6. No 3+ consecutive beats with the same camera or layout.
+7. Every spoken beat's text has exactly one *emphasis word*.
+8. Every beat has a numeric intensity in [0.0, 1.0].
+9. Every visual_query is a concrete same-domain noun (beat-specific preferred), no mood words.
+
+Output the JSON only.

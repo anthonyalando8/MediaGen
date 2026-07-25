@@ -1,0 +1,42 @@
+id: ad_commercial
+label: "Ad / Commercial"
+description: "A short product/service ad — problem, product reveal, features, social proof, price/CTA. Poster-style panels and a music-only beat, like a real commercial. Portrait."
+
+default_resolve_visuals: true
+
+beats: { min: 6, max: 10 }
+words_per_beat: { min: 10, max: 25 }
+total_words: { max: 180 }
+require_emphasis: false
+
+variety:
+  min_cameras: 3
+  min_paces: 2
+  min_layouts: 2
+  min_backgrounds: 2
+  max_consecutive_camera: 2
+  max_consecutive_layout: 2
+  # scene/3.0 composer pass — same mechanism shortform_tiktok uses. Real
+  # per-beat archetype variety matters even more here since 1-2 beats
+  # (product reveal, price/CTA) are ALSO directly set to "poster_card" by
+  # the prompt itself (see prompt.txt) — the composer only touches beats
+  # still on the default archetype, so it fills in the rest around them.
+  min_archetypes: 3
+  max_consecutive_archetype: 2
+
+voice:
+  style: aggressive
+
+visuals:
+  camera_energy: high
+  intensity_curve: spiky
+  looseness: 0.3
+
+# hybrid: fast/explosive beats pull real video clips, everything else
+# stays image-led — same as shortform_tiktok. Portrait: the default for
+# social ads (Reels/TikTok/Stories); override per-generation via the
+# editor's media-mode picker if a landscape placement is needed instead.
+media:
+  mode: hybrid
+  mood: [commercial, energetic, upbeat]
+  orientation: portrait

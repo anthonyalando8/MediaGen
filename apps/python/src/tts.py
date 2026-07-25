@@ -72,6 +72,10 @@ _PACE_SPEED_MULT = {
 
 # Fallback when no voice_style is supplied
 _DEFAULT_VOICE = "af_heart"
+
+# Hold length for a `silent: true` beat (music-only, no narration) when it
+# doesn't set its own `silent_duration_s`.
+_SILENT_BEAT_DEFAULT_S = 2.5
 _DEFAULT_SPEED = 1.05
 
 
@@ -247,6 +251,12 @@ def synthesize(
     Synthesise each beat with the script's voice_style → Kokoro voice mapping,
     apply per-beat pace adjustment, save beat_N.wav, concatenate → voice.wav.
 
+    A beat with `silent: true` gets a real silent WAV (`_SILENT_BEAT_DEFAULT_S`,
+    or its own `silent_duration_s`) instead of a Kokoro call — music-only
+    beats (an ad's paused-narration product reveal, a logo sting) keep the
+    "one WAV per beat, duration = that WAV's length" invariant every
+    downstream consumer (scene_export.py, visuals.py) already relies on.
+
     Returns (voice_path, [beat_0.wav, beat_1.wav, …])
     """
     voice_profile = voice_profile or VoiceProfile()
@@ -263,14 +273,29 @@ def synthesize(
     for i, beat in enumerate(script["beats"]):
         # Strip *emphasis* markers before TTS — they're for the renderer only.
         # Otherwise Kokoro pronounces them as "asterisk".
-        text  = beat["text"].replace("*", "").strip()
-        scene = _beat_scene(beat, i, total_beats)
-        spd   = _speed_for_beat(beat, base_speed, scene, voice_profile.pace_map)
-        pace  = voice_profile.pace_map.get(scene) or beat.get("pace", "mid")
-        print(f"[tts]   Beat {i+1} [pace={pace} speed={spd}]: {text[:60]}…")
+        text = (beat.get("text") or "").replace("*", "").strip()
 
-        samples, sr = kokoro.create(text, voice=chosen_voice, speed=spd, lang="en-us")
-        samples  = np.asarray(samples, dtype=np.float32)
+        if beat.get("silent"):
+            # Music-only beat (an ad's paused-narration product reveal, a
+            # logo sting, etc.) — no Kokoro call. Writing a REAL silent WAV
+            # here (rather than skipping the beat's audio entirely) keeps
+            # "one WAV per beat, duration = that WAV's length" true for
+            # every beat unconditionally, so nothing downstream (durations,
+            # scene_export.py's audio embedding) needs to special-case a
+            # missing beat. `text`/`keyword` may still be set — they're
+            # just not spoken, still used visually (e.g. poster_card's
+            # headline/subtext).
+            hold_s = float(beat.get("silent_duration_s") or _SILENT_BEAT_DEFAULT_S)
+            print(f"[tts]   Beat {i+1} [silent — music only, {hold_s}s]")
+            samples  = np.zeros(int(sample_rate * hold_s), dtype=np.float32)
+            sr       = sample_rate
+        else:
+            scene = _beat_scene(beat, i, total_beats)
+            spd   = _speed_for_beat(beat, base_speed, scene, voice_profile.pace_map)
+            pace  = voice_profile.pace_map.get(scene) or beat.get("pace", "mid")
+            print(f"[tts]   Beat {i+1} [pace={pace} speed={spd}]: {text[:60]}…")
+            samples, sr = kokoro.create(text, voice=chosen_voice, speed=spd, lang="en-us")
+            samples = np.asarray(samples, dtype=np.float32)
         final_sr = sr
 
         beat_path = out_dir / f"beat_{i}.wav"

@@ -77,7 +77,7 @@ _TRANSITION_BY_TYPE = {
 _ALLOWED_ARCHETYPES = {
     "text_over_dimmed", "full_bleed_video", "bare_visual", "split_screen",
     "pip", "quote_card", "stat_callout", "comparison", "broll_montage",
-    "title_card", "kinetic_type", "lower_third",
+    "title_card", "poster_card", "kinetic_type", "lower_third",
 }
 
 # Text-bearing vs textless split of the registry above — used by the composer
@@ -86,7 +86,7 @@ _ALLOWED_ARCHETYPES = {
 # narration audio to carry the beat; text-bearing ones still show a caption/
 # label. Must partition _ALLOWED_ARCHETYPES exactly (see test_generation.py).
 _TEXT_BEARING_ARCHETYPES = {
-    "text_over_dimmed", "title_card", "quote_card",
+    "text_over_dimmed", "title_card", "poster_card", "quote_card",
     "stat_callout", "kinetic_type", "lower_third",
 }
 _TEXTLESS_ARCHETYPES = {
@@ -534,9 +534,16 @@ def _validate_basic(data: dict, profile) -> None:
 
     lo, hi = profile.words_per_beat_min, profile.words_per_beat_max
     for i, beat in enumerate(beats):
-        for k in ("keyword", "text"):
-            if k not in beat:
-                raise KeyError(f"Beat {i} missing key: '{k}'")
+        if "keyword" not in beat:
+            raise KeyError(f"Beat {i} missing key: 'keyword'")
+        # `silent: true` (tts.py) — music-only beat, no narration. Its text
+        # (if any) is still shown visually (e.g. poster_card's headline/
+        # subtext), just never spoken, so the word-count/emphasis gates
+        # below — which exist to keep NARRATION pacing sane — don't apply.
+        if beat.get("silent"):
+            continue
+        if "text" not in beat:
+            raise KeyError(f"Beat {i} missing key: 'text'")
         if not beat["text"].strip():
             raise ValueError(f"Beat {i} has empty text")
         beat_words = len(beat["text"].split())
@@ -545,7 +552,7 @@ def _validate_basic(data: dict, profile) -> None:
         if profile.require_emphasis and "*" not in beat["text"]:
             raise ValueError(f"Beat {i} missing an *emphasis* word (format requires one per beat).")
 
-    total_words = sum(len(b["text"].split()) for b in beats)
+    total_words = sum(len((b.get("text") or "").split()) for b in beats)
     min_words = profile.total_words_min if profile.total_words_min is not None else n * lo
     if total_words < min_words:
         raise ValueError(
