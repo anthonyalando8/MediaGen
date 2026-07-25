@@ -41,10 +41,17 @@ import {
 import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual, SourceKind, VoiceOption } from "../persistence/scene-generate";
 import { closeAIScene, getAISceneState, subscribeAIScene } from "../store/ai-scene-handle";
 
+// Full-viewport, fixed-inset-0 flex-column — the same pattern
+// ExportWindow.tsx uses for its "render page" (header bar pinned top, a
+// scrollable body filling the rest, footer pinned bottom). Was previously a
+// small centered modal; with long scripts (20+ beats) that cramped preview
+// strip was the whole reason the dialog felt sluggish/hard to scroll —
+// fullscreen gives the beat grid room to breathe instead of fighting a
+// fixed card size.
 const overlay: React.CSSProperties = {
-  position: "fixed", inset: 0, zIndex: 210, display: "flex",
-  alignItems: "center", justifyContent: "center",
-  background: "rgba(4, 8, 10, 0.6)", backdropFilter: "blur(3px)",
+  position: "fixed", inset: 0, zIndex: 210,
+  display: "flex", flexDirection: "column",
+  background: "var(--surface-1)",
 };
 
 const FALLBACK_FORMATS: SceneFormat[] = [
@@ -390,22 +397,24 @@ function AISceneModalInner() {
   }, [playing, voUrls]);
 
   const pct = progress?.pct ?? 0;
-  const wide = phase === "preview";
+  // Preview's beat grid wants the full viewport width to breathe; the
+  // input/running forms read better capped like a normal form instead of
+  // stretching edge-to-edge on a wide monitor.
+  const contentStyle: React.CSSProperties | undefined =
+    phase === "preview" ? undefined : { maxWidth: 720, margin: "0 auto" };
 
   const card: React.CSSProperties = {
-    width: wide ? 760 : 480, maxWidth: "94vw", maxHeight: "90vh",
+    width: "100%", height: "100%",
     display: "flex", flexDirection: "column",
-    background: "var(--surface-1)",
-    border: "1px solid var(--border)", borderRadius: "var(--radius-lg, 10px)",
-    boxShadow: "0 24px 70px rgba(0,0,0,0.55)", color: "var(--text-0)",
+    background: "var(--surface-1)", color: "var(--text-0)",
     fontFamily: "var(--font-ui)", overflow: "hidden",
   };
 
   return (
-    <div style={overlay} role="dialog" aria-modal="true" aria-label="Generate AI scene" onMouseDown={close}>
-      <div style={card} onMouseDown={(e) => e.stopPropagation()}>
+    <div style={overlay} role="dialog" aria-modal="true" aria-label="Generate AI scene">
+      <div style={card}>
         {/* Header — pinned; body scrolls independently below */}
-        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
           <span style={{ color: "var(--accent)", display: "flex" }}><Sparkles size={18} /></span>
           <span style={{ fontWeight: 700, fontSize: 15 }}>{phase === "preview" ? "Preview scene" : "Generate AI Scene"}</span>
           <span style={{ flex: 1 }} />
@@ -420,7 +429,8 @@ function AISceneModalInner() {
         {/* Body — the scrollable region. flex:1 + minHeight:0 is load-bearing:
             without minHeight:0 a flex child never shrinks below its content
             size, so overflowY:auto would never actually kick in. */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 18 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 24 }}>
+        <div style={contentStyle}>
           {phase === "input" && (
             <>
               {/* Source mode: a short topic phrase vs. existing content */}
@@ -724,8 +734,18 @@ function AISceneModalInner() {
                           </div>
                         )}
                         {b.mediaUrl && b.kind === "video" ? (
-                          <video src={b.mediaUrl} muted loop autoPlay playsInline
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          // Paused by default (shows the first frame as a static
+                          // thumbnail via preload="metadata") — with 20+ beats,
+                          // autoplaying every card's video at once was the actual
+                          // cause of the dialog going sluggish (concurrent decode/
+                          // compositor load), not React re-renders. Play only the
+                          // card actually being looked at.
+                          <video
+                            src={b.mediaUrl} muted loop playsInline preload="metadata"
+                            onMouseEnter={(e) => { void e.currentTarget.play(); }}
+                            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
                         ) : b.mediaUrl ? (
                           <img src={b.mediaUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                         ) : (
@@ -796,9 +816,10 @@ function AISceneModalInner() {
             </div>
           )}
         </div>
+        </div>
 
         {/* Footer — pinned, same as the header */}
-        <div style={{ flexShrink: 0, display: "flex", gap: 9, justifyContent: "flex-end", padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ flexShrink: 0, display: "flex", gap: 9, justifyContent: "flex-end", padding: "14px 24px", borderTop: "1px solid var(--border)" }}>
           {phase === "running" ? (
             <button type="button" onClick={cancel} className="btn btn-outline">Cancel</button>
           ) : phase === "preview" ? (

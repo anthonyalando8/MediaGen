@@ -82,15 +82,23 @@ def _ranked_providers(llm: dict) -> list[tuple[str, dict]]:
     return enabled
 
 
-def _generate_with_fallback(providers: list[tuple[str, Provider]], prompt: str) -> str:
+def _generate_with_fallback(providers: list[tuple[str, Provider]], prompt: str, on_provider_start=None) -> str:
     """Try each (name, provider) in order; return the first success. Raises
     only if every one of them raised. Split out from `generate()` so the
     fallback behavior itself is testable with fake providers — no config
-    file, no network, no monkeypatching required."""
+    file, no network, no monkeypatching required.
+
+    `on_provider_start(name, index, total)` — optional, called right before
+    each provider attempt. Real progress signal (which provider is being
+    tried right now), not a time-based estimate — lets a caller like
+    llm.py's generate_script surface "trying groq" instead of the whole
+    call just sitting there with no visible movement."""
     if not providers:
         raise RuntimeError("_generate_with_fallback called with no providers")
     last_exc: Exception | None = None
     for i, (name, provider) in enumerate(providers):
+        if on_provider_start:
+            on_provider_start(name, i, len(providers))
         try:
             return provider.generate(prompt)
         except Exception as e:
@@ -130,9 +138,9 @@ def _get_providers() -> list[tuple[str, Provider]]:
     return _providers_cache
 
 
-def generate(prompt: str) -> str:
+def generate(prompt: str, on_provider_start=None) -> str:
     """Send `prompt` to the highest-priority enabled provider, falling back
     down the ranked list on failure. Raises if every enabled provider
     failed — llm.py's own 3-attempt retry loop wraps this call and will
     re-run the whole fallback chain again from the top on that."""
-    return _generate_with_fallback(_get_providers(), prompt)
+    return _generate_with_fallback(_get_providers(), prompt, on_provider_start)

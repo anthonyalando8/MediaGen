@@ -168,7 +168,10 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
         # Explicit request override wins over the format's own media.mode —
         # mood/allow_illustration stay whatever the genre already set.
         media_plan = dataclasses.replace(fmt.media, mode=media_mode) if media_mode else fmt.media
-        script = generate_script(topic, fmt, CFG["llm"]["model"])
+        script = generate_script(
+            topic, fmt, CFG["llm"]["model"],
+            progress=lambda frac, detail: _sub(job_id, 1, frac, detail),
+        )
         (run_dir / "script.json").write_text(
             json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8")
 

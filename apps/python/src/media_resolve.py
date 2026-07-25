@@ -98,8 +98,9 @@ def _tokens(s: str) -> set:
     return set(re.findall(r"[a-z0-9]+", (s or "").lower()))
 
 
-def _score_candidate(query_tokens: set, text: str, tags: str, width, height, allow_illustration: bool, target_ar: float = 9 / 16):
-    """Term-overlap score in [0, ~1.15]. Returns None to exclude the candidate
+def _score_candidate(query_tokens: set, text: str, tags: str, width, height, allow_illustration: bool, target_ar: float = 9 / 16,
+                      duration_ms: int | None = None, min_duration_ms: int | None = None):
+    """Term-overlap score in [0, ~1.25]. Returns None to exclude the candidate
     outright (illustration hint present and allow_illustration is False)."""
     cand_tokens = _tokens(text) | _tokens(tags)
     if not allow_illustration and (cand_tokens & _ILLUSTRATION_HINTS):
@@ -113,10 +114,23 @@ def _score_candidate(query_tokens: set, text: str, tags: str, width, height, all
         # candidate is.
         ar = width / height
         score += 0.15 - min(0.3, abs(ar - target_ar) * 0.5)
+    if min_duration_ms and duration_ms is not None:
+        # Video only (image candidates never carry duration_ms, so this is a
+        # no-op for images). A clip shorter than the window it needs to fill
+        # freezes on its last frame while narration keeps playing — prefer a
+        # clip that covers the window; penalize (not exclude — a decent
+        # match that's a bit short still beats no visual at all) the ones
+        # that don't, proportional to how much of the window they'd miss.
+        if duration_ms >= min_duration_ms:
+            score += 0.1
+        else:
+            shortfall = (min_duration_ms - duration_ms) / min_duration_ms
+            score -= min(0.25, shortfall * 0.25)
     return score
 
 
-def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, target_ar: float = 9 / 16, exclude: set | None = None):
+def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, target_ar: float = 9 / 16, exclude: set | None = None,
+                     min_duration_ms: int | None = None):
     best, best_score = None, -1.0
     for c in candidates:
         # Skip anything already used — by provider asset id (stable across
@@ -124,7 +138,8 @@ def _best_candidate(candidates: list, q_tokens: set, allow_illustration: bool, t
         # URL (a prior reroll, or a provider with no id).
         if exclude and (c.get("id") in exclude or c.get("url") in exclude):
             continue
-        score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration, target_ar)
+        score = _score_candidate(q_tokens, c.get("text", ""), c.get("tags", ""), c.get("width"), c.get("height"), allow_illustration, target_ar,
+                                  duration_ms=c.get("duration_ms"), min_duration_ms=min_duration_ms)
         if score is None:
             continue
         if score > best_score:
@@ -283,7 +298,7 @@ _MAX_VIDEO_DURATION_MS = 30_000
 
 
 def _best_video_candidate(query: str, mood: list, allow_illustration: bool, orientation: str = "portrait",
-                           target_ar: float = 9 / 16, exclude: set | None = None) -> dict | None:
+                           target_ar: float = 9 / 16, exclude: set | None = None, min_duration_ms: int | None = None) -> dict | None:
     full_q = " ".join([query, *mood]).strip()
     q_tokens = _tokens(full_q)
 
@@ -292,7 +307,7 @@ def _best_video_candidate(query: str, mood: list, allow_illustration: bool, orie
         candidates.extend(fn(full_q, orientation))
     candidates = [c for c in candidates if c.get("duration_ms", 0) <= _MAX_VIDEO_DURATION_MS]
 
-    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, target_ar, exclude)
+    best, best_score = _best_candidate(candidates, q_tokens, allow_illustration, target_ar, exclude, min_duration_ms=min_duration_ms)
     if best is None:
         return None
     print(f"[media] {best['source']} video ✓ (score={best_score:.2f}) \"{full_q}\"")
@@ -314,6 +329,7 @@ def resolve_visual(
     pace: str = "",
     exclude: set | None = None,
     orientation: str = "portrait",
+    min_duration_ms: int | None = None,
 ) -> dict | None:
     """
     Resolve `query` to a visual — scored across every provider that has a
@@ -336,6 +352,12 @@ def resolve_visual(
     `orientation` — "portrait" (default, back-compat) | "landscape" | "square".
                     Threaded to each provider's own orientation query param
                     and into scoring as the delivery aspect target.
+    `min_duration_ms` — video only (ignored for image candidates, which have
+                    no duration). The ms window this visual needs to cover;
+                    biases selection toward clips that don't run out before
+                    it, so the visual doesn't freeze on its last frame while
+                    narration keeps playing. A soft preference, not a hard
+                    filter — a too-short clip still beats no visual at all.
 
     Returns {"kind", "url", "id", "relevance", "query", "duration_ms"?} or None.
     """
@@ -346,7 +368,7 @@ def resolve_visual(
 
     want_video = mode == "video" or (mode == "hybrid" and pace in _MOTION_PACES)
     if want_video:
-        result = _best_video_candidate(query, mood, allow_illustration, orientation, target_ar, exclude)
+        result = _best_video_candidate(query, mood, allow_illustration, orientation, target_ar, exclude, min_duration_ms=min_duration_ms)
         if result:
             return result
         # No video candidate cleared the bar — fall through to image so the

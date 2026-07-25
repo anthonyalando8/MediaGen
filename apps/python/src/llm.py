@@ -254,7 +254,10 @@ def assign_composition(data: dict, profile) -> dict:
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_script(topic: str, fmt, model: str | None = None) -> dict:
+_SCRIPT_GEN_MAX_ATTEMPTS = 3
+
+
+def generate_script(topic: str, fmt, model: str | None = None, progress=None) -> dict:
     """
     Generate a structured script via the configured LLM provider (see
     generation.py — provider + model selection now live entirely in
@@ -269,26 +272,44 @@ def generate_script(topic: str, fmt, model: str | None = None) -> dict:
     `model` is accepted for back-compat with existing callers (main.py/
     server.py currently pass `CFG["llm"]["model"]`) but is IGNORED — model
     selection is config.yaml's job now, not the caller's.
+
+    `progress` — optional callback(frac: float, detail: str), frac in
+    [0, 1] across the whole retry budget. This is a single blocking call
+    per attempt (no token-level streaming below this layer, across every
+    provider), so there's no finer-grained signal available than "which
+    attempt" / "which provider is being tried right now" — that's real
+    progress, not a time-based animation, which is why it moves in
+    per-attempt/per-provider steps rather than smoothly.
     """
     prompt = fmt.prompt.format(topic=topic)
     profile = fmt.profile
     raw = ""
+    max_attempts = _SCRIPT_GEN_MAX_ATTEMPTS
 
-    for attempt in range(1, 4):
-        print(f"[llm] Generating script (format={fmt.id}, attempt {attempt}/3)…")
+    for attempt in range(1, max_attempts + 1):
+        print(f"[llm] Generating script (format={fmt.id}, attempt {attempt}/{max_attempts})…")
+        if progress:
+            progress((attempt - 1) / max_attempts, f"attempt {attempt}/{max_attempts}")
+
+        def _on_provider_start(name, i, n, _attempt=attempt):
+            if progress:
+                progress((_attempt - 1) / max_attempts, f"attempt {_attempt}/{max_attempts} · trying {name}")
+
         try:
-            raw = generate(prompt)
+            raw = generate(prompt, on_provider_start=_on_provider_start)
             data = _parse_json(raw.strip())
             data = assign_composition(data, profile)
             _validate(data, profile)
             print(f"[llm] ✓ Script OK — \"{data['title']}\"")
             _print_cinematic_summary(data)
+            if progress:
+                progress(1.0, "script ready")
             return data
         except Exception as e:
             print(f"[llm]   ✗ attempt {attempt} failed: {e}", file=sys.stderr)
 
     raise RuntimeError(
-        f"[llm] Could not get valid JSON from model after 3 attempts.\n"
+        f"[llm] Could not get valid JSON from model after {max_attempts} attempts.\n"
         f"Last raw output (first 600 chars):\n{raw[:600]}"
     )
 

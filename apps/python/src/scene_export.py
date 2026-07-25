@@ -155,12 +155,50 @@ def _synthesize_text_over_dimmed_layers(contract: dict) -> list[dict]:
     return layers
 
 
+# Below this, a single held shot is fine. At/above it, a lone video clip is
+# increasingly likely to be shorter than the beat's narration — most stock
+# clips run well under this — so the visual freezes on its last frame while
+# audio keeps playing (see _sequential_cut_windows). Splitting into several
+# shorter cuts instead sidesteps that almost entirely, since each cut only
+# needs to cover a fraction of the beat.
+_SEQUENTIAL_CUT_THRESHOLD_MS = 6000
+
+
+def _sequential_cut_windows(duration_ms: int) -> list[tuple[int, int]]:
+    """3-5 disjoint (start, end) ms windows spanning `duration_ms` — the
+    "quick cuts instead of one held shot" windowing math, shared by
+    broll_montage and any other archetype that opts into it above the
+    freeze-risk threshold. Scale cut count to beat length — a short beat
+    shouldn't get 5 cuts of a few hundred ms each; a long one shouldn't
+    hold a single cut too long."""
+    n_cuts = 3 if duration_ms < 3500 else (4 if duration_ms < 5000 else 5)
+    slice_ms = duration_ms // n_cuts
+    windows: list[tuple[int, int]] = []
+    for i in range(n_cuts):
+        start = i * slice_ms
+        end = duration_ms if i == n_cuts - 1 else (i + 1) * slice_ms
+        windows.append((start, end))
+    return windows
+
+
 def _synthesize_bare_visual_layers(contract: dict) -> list[dict]:
     """Visuals-only — no HUD, no keyword, no body. "Sequences where only
-    visuals tell the story" (design doc). A single full-bleed source; the
-    beat's `body`/`keyword` (still present for text_over_dimmed's sake, and
-    for narration continuity) are deliberately never read here."""
+    visuals tell the story" (design doc). The beat's `body`/`keyword` (still
+    present for text_over_dimmed's sake, and for narration continuity) are
+    deliberately never read here.
+
+    A single full-bleed source normally — but past
+    _SEQUENTIAL_CUT_THRESHOLD_MS that's also when a lone clip is most likely
+    to run out before the narration does, so long beats get several
+    sequential cuts (same query, deduped to distinct assets) instead of one
+    shot held past its own length."""
     q = contract.get("visual_query") or contract.get("keyword", "")
+    duration_ms = contract.get("duration_ms") or 5000
+    if duration_ms >= _SEQUENTIAL_CUT_THRESHOLD_MS:
+        return [
+            {"role": "background", "source": {"query": q}, "fit": "cover", "in": start, "out": end}
+            for start, end in _sequential_cut_windows(duration_ms)
+        ]
     return [{
         "role": "background", "source": {"query": q}, "fit": "cover",
         "animation": {"camera": contract.get("camera", "")},
@@ -228,8 +266,19 @@ def _synthesize_full_bleed_video_layers(contract: dict) -> list[dict]:
     deliberate choice, not an accident of a fast-paced beat. The resolution
     loop in build_scene() reads `source.kind == "video"` as a per-layer mode
     override; if no video candidate clears the bar, resolve_visual's
-    existing image fallback still leaves the beat with SOME visual."""
+    existing image fallback still leaves the beat with SOME visual.
+
+    Since this archetype is video-only by definition, it's the archetype
+    MOST exposed to the freeze-on-a-short-clip problem — same
+    _SEQUENTIAL_CUT_THRESHOLD_MS split as bare_visual, every cut keeping the
+    `kind: "video"` flag."""
     q = contract.get("visual_query") or contract.get("keyword", "")
+    duration_ms = contract.get("duration_ms") or 5000
+    if duration_ms >= _SEQUENTIAL_CUT_THRESHOLD_MS:
+        return [
+            {"role": "background", "source": {"query": q, "kind": "video"}, "fit": "cover", "in": start, "out": end}
+            for start, end in _sequential_cut_windows(duration_ms)
+        ]
     return [{
         "role": "background", "source": {"query": q, "kind": "video"}, "fit": "cover",
         "animation": {"camera": contract.get("camera", "")}, "in": 0, "out": None,
@@ -287,16 +336,10 @@ def _synthesize_broll_montage_layers(contract: dict) -> list[dict]:
     every layer) guarantees each cut lands a different clip/photo."""
     duration_ms = contract.get("duration_ms") or 5000
     q = contract.get("visual_query") or contract.get("keyword", "")
-    # Scale cut count to beat length — a short beat shouldn't get 5 cuts of
-    # a few hundred ms each; a long one shouldn't hold a single cut too long.
-    n_cuts = 3 if duration_ms < 3500 else (4 if duration_ms < 5000 else 5)
-    slice_ms = duration_ms // n_cuts
-    layers: list[dict] = []
-    for i in range(n_cuts):
-        start = i * slice_ms
-        end = duration_ms if i == n_cuts - 1 else (i + 1) * slice_ms
-        layers.append({"role": "background", "source": {"query": q}, "fit": "cover", "in": start, "out": end})
-    return layers
+    return [
+        {"role": "background", "source": {"query": q}, "fit": "cover", "in": start, "out": end}
+        for start, end in _sequential_cut_windows(duration_ms)
+    ]
 
 
 def _synthesize_kinetic_type_layers(contract: dict) -> list[dict]:
@@ -420,15 +463,20 @@ def build_scene(
         # panels are guaranteed distinct even when they share a query.
         used_visuals: set[str] = set()
 
-        def _resolve_and_download(query: str, pace: str, mode_override: str | None = None):
+        def _resolve_and_download(query: str, pace: str, mode_override: str | None = None, min_duration_ms: int | None = None):
             """One resolve, with the oversized-video-clip → image fallback.
             Returns (result, data) or None. Mutates `used_visuals`.
             `mode_override` — a layer can demand "video" specifically
-            (full_bleed_video) regardless of the format's own media.mode."""
+            (full_bleed_video) regardless of the format's own media.mode.
+            `min_duration_ms` — the ms window this visual needs to cover
+            (a layer's own cut length, or the whole beat when unsplit);
+            biases video candidate selection toward clips that don't run out
+            before it (see media_resolve.py's resolve_visual doc)."""
             result = resolve_visual(
                 query, mood=media.mood, mode=mode_override or media.mode,
                 allow_illustration=media.allow_illustration, pace=pace,
                 orientation=media.orientation, exclude=used_visuals,
+                min_duration_ms=min_duration_ms,
             )
             if not result:
                 return None
@@ -460,7 +508,7 @@ def build_scene(
                 q = (c.get("visual_query") or "").strip()
                 if not q:
                     continue
-                resolved = _resolve_and_download(q, c.get("pace", ""))
+                resolved = _resolve_and_download(q, c.get("pace", ""), min_duration_ms=c.get("duration_ms"))
                 if not resolved:
                     continue
                 result, data = resolved
@@ -501,7 +549,10 @@ def build_scene(
                 if not q:
                     continue
                 mode_override = "video" if (layer.get("source") or {}).get("kind") == "video" else None
-                resolved = _resolve_and_download(q, c.get("pace", ""), mode_override)
+                layer_out = layer.get("out")
+                layer_in = layer.get("in") or 0
+                layer_window_ms = (layer_out - layer_in) if isinstance(layer_out, (int, float)) else c.get("duration_ms")
+                resolved = _resolve_and_download(q, c.get("pace", ""), mode_override, min_duration_ms=layer_window_ms)
                 if not resolved:
                     continue
                 result, data = resolved

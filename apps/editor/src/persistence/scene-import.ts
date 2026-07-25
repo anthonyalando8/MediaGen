@@ -982,18 +982,17 @@ function dividerNode(axis: "horizontal" | "vertical", start: number, dur: number
   } as unknown as Node;
 }
 
-/** A centered, wrapped block of text (whole lines, not word-synced — quote/stat
- * treatments read as a single composed statement, not spoken captions).
- * `centerY` (fraction of frame height, default 0.5) lets two text layers on
- * the same beat (stat_callout's hero figure + label) stack without
- * overlapping instead of both centering on the frame's vertical middle. */
-function layerTextNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, fontScale: number, centerY = 0.5): Node[] {
-  const margin = Math.round(W * 0.1);
-  const colWidth = W - margin * 2;
-  const fs = Math.round(W * fontScale);
-  const space = spaceWidth(fs, 700);
-  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
+/** How far a shrink step reduces the font scale per iteration of
+ * `fitWrappedLines`'s fit loop, and the floor (as a fraction of the
+ * requested scale) it won't shrink past — below that, a long single
+ * unbreakable word could still overflow at the size floor, so `top` gets a
+ * final clamp on top of the shrink (see `fitWrappedLines`). */
+const _FONT_SCALE_SHRINK_STEP = 0.92;
+const _FONT_SCALE_FLOOR_RATIO = 0.55;
 
+function wrapLines(text: string, fs: number, weight: number, colWidth: number): { text: string; width: number }[] {
+  const space = spaceWidth(fs, weight);
+  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
   const lines: { text: string; width: number }[] = [];
   let lineWords: string[] = [];
   let lineWidth = 0;
@@ -1003,16 +1002,56 @@ function layerTextNodes(text: string, start: number, dur: number, W: number, H: 
     lineWidth = 0;
   };
   for (const w of words) {
-    const ww = measureText(w, fs, 700);
+    const ww = measureText(w, fs, weight);
     if (lineWords.length > 0 && lineWidth + space + ww > colWidth) flush();
     lineWords.push(w);
     lineWidth += (lineWords.length > 1 ? space : 0) + ww;
   }
   flush();
+  return lines;
+}
 
-  const lineH = fs * 1.3;
-  const totalH = lines.length * lineH;
-  const top = Math.round(H * centerY - totalH / 2);
+/** Wraps `text` at `fontScaleStart`, then shrinks (down to
+ * `_FONT_SCALE_FLOOR_RATIO` of that scale) until the wrapped block's height
+ * fits within `H * availHFrac`. Fixes long beat text rendering above/below
+ * the visible frame — sizing was previously derived from frame WIDTH alone
+ * with no check against frame height, which a landscape beat with a long
+ * body (narrower available height than portrait, same width-driven font
+ * size) could blow straight through. Short text that already fits at
+ * `fontScaleStart` never enters the shrink loop — byte-for-byte unchanged
+ * from before this fix. */
+export function fitWrappedLines(text: string, W: number, H: number, weight: number, fontScaleStart: number, availHFrac = 0.86) {
+  const margin = Math.round(W * 0.1);
+  const colWidth = W - margin * 2;
+  const availH = H * availHFrac;
+  const floorScale = fontScaleStart * _FONT_SCALE_FLOOR_RATIO;
+
+  let fontScale = fontScaleStart;
+  let fs = Math.round(W * fontScale);
+  let lines = wrapLines(text, fs, weight, colWidth);
+  let lineH = fs * 1.3;
+  let totalH = lines.length * lineH;
+
+  while (totalH > availH && fontScale > floorScale) {
+    fontScale = Math.max(floorScale, fontScale * _FONT_SCALE_SHRINK_STEP);
+    fs = Math.round(W * fontScale);
+    lines = wrapLines(text, fs, weight, colWidth);
+    lineH = fs * 1.3;
+    totalH = lines.length * lineH;
+  }
+
+  return { fs, lines, lineH, totalH };
+}
+
+/** A centered, wrapped block of text (whole lines, not word-synced — quote/stat
+ * treatments read as a single composed statement, not spoken captions).
+ * `centerY` (fraction of frame height, default 0.5) lets two text layers on
+ * the same beat (stat_callout's hero figure + label) stack without
+ * overlapping instead of both centering on the frame's vertical middle. */
+function layerTextNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, fontScale: number, centerY = 0.5): Node[] {
+  const { fs, lines, lineH, totalH } = fitWrappedLines(text, W, H, 700, fontScale);
+  const marginV = Math.round(H * 0.04);
+  const top = Math.max(marginV, Math.min(Math.round(H * centerY - totalH / 2), H - marginV - totalH));
   const entF = Math.min(10, Math.max(4, Math.round(dur * 0.15)));
 
   return lines.map((ln, li) => {
@@ -1041,31 +1080,9 @@ function layerTextNodes(text: string, start: number, dur: number, W: number, H: 
  * not just a fade+rise — the punchier "kinetic_type" reveal distinct from
  * quote_card's calmer single fade. */
 function kineticTextNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, fontScale: number): Node[] {
-  const margin = Math.round(W * 0.1);
-  const colWidth = W - margin * 2;
-  const fs = Math.round(W * fontScale);
-  const space = spaceWidth(fs, 800);
-  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
-
-  const lines: { text: string; width: number }[] = [];
-  let lineWords: string[] = [];
-  let lineWidth = 0;
-  const flush = () => {
-    if (lineWords.length) lines.push({ text: lineWords.join(" "), width: lineWidth });
-    lineWords = [];
-    lineWidth = 0;
-  };
-  for (const w of words) {
-    const ww = measureText(w, fs, 800);
-    if (lineWords.length > 0 && lineWidth + space + ww > colWidth) flush();
-    lineWords.push(w);
-    lineWidth += (lineWords.length > 1 ? space : 0) + ww;
-  }
-  flush();
-
-  const lineH = fs * 1.3;
-  const totalH = lines.length * lineH;
-  const top = Math.round((H - totalH) / 2);
+  const { fs, lines, lineH, totalH } = fitWrappedLines(text, W, H, 800, fontScale);
+  const marginV = Math.round(H * 0.04);
+  const top = Math.max(marginV, Math.min(Math.round((H - totalH) / 2), H - marginV - totalH));
   // Each line's pop starts `staggerF` frames after the previous one, capped
   // so a long block doesn't take forever to finish landing.
   const staggerF = Math.min(6, Math.max(2, Math.round(dur * 0.06)));
