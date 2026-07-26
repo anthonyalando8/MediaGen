@@ -38,7 +38,7 @@ import {
   SceneGenerateError,
   DEFAULT_FORMAT,
 } from "../persistence/scene-generate";
-import type { GenerateProgress, MediaMode, SceneAsset, SceneFormat, SceneVisual, SourceKind, VoiceOption } from "../persistence/scene-generate";
+import type { GenerateProgress, MediaMode, Orientation, SceneAsset, SceneFormat, SceneVisual, SourceKind, VoiceOption } from "../persistence/scene-generate";
 import { closeAIScene, getAISceneState, subscribeAIScene } from "../store/ai-scene-handle";
 
 // Full-viewport, fixed-inset-0 flex-column — the same pattern
@@ -63,6 +63,12 @@ const MEDIA_MODES: { id: MediaMode; label: string }[] = [
   { id: "image", label: "Image" },
   { id: "video", label: "Video" },
   { id: "hybrid", label: "Hybrid" },
+];
+
+const ORIENTATIONS: { id: Orientation; label: string }[] = [
+  { id: "portrait", label: "Portrait" },
+  { id: "landscape", label: "Landscape" },
+  { id: "square", label: "Square" },
 ];
 
 /** ArrayBuffer -> base64, chunked so a multi-MB PDF doesn't blow the call
@@ -132,12 +138,20 @@ function AISceneModalInner() {
   const [format, setFormat] = useState<string>(DEFAULT_FORMAT);
   const [autoFormat, setAutoFormat] = useState(true);
   const [mediaMode, setMediaMode] = useState<MediaMode>("auto");
+  const [orientation, setOrientation] = useState<Orientation | "">("");
 
   // Voice picker state. voiceId === "" means "Automatic" (today's genre/LLM-driven choice).
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voiceId, setVoiceId] = useState<string>("");
   const [previewingVoice, setPreviewingVoice] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Optional real product photo — used for the reveal/CTA poster beats
+  // instead of a stock search (see server.py's product_image_data_url).
+  const [productImageDataUrl, setProductImageDataUrl] = useState<string | null>(null);
+  const [productImageName, setProductImageName] = useState<string | null>(null);
+  const [productImageError, setProductImageError] = useState("");
+  const productImageInputRef = useRef<HTMLInputElement>(null);
 
   // Asset review — which job this scene came from (for reroll), and which
   // beat (if any) currently has a reroll in flight.
@@ -296,6 +310,33 @@ function AISceneModalInner() {
 
   const hasContent = inputMode === "content" && !!(sourcePdfBase64 || sourceText.trim());
 
+  // Reads an image file client-side via readAsDataURL — already a full
+  // `data:image/...;base64,...` string, so no separate mime field or
+  // manual base64 assembly needed (unlike the PDF path above, which needs
+  // raw bytes for server-side text extraction).
+  const handleProductImageChosen = useCallback((file: File) => {
+    setProductImageError("");
+    if (!file.type.startsWith("image/")) {
+      setProductImageError(`"${file.name}" isn't an image file.`);
+      return;
+    }
+    setProductImageName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setProductImageDataUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => {
+      setProductImageError(`Could not read "${file.name}".`);
+      setProductImageName(null);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const clearProductImage = useCallback(() => {
+    setProductImageDataUrl(null);
+    setProductImageName(null);
+    setProductImageError("");
+    if (productImageInputRef.current) productImageInputRef.current.value = "";
+  }, []);
+
   const run = useCallback(async () => {
     const t = topic.trim();
     if (busy) return;
@@ -314,6 +355,8 @@ function AISceneModalInner() {
         format: inputMode === "content" && autoFormat ? undefined : format,
         mediaMode,
         voiceId: voiceId || undefined,
+        orientation: orientation || undefined,
+        productImageDataUrl: productImageDataUrl || undefined,
         signal: controller.signal,
         onProgress: setProgress,
       });
@@ -333,7 +376,7 @@ function AISceneModalInner() {
     } finally {
       abortRef.current = null;
     }
-  }, [topic, busy, format, mediaMode, voiceId, inputMode, hasContent, sourceText, sourceKind, sourcePdfBase64, autoFormat]);
+  }, [topic, busy, format, mediaMode, voiceId, orientation, productImageDataUrl, inputMode, hasContent, sourceText, sourceKind, sourcePdfBase64, autoFormat]);
 
   // ── Asset review: reroll / convert / reject ──────────────────────────────
   const handleReroll = useCallback(async (beatIndex: number, mode?: "image" | "video") => {
@@ -542,6 +585,45 @@ function AISceneModalInner() {
                 })}
               </div>
 
+              {/* Orientation */}
+              <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
+                Orientation
+              </label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setOrientation("")}
+                  style={{
+                    padding: "6px 11px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    cursor: "pointer", fontFamily: "var(--font-ui)",
+                    border: `1px solid ${orientation === "" ? "var(--accent)" : "var(--border)"}`,
+                    background: orientation === "" ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "var(--surface-0)",
+                    color: orientation === "" ? "var(--accent)" : "var(--text-1)",
+                  }}
+                >
+                  Format default
+                </button>
+                {ORIENTATIONS.map((o) => {
+                  const selected = o.id === orientation;
+                  return (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => setOrientation(o.id)}
+                      style={{
+                        padding: "6px 11px", borderRadius: 8, fontSize: 12, fontWeight: 600,
+                        cursor: "pointer", fontFamily: "var(--font-ui)",
+                        border: `1px solid ${selected ? "var(--accent)" : "var(--border)"}`,
+                        background: selected ? "color-mix(in srgb, var(--accent) 16%, transparent)" : "var(--surface-0)",
+                        color: selected ? "var(--accent)" : "var(--text-1)",
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Voice */}
               <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
                 Voice
@@ -577,6 +659,44 @@ function AISceneModalInner() {
                   {previewingVoice ? <Loader2 size={14} className="spin" /> : <Play size={14} />}
                 </button>
               </div>
+
+              {/* Product photo — optional. Used for the poster (reveal/CTA)
+                  beats instead of a stock search; harmless to leave empty
+                  for formats that don't use poster_card at all. */}
+              <label style={{ fontSize: 12, color: "var(--text-2)", display: "block", marginBottom: 7 }}>
+                Product photo <span style={{ opacity: 0.6, fontWeight: 400 }}>(optional)</span>
+              </label>
+              {productImageDataUrl ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <img src={productImageDataUrl} alt="" style={{ width: 42, height: 42, borderRadius: 8,
+                    objectFit: "cover", border: "1px solid var(--border)", flexShrink: 0 }} />
+                  <span style={{ fontSize: 12.5, color: "var(--text-0)", overflow: "hidden", textOverflow: "ellipsis",
+                    whiteSpace: "nowrap", flex: 1 }}>
+                    {productImageName}
+                  </span>
+                  <button type="button" onClick={clearProductImage} title="Remove photo"
+                    style={{ display: "flex", background: "transparent", border: "none", color: "var(--text-2)", cursor: "pointer", padding: 2 }}>
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <button type="button" onClick={() => productImageInputRef.current?.click()} className="btn btn-outline" style={{ gap: 6, fontSize: 12 }}>
+                    <Upload size={13} /> Upload a product photo
+                  </button>
+                  <span style={{ fontSize: 11, color: "var(--text-2)" }}>Used for the reveal/CTA beats instead of stock photos</span>
+                  <input
+                    ref={productImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleProductImageChosen(f); }}
+                    style={{ display: "none" }}
+                  />
+                </div>
+              )}
+              {productImageError && (
+                <p style={{ fontSize: 11.5, color: "var(--danger, #f0654a)", margin: "-10px 2px 16px" }}>{productImageError}</p>
+              )}
 
               {inputMode === "topic" ? (
                 <>

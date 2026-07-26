@@ -33,6 +33,8 @@ export interface SceneFormat {
 
 export type MediaMode = "auto" | "image" | "video" | "hybrid";
 
+export type Orientation = "portrait" | "landscape" | "square";
+
 /** How to interpret pasted/uploaded `sourceText` — mirrors ingest.py's
  * `_NORMALIZERS` keys. "plain_text" for an article/blog paste, "markdown"
  * for a doc with #/## headings, "script" for the user's own draft narration
@@ -106,6 +108,13 @@ interface GenerateOptions {
   mediaMode?: MediaMode;
   /** Explicit voice pick (id from listVoices()) for this generation. Omitted = "Automatic" (today's genre/LLM-driven choice). */
   voiceId?: string;
+  /** Override the format's own media.orientation for this generation. Omitted = format's own choice. */
+  orientation?: Orientation;
+  /** A real product photo, read client-side via FileReader.readAsDataURL
+   * (already a full `data:image/...;base64,...` string — no separate mime
+   * field needed). Used for the product-reveal/CTA poster beats instead of
+   * a stock photo search; omit to keep today's all-stock-search behavior. */
+  productImageDataUrl?: string;
   onProgress?: (p: GenerateProgress) => void;
   signal?: AbortSignal;
   /** Poll interval ms (default 1200). */
@@ -155,6 +164,8 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
     resolveVisuals = true,
     mediaMode,
     voiceId,
+    orientation,
+    productImageDataUrl,
     onProgress,
     signal,
     pollMs = 1200,
@@ -174,6 +185,8 @@ export async function generateScene(opts: GenerateOptions): Promise<{ scene: any
         ...(format ? { format } : {}),
         ...(mediaMode ? { media_mode: mediaMode } : {}),
         ...(voiceId ? { voice_id: voiceId } : {}),
+        ...(orientation ? { orientation } : {}),
+        ...(productImageDataUrl ? { product_image_data_url: productImageDataUrl } : {}),
         // At most one of these two — sourcePdfBase64 takes priority
         // server-side if somehow both were set.
         ...(sourcePdfBase64 ? { source_pdf_base64: sourcePdfBase64 } : {}),

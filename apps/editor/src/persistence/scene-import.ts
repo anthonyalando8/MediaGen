@@ -1013,18 +1013,22 @@ function wrapLines(text: string, fs: number, weight: number, colWidth: number): 
 
 /** Wraps `text` at `fontScaleStart`, then shrinks (down to
  * `_FONT_SCALE_FLOOR_RATIO` of that scale) until the wrapped block's height
- * fits within `H * availHFrac`. Fixes long beat text rendering above/below
- * the visible frame — sizing was previously derived from frame WIDTH alone
- * with no check against frame height, which a landscape beat with a long
- * body (narrower available height than portrait, same width-driven font
- * size) could blow straight through. Short text that already fits at
- * `fontScaleStart` never enters the shrink loop — byte-for-byte unchanged
- * from before this fix. */
+ * fits within `H * availHFrac` AND no single line is wider than the
+ * column. Fixes two distinct overflow modes: long beat text rendering
+ * above/below the visible frame (too many lines — sizing was previously
+ * derived from frame WIDTH alone with no check against frame height), and
+ * a single unbreakable "word" (no internal space — e.g. a hyphenated
+ * keyword like "TAB-SWITCHING") running past the column edge, which the
+ * height check alone never catches since one long word doesn't add lines.
+ * Short text that already fits at `fontScaleStart` never enters the shrink
+ * loop — byte-for-byte unchanged from before this fix. */
 export function fitWrappedLines(text: string, W: number, H: number, weight: number, fontScaleStart: number, availHFrac = 0.86) {
   const margin = Math.round(W * 0.1);
   const colWidth = W - margin * 2;
   const availH = H * availHFrac;
   const floorScale = fontScaleStart * _FONT_SCALE_FLOOR_RATIO;
+
+  const maxLineWidth = (ls: { width: number }[]) => ls.reduce((m, l) => Math.max(m, l.width), 0);
 
   let fontScale = fontScaleStart;
   let fs = Math.round(W * fontScale);
@@ -1032,7 +1036,7 @@ export function fitWrappedLines(text: string, W: number, H: number, weight: numb
   let lineH = fs * 1.3;
   let totalH = lines.length * lineH;
 
-  while (totalH > availH && fontScale > floorScale) {
+  while ((totalH > availH || maxLineWidth(lines) > colWidth) && fontScale > floorScale) {
     fontScale = Math.max(floorScale, fontScale * _FONT_SCALE_SHRINK_STEP);
     fs = Math.round(W * fontScale);
     lines = wrapLines(text, fs, weight, colWidth);

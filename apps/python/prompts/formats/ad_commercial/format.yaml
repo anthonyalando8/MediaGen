@@ -24,8 +24,17 @@ variety:
   min_archetypes: 3
   max_consecutive_archetype: 2
 
-voice:
-  style: aggressive
+# No forced voice style — unlike shortform_tiktok/calm_narrative/explainer_*
+# (each always ONE register by definition), ads genuinely span a wide tone
+# range: a hype direct-response ad and a calm wellness-brand ad are both
+# legitimate "ad_commercial" scripts. Forcing "aggressive" here previously
+# overrode the LLM's own per-product judgment — a real generation for a
+# focus/wellness drink correctly picked global.voice_style "calm_intense",
+# but the forced override discarded that and used the faster "aggressive"
+# voice anyway, which is what made the video feel rushed. Leaving `voice`
+# unset (matching listicle's convention) lets script.global.voice_style —
+# which the prompt's GLOBAL FIELDS section already asks to match the
+# product's register — actually take effect.
 
 visuals:
   camera_energy: high

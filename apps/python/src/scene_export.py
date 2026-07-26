@@ -26,6 +26,7 @@ Output: <run_dir>/scene.json  — open it in the editor via File ▸ Import Scen
 
 from __future__ import annotations
 import base64
+import hashlib
 import json
 import pathlib
 
@@ -305,6 +306,18 @@ def _synthesize_title_card_layers(contract: dict) -> list[dict]:
     return layers
 
 
+# Headline/subtext anchor_y pairs a poster beat can land on — five real
+# print-ad compositions, not one fixed layout repeated on every poster in
+# every video.
+_POSTER_LAYOUT_VARIANTS = [
+    (0.38, 0.62),  # centered block
+    (0.24, 0.46),  # top-stacked — photo shows through the lower two-thirds
+    (0.56, 0.78),  # bottom-stacked — photo dominates the top
+    (0.46, 0.58),  # tight-center — headline and subtext close together
+    (0.16, 0.30),  # upper-heavy — text near the very top, photo owns the rest
+]
+
+
 def _synthesize_poster_card_layers(contract: dict) -> list[dict]:
     """A static "print-ad" panel — product/brand photo behind a bold
     headline (`keyword`) and a supporting line (`body`), held with no
@@ -313,21 +326,43 @@ def _synthesize_poster_card_layers(contract: dict) -> list[dict]:
     moment, but doesn't require it — the archetype itself is just
     title_card's photo+scrim plus a second text layer, same
     background/scrim/multi-text-layer primitives stat_callout already
-    uses. No new renderer work."""
+    uses. No new renderer work.
+
+    Three things vary per beat instead of being fixed, so consecutive
+    posters (and posters across different generations) don't all look
+    identical: scrim strength tracks `intensity` (same formula as
+    text_over_dimmed, so a punchier beat gets a stronger dim, not a flat
+    0.55 always); the reveal reuses `_REVEAL_BY_PACE` (the same pace→reveal
+    mapping text_over_dimmed already uses, so a slow reveal beat FADES in
+    and an explosive one TYPEWRITERs, instead of every poster fading the
+    same way); the headline/subtext vertical layout is picked
+    deterministically from `_POSTER_LAYOUT_VARIANTS` via a hash of the
+    beat's own text (same beat regenerates the same layout; different
+    beats/videos land on different ones)."""
     duration_ms = contract.get("duration_ms") or 3000
     q = contract.get("visual_query") or contract.get("keyword", "")
     headline = (contract.get("keyword") or "").strip()
     subtext = (contract.get("body") or "").strip()
+
+    intensity = contract.get("intensity")
+    intensity = intensity if isinstance(intensity, (int, float)) else 0.5
+    scrim_opacity = round(0.4 + 0.3 * intensity, 2)
+    reveal = _REVEAL_BY_PACE.get(contract.get("pace", ""), "fade")
+    variant = _POSTER_LAYOUT_VARIANTS[
+        int(hashlib.md5((headline + subtext).encode("utf-8")).hexdigest(), 16) % len(_POSTER_LAYOUT_VARIANTS)
+    ]
+    headline_y, subtext_y = variant
+
     layers: list[dict] = [
         {"role": "background", "source": {"query": q}, "fit": "cover", "in": 0, "out": None},
-        {"role": "scrim", "shape": "rect", "opacity": 0.55, "in": 0, "out": None},
+        {"role": "scrim", "shape": "rect", "opacity": scrim_opacity, "in": 0, "out": None},
     ]
     if headline:
-        layers.append({"role": "text", "text": headline, "reveal": "fade", "size": "hero",
-                        "anchor_y": 0.38, "in": 0, "out": duration_ms})
+        layers.append({"role": "text", "text": headline, "reveal": reveal, "size": "hero",
+                        "anchor_y": headline_y, "in": 0, "out": duration_ms})
     if subtext:
-        layers.append({"role": "text", "text": subtext, "reveal": "fade", "size": "normal",
-                        "anchor_y": 0.62, "in": 0, "out": duration_ms})
+        layers.append({"role": "text", "text": subtext, "reveal": reveal, "size": "normal",
+                        "anchor_y": subtext_y, "in": 0, "out": duration_ms})
     return layers
 
 
@@ -444,6 +479,7 @@ def build_scene(
     progress=None,
     visual_profile: VisualProfile | None = None,   # genre's say over the cinematic defaults (formats.VisualProfile)
     media_plan: MediaPlan | None = None,           # genre's say over media mode/mood (formats.MediaPlan)
+    product_image_data_url: str | None = None,     # optional user-supplied product photo (see below)
 ) -> pathlib.Path:
     """
     Assemble scene.json (v2) and write it to out_dir. Returns the path.
@@ -452,6 +488,14 @@ def build_scene(
     beat_wavs         — the Kokoro beat_i.wav paths, 1:1 w/ beats.
     timeline          — the timeline dict (build_timeline) for word_times.
     resolve_visuals   — set False to skip stock lookups (faster; text-only scene).
+    product_image_data_url — an already-encoded `data:image/...;base64,...` string
+        from the caller (the editor reads the file with FileReader.readAsDataURL,
+        so no mime-sniffing/re-encoding is needed server-side — it's embedded
+        as-is). When set, every `poster_card` beat's background uses THIS real
+        photo instead of a stock search — those are the beats that are
+        actually "the product" (reveal/CTA), so a real photo matters most
+        there; every other beat keeps using stock search unchanged. None
+        (the default) reproduces today's all-stock-search behavior exactly.
     """
     visual_profile = visual_profile or VisualProfile()
     media_plan = media_plan or MediaPlan()
@@ -471,6 +515,14 @@ def build_scene(
     _synthesize_layers(contracts, orientation=media_plan.orientation)
 
     assets: list[dict] = []
+
+    # ── Product photo (optional) — embedded once, reused by every
+    # poster_card beat's background instead of a stock search. See
+    # build_scene's docstring for why it's scoped to poster_card only.
+    product_asset_id: str | None = None
+    if product_image_data_url:
+        product_asset_id = "product_photo"
+        assets.append({"id": product_asset_id, "kind": "image", "url": product_image_data_url})
 
     # ── Audio: one embedded VO asset + track per beat ────────────────────────
     for i, wav in enumerate(beat_wavs):
@@ -575,6 +627,21 @@ def build_scene(
                 q = ((layer.get("source") or {}).get("query") or "").strip()
                 if not q:
                     continue
+
+                if product_asset_id and c.get("archetype") == "poster_card" and layer.get("role") == "background":
+                    # Real product photo instead of a stock search — same
+                    # asset reused by every poster_card beat (reveal + CTA).
+                    layer["asset_id"] = product_asset_id
+                    layer["kind"] = "image"
+                    if "visual" not in c:
+                        c["visual"] = {
+                            "asset_id": product_asset_id, "kind": "image", "role": layer.get("role", "background"),
+                            "fit": layer.get("fit", "cover"), "opacity": 0.9,
+                            "relevance": 1.0, "query": q, "alternatives": [], "_source_url": None,
+                        }
+                    visual_layer_idx += 1
+                    continue
+
                 mode_override = "video" if (layer.get("source") or {}).get("kind") == "video" else None
                 layer_out = layer.get("out")
                 layer_in = layer.get("in") or 0

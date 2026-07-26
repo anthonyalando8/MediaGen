@@ -48,4 +48,26 @@ describe("fitWrappedLines", () => {
     expect(portrait.fs).toBe(Math.round(W * fontScale));
     expect(portrait.totalH).toBeLessThanOrEqual(1920 * 0.86);
   });
+
+  it("reproduces run 036 beat_01 ('ENDLESS TAB-SWITCHING' title_card, 3840x2160 4K landscape) — a single unbreakable hyphenated word no longer overflows the column", () => {
+    // "TAB-SWITCHING" has no space, so it's one unbreakable wrap token —
+    // the height-only check (totalH vs availH) never caught this, since
+    // two short lines don't exceed the height budget even though the
+    // second line's WIDTH blew past the column on its own.
+    const W = 3840, H = 2160;
+    const margin = Math.round(W * 0.1);
+    const colWidth = W - margin * 2;
+    const { lines } = fitWrappedLines("ENDLESS TAB-SWITCHING", W, H, 700, 0.13);
+    for (const line of lines) {
+      expect(line.width).toBeLessThanOrEqual(colWidth + 1); // +1 rounding slack
+    }
+  });
+
+  it("a single unbreakable long word still respects the shrink floor rather than shrinking forever", () => {
+    const W = 800, H = 800;
+    const fontScaleStart = 0.13;
+    const { fs } = fitWrappedLines("SUPERCALIFRAGILISTICEXPIALIDOCIOUS", W, H, 700, fontScaleStart);
+    const floorFs = Math.round(W * fontScaleStart * 0.55);
+    expect(fs).toBeGreaterThanOrEqual(floorFs);
+  });
 });

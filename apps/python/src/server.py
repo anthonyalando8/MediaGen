@@ -61,7 +61,7 @@ from pydantic import BaseModel
 sys.path.insert(0, str(pathlib.Path(__file__).parent / "src"))
 
 from llm import generate_script
-from formats import load_format, list_formats, DEFAULT_FORMAT
+from formats import load_format, list_formats, DEFAULT_FORMAT, MediaPlan
 import ingest
 from tts import synthesize, beat_durations, synthesize_preview, ENGLISH_VOICES, _ENGLISH_VOICE_IDS
 from captions.captions import generate_captions
@@ -154,10 +154,37 @@ def _sub(job_id: str, step: int, frac: float, detail: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # Pipeline worker
 # ─────────────────────────────────────────────────────────────────────────────
-def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool, media_mode: str | None = None, voice_id: str | None = None) -> None:
+def _apply_media_request_overrides(media: MediaPlan, media_mode: str | None, orientation: str | None) -> MediaPlan:
+    """Explicit request overrides win over the format's own media.mode/
+    orientation — allow_illustration/mood stay whatever the genre set (mood
+    gets its own, later, script-driven override — see
+    _apply_script_mood_override). Pure function: no request/job-state
+    dependency, directly unit-testable."""
+    overrides: dict = {}
+    if media_mode:
+        overrides["mode"] = media_mode
+    if orientation:
+        overrides["orientation"] = orientation
+    return dataclasses.replace(media, **overrides) if overrides else media
+
+
+def _apply_script_mood_override(media: MediaPlan, script: dict) -> MediaPlan:
+    """The script's OWN music_mood (LLM-picked per-topic, already proven to
+    judge tone well — e.g. correctly picking a calm register for a wellness
+    product) drives the visual mood search terms too, instead of the
+    format's one static mood list applying to every generation regardless
+    of register. Falls back to the format's own mood list (i.e. a no-op)
+    when the script doesn't set one."""
+    music_mood = ((script.get("global", {}) or {}).get("music_mood") or "").strip()
+    return dataclasses.replace(media, mood=[music_mood]) if music_mood else media
+
+
+def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool, media_mode: str | None = None,
+                   voice_id: str | None = None, orientation: str | None = None,
+                   product_image_data_url: str | None = None) -> None:
     started = _time.time()
-    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s media_mode=%s voice_id=%s",
-             job_id[:8], topic, format_id, resolve_visuals, media_mode, voice_id)
+    LOG.info("job %s · START topic=%r format=%s resolve_visuals=%s media_mode=%s voice_id=%s orientation=%s product_photo=%s",
+             job_id[:8], topic, format_id, resolve_visuals, media_mode, voice_id, orientation, bool(product_image_data_url))
     try:
         run_id, run_dir = make_run_dir(CFG["paths"]["workspace"])
         _set(job_id, run_id=run_id, run_dir=str(run_dir))
@@ -165,13 +192,12 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
         # 1. Script — load the selected format recipe (prompt + validation profile)
         _mark_step(job_id, 1)
         fmt = load_format(_PROMPTS_ROOT, format_id)
-        # Explicit request override wins over the format's own media.mode —
-        # mood/allow_illustration stay whatever the genre already set.
-        media_plan = dataclasses.replace(fmt.media, mode=media_mode) if media_mode else fmt.media
+        media_plan = _apply_media_request_overrides(fmt.media, media_mode, orientation)
         script = generate_script(
             topic, fmt, CFG["llm"]["model"],
             progress=lambda frac, detail: _sub(job_id, 1, frac, detail),
         )
+        media_plan = _apply_script_mood_override(media_plan, script)
         (run_dir / "script.json").write_text(
             json.dumps(script, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -210,6 +236,7 @@ def _run_pipeline(job_id: str, topic: str, format_id: str, resolve_visuals: bool
             progress=lambda i, n, d: _sub(job_id, 5, (i + 1) / n, d),
             visual_profile=fmt.visuals,
             media_plan=media_plan,
+            product_image_data_url=product_image_data_url,
         )
         scene = json.loads(pathlib.Path(scene_path).read_text(encoding="utf-8"))
 
@@ -294,6 +321,15 @@ class GenerateRequest(BaseModel):
     # (must be one of tts.ENGLISH_VOICES). None (the default/"Automatic")
     # leaves today's genre/LLM-driven voice selection untouched.
     voice_id: str | None = None
+    # Explicit editor override for the format's own media.orientation
+    # (portrait/landscape/square) — same "None leaves the format's own
+    # choice untouched" convention as media_mode above.
+    orientation: str | None = None
+    # An already-encoded `data:image/...;base64,...` string (the editor
+    # reads the file with FileReader.readAsDataURL client-side, so no
+    # mime-sniffing needed here) for a real product photo. None (the
+    # default) leaves every visual on stock search, unchanged.
+    product_image_data_url: str | None = None
 
 
 class RerollRequest(BaseModel):
@@ -378,7 +414,8 @@ def generate(req: GenerateRequest) -> dict:
     _set(job_id, state="queued", step=0, total_steps=_TOTAL, label="Queued", pct=0,
          format=format_id, created=_time.time())
     _evict_if_needed()
-    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals, req.media_mode, req.voice_id)
+    _EXECUTOR.submit(_run_pipeline, job_id, topic, format_id, req.resolve_visuals, req.media_mode, req.voice_id,
+                      req.orientation, req.product_image_data_url)
     return {"job_id": job_id}
 
 

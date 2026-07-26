@@ -109,6 +109,18 @@ BANNED PHRASES — generic ad-copy filler that reads as fake: "industry-leading"
 next level" / "in today's world" / "here's the thing".
 
 ──────────────────────────────────────────────────────────────────────
+VARY THE CLOSE — don't default to the same CTA every time
+──────────────────────────────────────────────────────────────────────
+A discount isn't the only way to close. Pick whichever actually fits the
+product instead of reaching for "X% off" by default:
+  - Discount/urgency: "40% off today", "first 100 orders only"
+  - Risk reversal: "money-back guarantee", "try it free for 14 days"
+  - Social proof: "join 10,000 others who switched"
+  - Plain availability: "available now", "ships this week"
+The PRODUCT REVEAL keyword should vary too — not always "MEET X" — try
+naming what changes instead ("NO MORE BRAIN FOG", "YOUR NEW MORNING").
+
+──────────────────────────────────────────────────────────────────────
 GLOBAL FIELDS — pick one value per field based on the product.
 ──────────────────────────────────────────────────────────────────────
 - theme/music_mood/voice_style/camera_style: the visual and sonic register
@@ -187,6 +199,52 @@ WORKED EXAMPLE (7 beats — a coffee subscription product)
     {{ "id": "beat_05", "type": "insight", "keyword": "YOUR SCHEDULE", "text": "Pick weekly, biweekly, or monthly — it just *shows up* before you run out.", "energy": "mid", "emotion": "playful", "pace": "fast", "visual_intent": "clean", "camera": "snap_zoom", "transition": "whip_pan", "background": "grid", "layout": "left", "visual_query": "phone app delivery schedule", "intensity": 0.65, "pattern_interrupt": "", "composition": "" }},
     {{ "id": "beat_06", "type": "truth", "keyword": "REAL CUSTOMERS", "text": "Thousands of people switched and said the same *thing*: they didn't know coffee could taste like this.", "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary", "camera": "static", "transition": "cut", "background": "solid", "layout": "center", "visual_query": "person drinking coffee morning", "intensity": 0.68, "pattern_interrupt": "", "composition": "" }},
     {{ "id": "beat_07", "type": "cta", "keyword": "20% OFF FIRST BAG", "text": "Your next cup could be the best one you've *ever* had. First bag, twenty percent off.", "energy": "high", "emotion": "confident", "pace": "explosive", "visual_intent": "cinematic", "camera": "pull_out", "transition": "dip_black", "background": "glow", "layout": "full", "visual_query": "coffee beans bag close up", "intensity": 0.92, "pattern_interrupt": "flash", "composition": "", "archetype": "poster_card" }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+WORKED EXAMPLE (6 beats — a calm/wellness product, risk-reversal close
+instead of a discount — different register, different CTA style from the
+example above; match THIS energy for a calm/premium product, not the
+coffee example's aggressive one)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Fall Asleep Without Trying",
+  "thumbnail": "Still Awake At 2AM",
+  "style": "calm",
+  "global": {{
+    "theme": "luxury_minimal", "music_mood": "ambient", "voice_style": "calm_intense",
+    "camera_style": "static", "subject": "bedside sleep device"
+  }},
+  "beats": [
+    {{ "id": "beat_01", "type": "hook", "keyword": "STILL AWAKE", "text": "You've counted to a thousand, tried every position, and you're *still* wide awake.", "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary", "camera": "static", "transition": "fade", "background": "solid", "layout": "center", "visual_query": "person bed dark night", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_02", "type": "tension", "keyword": "NOT JUST TIRED", "text": "It isn't just feeling tired the next day — poor sleep quietly erodes *everything* else too.", "energy": "mid", "emotion": "serious", "pace": "slow", "visual_intent": "documentary", "camera": "push_in", "transition": "cut", "background": "gradient", "layout": "left", "visual_query": "person tired morning coffee", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_03", "type": "payoff", "keyword": "MEET DRIFT", "text": "", "energy": "low", "emotion": "confident", "pace": "slow", "visual_intent": "minimal", "camera": "static", "transition": "fade", "background": "solid", "layout": "center", "visual_query": "sleep device nightstand", "intensity": 0.4, "pattern_interrupt": "", "composition": "", "archetype": "poster_card", "silent": true, "silent_duration_s": 3 }},
+    {{ "id": "beat_04", "type": "insight", "keyword": "GUIDED WIND-DOWN", "text": "A ten-minute guided wind-down that eases your *nervous system* into sleep, not just white noise.", "energy": "low", "emotion": "hopeful", "pace": "slow", "visual_intent": "minimal", "camera": "static", "transition": "fade", "background": "gradient", "layout": "right", "visual_query": "nightstand soft light evening", "intensity": 0.45, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_05", "type": "truth", "keyword": "REAL RESULTS", "text": "People using Drift report falling asleep nearly *twice* as fast within the first week.", "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "documentary", "camera": "static", "transition": "cut", "background": "solid", "layout": "center", "visual_query": "person sleeping peacefully", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_06", "type": "cta", "keyword": "TRY 30 NIGHTS FREE", "text": "Sleep on it for thirty nights. If it doesn't work, send it *back* — no questions asked.", "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "minimal", "camera": "pull_out", "transition": "fade", "background": "solid", "layout": "center", "visual_query": "sleep device box packaging", "intensity": 0.6, "pattern_interrupt": "", "composition": "", "archetype": "poster_card" }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+WORKED EXAMPLE (6 beats — an app/service product, social-proof close
+instead of a discount or guarantee — a third distinct register/CTA style)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Split Any Bill In Seconds",
+  "thumbnail": "Who Owes What",
+  "style": "builder",
+  "global": {{
+    "theme": "tech_blue", "music_mood": "playful", "voice_style": "storyteller",
+    "camera_style": "dynamic", "subject": "phone screen app"
+  }},
+  "beats": [
+    {{ "id": "beat_01", "type": "hook", "keyword": "WHO OWES WHAT", "text": "Someone always ends up doing *math* on their phone at the end of dinner.", "energy": "high", "emotion": "amused", "pace": "fast", "visual_intent": "quirky", "camera": "handheld", "transition": "cut", "background": "glow", "layout": "left", "visual_query": "friends restaurant table bill", "intensity": 0.75, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_02", "type": "tension", "keyword": "THE AWKWARD PART", "text": "And someone else always has to be the one who *brings it up*.", "energy": "mid", "emotion": "amused", "pace": "mid", "visual_intent": "quirky", "camera": "static", "transition": "cut", "background": "lines", "layout": "right", "visual_query": "phone calculator screen", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_03", "type": "payoff", "keyword": "MEET SPLITLY", "text": "", "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "clean", "camera": "static", "transition": "fade", "background": "solid", "layout": "center", "visual_query": "phone app screen interface", "intensity": 0.55, "pattern_interrupt": "", "composition": "", "archetype": "poster_card", "silent": true, "silent_duration_s": 2 }},
+    {{ "id": "beat_04", "type": "insight", "keyword": "SCAN AND SPLIT", "text": "Scan the receipt, tap who had *what*, and everyone gets a link to pay their share.", "energy": "mid", "emotion": "confident", "pace": "fast", "visual_intent": "clean", "camera": "snap_zoom", "transition": "whip_pan", "background": "grid", "layout": "left", "visual_query": "phone camera receipt scan", "intensity": 0.65, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_05", "type": "truth", "keyword": "NO MORE IOUS", "text": "No spreadsheets, no *IOUs*, no group chat full of math nobody wants to do.", "energy": "mid", "emotion": "playful", "pace": "mid", "visual_intent": "clean", "camera": "handheld", "transition": "cut", "background": "gradient", "layout": "right", "visual_query": "friends phones out together", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }},
+    {{ "id": "beat_06", "type": "cta", "keyword": "JOIN 500,000 USERS", "text": "Half a million people already stopped doing the *math* at the table. You can too.", "energy": "high", "emotion": "confident", "pace": "explosive", "visual_intent": "cinematic", "camera": "pull_out", "transition": "dip_black", "background": "glow", "layout": "full", "visual_query": "phone app screen close up", "intensity": 0.85, "pattern_interrupt": "flash", "composition": "", "archetype": "poster_card" }}
   ]
 }}
 

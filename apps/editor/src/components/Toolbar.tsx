@@ -3,7 +3,12 @@
 // Simplified toolbar (UI/UX redesign). The toolbar is now ONLY tools +
 // zoom + history:
 //
-//   [ Select  Text  Shape  Draw  Mask ] | [ −  100%  + ] ......... [ ⤺  ⤼ ]
+//   [ Select  Text  Shape  Draw  Path-edit  Mask ] | [ −  100%  + ] .. [ ⤺  ⤼ ]
+//
+// "Path-edit" isn't a `Tool` (it needs a specific selected shape node, not
+// a persistent mode) — it's a one-shot action button, same shape as the
+// Inspector's "Convert to path" button, just promoted to the toolbar for
+// discoverability (see handlePathEdit below).
 //
 // All Insert / Arrange / View clusters moved up to the <Menubar>:
 //   • Insert (Shape/Text/Group/Null/Adjustment/Precomp) → Insert menu
@@ -15,8 +20,11 @@
 // <Viewport> and <ViewportStatusBar> already share. No document/store logic
 // changed — only which controls live here.
 
-import { MousePointer2, Pencil, PenLine, Plus, Minus, Redo2, Square, Type, Undo2 } from "lucide-react";
+import { MousePointer2, Pencil, PenLine, Plus, Minus, Redo2, SplinePointer, Square, Type, Undo2 } from "lucide-react";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
+import { activeComp } from "../store/selectors";
+import { convertToPathOp } from "../commands/convert-to-path";
+import { enterPathEditMode } from "../store/path-edit-handle";
 import type { Tool } from "../store/selection";
 
 const TOOLS: { tool: Tool; label: string; icon: typeof Square }[] = [
@@ -36,6 +44,24 @@ export function Toolbar() {
   const zoom = useEditorStore((s) => s.zoom);
   const selection = useEditorStore((s) => s.selection);
 
+  // Path-edit anchors — previously only reachable via the Inspector's
+  // "Convert to path" button (non-polygon shapes) or double-clicking an
+  // already-editable polygon on canvas. This button unifies both: it
+  // converts the shape to an editable path if it isn't one already
+  // (convertToPathOp no-ops/returns null for a shape that already has
+  // pathPoints), then opens the same PathEditOverlay Viewport owns.
+  const root = useEditorStore((s) => activeComp(s).root);
+  const selectedNode = selection.length === 1 ? root.find((n) => n.id === selection[0]) : undefined;
+  const canPathEdit = !!selectedNode && selectedNode.kind === "shape";
+
+  function handlePathEdit() {
+    if (!selectedNode) return;
+    const state = store.getState();
+    const op = convertToPathOp(activeComp(state), selectedNode.id);
+    if (op) state.apply(op);
+    enterPathEditMode(String(selectedNode.id));
+  }
+
   return (
     <div className="toolbar">
       {/* Tools */}
@@ -51,6 +77,14 @@ export function Toolbar() {
             <Icon size={ICON_SIZE} />
           </button>
         ))}
+        <button
+          className="btn btn-icon"
+          title="Edit path anchors"
+          disabled={!canPathEdit}
+          onClick={handlePathEdit}
+        >
+          <SplinePointer size={ICON_SIZE} />
+        </button>
         <button
           className="btn btn-icon"
           aria-pressed={tool === "mask"}

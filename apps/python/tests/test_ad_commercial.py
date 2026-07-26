@@ -51,6 +51,39 @@ class TestPosterCardLayers(unittest.TestCase):
         # The text/textless partition test in test_composer.py already
         # verifies TEXT_BEARING | TEXTLESS == ALLOWED for the whole set.
 
+    def test_scrim_opacity_tracks_intensity_not_a_flat_value(self):
+        low = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "K", "body": "B", "intensity": 0.1})
+        high = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "K", "body": "B", "intensity": 0.95})
+        low_scrim = next(l for l in low if l["role"] == "scrim")["opacity"]
+        high_scrim = next(l for l in high if l["role"] == "scrim")["opacity"]
+        self.assertLess(low_scrim, high_scrim)
+
+    def test_reveal_follows_pace_same_mapping_as_text_over_dimmed(self):
+        for pace, expected in scene_export._REVEAL_BY_PACE.items():
+            layers = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "K", "body": "B", "pace": pace})
+            headline = next(l for l in layers if l["role"] == "text")
+            self.assertEqual(headline["reveal"], expected)
+
+    def test_layout_variant_is_deterministic_and_varies_by_content(self):
+        a1 = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "MEET AURA", "body": "Fresh, delivered weekly."})
+        a2 = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "MEET AURA", "body": "Fresh, delivered weekly."})
+        b = scene_export._synthesize_poster_card_layers({"duration_ms": 3000, "keyword": "40% OFF TODAY", "body": "One weekend only."})
+
+        def anchor_ys(layers):
+            return tuple(l["anchor_y"] for l in layers if l["role"] == "text")
+
+        self.assertEqual(anchor_ys(a1), anchor_ys(a2))  # same content -> same layout, every time
+        # Headline always sits above the subtext, regardless of which variant landed.
+        for layers in (a1, b):
+            ys = anchor_ys(layers)
+            self.assertLess(ys[0], ys[1])
+        # Sweep enough distinct content to see more than one variant actually used
+        # (guards against the hash bucketing collapsing to a single layout).
+        seen = {anchor_ys(scene_export._synthesize_poster_card_layers(
+            {"duration_ms": 3000, "keyword": f"HEADLINE {i}", "body": f"Subtext body {i}."}
+        )) for i in range(12)}
+        self.assertGreater(len(seen), 1)
+
 
 class FakeKokoro:
     """Records calls instead of doing real inference — no model files needed."""
