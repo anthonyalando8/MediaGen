@@ -207,12 +207,31 @@ def _synthesize_bare_visual_layers(contract: dict) -> list[dict]:
     }]
 
 
+# Above this word count a "quote card" statement no longer reads as a
+# punchy centered quote — it's a paragraph, and the centered box the editor
+# fits it into (capped at body scale, MAX_BLOCK_H of the frame height) can't
+# hold it without shrinking well past comfortable reading size. See
+# scene-import-text-fit-doc.md §6.2.
+_QUOTE_CARD_WORD_BUDGET = 18
+
+
 def _synthesize_quote_card_layers(contract: dict) -> list[dict]:
     """Typographic, minimal/no imagery — a generated background (no stock
     photo lookup: an empty `source` tells the resolution loop below to skip
-    it), centered statement text held for the whole beat."""
-    duration_ms = contract.get("duration_ms") or 5000
+    it), centered statement text held for the whole beat.
+
+    Past `_QUOTE_CARD_WORD_BUDGET` words, the centered treatment is the wrong
+    fit no matter how the editor shrinks it, so this defers to
+    `_synthesize_text_over_dimmed_layers` instead — the same word-synced
+    bottom-band body that already carries calm_narrative's long lines (shrink
+    + coverage guard, scene-import.ts §4.3/§4.4). The contract already has
+    everything that path needs (`visual_query`, `word_times`, `pace`,
+    `intensity`) regardless of archetype, so no extra data is required."""
     body = (contract.get("body") or contract.get("keyword") or "").strip()
+    if len(body.split()) > _QUOTE_CARD_WORD_BUDGET:
+        return _synthesize_text_over_dimmed_layers(contract)
+
+    duration_ms = contract.get("duration_ms") or 5000
     layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
     if body:
         layers.append({"role": "text", "text": body, "reveal": "fade", "in": 0, "out": duration_ms})
@@ -338,7 +357,15 @@ def _synthesize_poster_card_layers(contract: dict) -> list[dict]:
     same way); the headline/subtext vertical layout is picked
     deterministically from `_POSTER_LAYOUT_VARIANTS` via a hash of the
     beat's own text (same beat regenerates the same layout; different
-    beats/videos land on different ones)."""
+    beats/videos land on different ones).
+
+    The variant's two `anchor_y` values are STARTING centers only, not a
+    reserved, collision-free pair: scene-import.ts renders poster_card's two
+    text layers as a measured stack (headline first, at `anchor_y`; subtext
+    positioned from the headline's actual rendered bottom + a gap, then the
+    pair clamped into the safe area), so a headline that wraps to 2 lines
+    can't run into the subtext even though both anchors were authored
+    assuming single-line text."""
     duration_ms = contract.get("duration_ms") or 3000
     q = contract.get("visual_query") or contract.get("keyword", "")
     headline = (contract.get("keyword") or "").strip()
@@ -403,17 +430,33 @@ def _synthesize_broll_montage_layers(contract: dict) -> list[dict]:
     ]
 
 
+# Above this word count, a kinetic line reads as a full sentence, not a
+# punchy one-or-two-word slam — the "hero" size hint should follow that
+# distinction rather than being applied unconditionally to whatever `body`
+# happens to be. See scene-import-text-fit-doc.md §6.1.
+_KINETIC_HERO_WORD_BUDGET = 6
+
+
 def _synthesize_kinetic_type_layers(contract: dict) -> list[dict]:
     """Animated typography, no imagery — the beat's spoken `body` (not just
     `keyword`; kinetic type carries the actual line, not a section label)
     rendered with a punchier per-LINE staggered pop-in (`reveal: "kinetic"`
     — scene-import.ts's kineticTextNodes) instead of quote_card's single
-    calm fade. Generated background, same as quote_card/stat_callout."""
+    calm fade. Generated background, same as quote_card/stat_callout.
+
+    `size` is "hero" only for a short punch line (<= `_KINETIC_HERO_WORD_BUDGET`
+    words); a longer line — the common case, since this carries the full
+    spoken `body` — hints "normal" instead. (scene-import.ts's kinetic
+    reveal currently starts every line at a fixed "heroSub" px size
+    regardless of this hint, so today this doesn't change a rendered pixel —
+    it keeps the hint honest for that code and any future consumer that
+    does key weight/tracking off it.)"""
     duration_ms = contract.get("duration_ms") or 5000
     text = (contract.get("body") or contract.get("keyword") or "").strip()
     layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
     if text:
-        layers.append({"role": "text", "text": text, "reveal": "kinetic", "size": "hero",
+        size = "hero" if len(text.split()) <= _KINETIC_HERO_WORD_BUDGET else "normal"
+        layers.append({"role": "text", "text": text, "reveal": "kinetic", "size": size,
                         "in": 0, "out": duration_ms})
     return layers
 
