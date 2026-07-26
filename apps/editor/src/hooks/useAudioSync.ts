@@ -21,6 +21,7 @@ import { useEffect, useRef } from "react";
 import { audioEngine } from "../audio/audio-engine";
 import { useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
+import { subscribeViewportReset } from "../store/viewport-reset-handle";
 import type { AudioTrack } from "core";
 
 export function useAudioSync() {
@@ -84,8 +85,23 @@ export function useAudioSync() {
     const unsubscribe = store.subscribe(sync);
     sync(); // run immediately on mount
 
+    // Document swap (Import Scene / Generate AI Scene / File ▸ Open / New
+    // Project) — clear the engine's stale buffer cache (see
+    // AudioEngine.reset()'s doc for why: reused asset ids like "vo_0" across
+    // generations) and reset our own change-detection refs so the next
+    // sync() unconditionally re-evaluates and reloads, even if the new
+    // scene's track list happens to fingerprint-match the old one.
+    const unsubscribeReset = subscribeViewportReset(() => {
+      audioEngine.reset();
+      lastTracksRef.current = "";
+      lastPlayhead.current = -1;
+      lastPlaying.current = false;
+      sync();
+    });
+
     return () => {
       unsubscribe();
+      unsubscribeReset();
       // Stop audio cleanly when the component unmounts
       audioEngine.setPlaying(false);
     };

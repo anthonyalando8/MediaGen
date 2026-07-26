@@ -1,5 +1,5 @@
 // apps/editor/src/components/Viewport.tsx
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { mul, toFrame } from "core";
 import type { Id, NodeKindRegistry } from "core";
 import { createWebGLRenderer } from "renderer-webgl";
@@ -19,6 +19,7 @@ import { ViewportFrame } from "./ViewportFrame";
 import { MaskPenOverlay } from "./MaskPenOverlay";
 import { RichTextEditor } from "./RichTextEditor";
 import type { RichTextEditorHandle } from "./RichTextEditor";
+import { getViewportEpoch, subscribeViewportReset } from "../store/viewport-reset-handle";
 import { PathEditOverlay } from "./PathEditOverlay";
 import { DrawOverlay } from "./DrawOverlay";
 import { DrawOptionsBar } from "./DrawOptionsBar";
@@ -429,6 +430,16 @@ const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
   }, [store, registry, canvasSize]);
 
   const tool = useEditorStore((s) => s.tool);
+  // `loadProjectDocument` (File ▸ Open / Import Scene / Generate AI Scene /
+  // New Project) calls `resetViewport()` intending to force a full canvas
+  // remount (see viewport-reset-handle.ts's header comment) — but nothing
+  // ever actually consumed the epoch, so <CanvasHost>'s WebGL renderer (and
+  // its node/texture caches) survived a document swap untouched, and kept
+  // rendering/playing the PREVIOUS project after importing a new one (while
+  // export — which builds its own renderer straight from the current store
+  // state — always showed the new one). Keying <CanvasHost> on the epoch
+  // below is what actually makes the remount happen.
+  const viewportEpoch = useSyncExternalStore(subscribeViewportReset, getViewportEpoch, getViewportEpoch);
   const editingNodeIdRef = useRef<string | null>(null);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [pathEditNodeId, setPathEditNodeId] = useState<string | null>(null);
@@ -465,7 +476,7 @@ const createRenderer = useCallback((canvas: HTMLCanvasElement): Renderer => {
 
   return (
     <>
-      <CanvasHost createRenderer={createRenderer} onResize={handleResize} onContextLost={handleContextLost} active={!isExporting} />
+      <CanvasHost key={viewportEpoch} createRenderer={createRenderer} onResize={handleResize} onContextLost={handleContextLost} active={!isExporting} />
       <ViewportFrame compSize={compSize} canvasSize={canvasSize} fit={fit} />
       <div
         ref={clickLayerRef}

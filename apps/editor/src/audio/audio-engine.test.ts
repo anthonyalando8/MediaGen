@@ -181,4 +181,52 @@ describe("AudioEngine", () => {
     expect(firstSource.stopped).toBe(true);
     expect(ctx.createdSources).toHaveLength(2);
   });
+
+  // Regression coverage for the "importing a second scene still plays the
+  // FIRST scene's voice-over" bug. scene_export.py names VO assets
+  // positionally ("vo_0", "vo_1", ...) — the SAME ids across every separate
+  // generation, pointing at completely different audio each time. Since
+  // loadAsset()/update() only fetch an id they haven't cached yet, a second
+  // scene reusing "vo_0" silently kept playing the FIRST scene's decoded
+  // buffer forever, with no error, unless the cache is explicitly cleared
+  // on a document swap — which is what reset() (called from
+  // useAudioSync.ts's viewport-reset-epoch subscription) now does.
+  describe("reset()", () => {
+    it("clears the decoded-buffer cache, so re-loading a REUSED asset id actually re-fetches instead of silently keeping the old buffer", async () => {
+      const engine = new AudioEngine();
+      const fetchMock = vi.fn(async () => ({ arrayBuffer: async () => new ArrayBuffer(0) }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      await engine.loadAsset({ id: "vo_0", url: "http://x/scene-A-vo0.mp3", kind: "audio" });
+      expect(engine.isReady("vo_0")).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Without reset(), this second call for the SAME id would no-op —
+      // exactly the bug: a different scene's "vo_0" never gets loaded.
+      await engine.loadAsset({ id: "vo_0", url: "http://x/scene-B-vo0.mp3", kind: "audio" });
+      expect(fetchMock).toHaveBeenCalledTimes(1); // confirms the cache-skip this bug depends on
+
+      engine.reset();
+      expect(engine.isReady("vo_0")).toBe(false);
+
+      await engine.loadAsset({ id: "vo_0", url: "http://x/scene-B-vo0.mp3", kind: "audio" });
+      expect(fetchMock).toHaveBeenCalledTimes(2); // now actually re-fetched the new scene's audio
+      expect(fetchMock).toHaveBeenLastCalledWith("http://x/scene-B-vo0.mp3");
+    });
+
+    it("stops any currently scheduled/playing sources", async () => {
+      const engine = await engineWithLoadedTrack();
+      const firstSource = ctx.createdSources[0];
+      expect(firstSource.stopped).toBe(false);
+
+      engine.reset();
+
+      expect(firstSource.stopped).toBe(true);
+    });
+
+    it("does not throw when called on a fresh engine with nothing loaded or playing", () => {
+      const engine = new AudioEngine();
+      expect(() => engine.reset()).not.toThrow();
+    });
+  });
 });

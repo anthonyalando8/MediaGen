@@ -318,6 +318,32 @@ export class AudioEngine {
     this.buffers.clear();
   }
 
+  /**
+   * Stops playback and clears the decoded-buffer + track cache WITHOUT
+   * closing the AudioContext (cheap to call repeatedly, unlike destroy()) —
+   * for a full document swap (Import Scene / Generate AI Scene / File ▸
+   * Open / New Project).
+   *
+   * Why this is needed: `buffers` is keyed by `assetId`, and
+   * `loadAsset`/`update` only fetch an asset the FIRST time its id is seen
+   * (`if (this.buffers.has(asset.id)) return`). scene_export.py names VO
+   * assets positionally — "vo_0", "vo_1", "img_0" — the SAME ids in EVERY
+   * generation, pointing at completely different audio content each time.
+   * Without clearing the cache here, importing a second scene whose first
+   * beat is also "vo_0" silently keeps playing the FIRST scene's already-
+   * decoded buffer forever — `update()` never re-fetches an id it's already
+   * cached. (The visual side of this same bug — a stale WebGL renderer
+   * surviving a document swap — was fixed separately by keying <CanvasHost>
+   * on the viewport-reset epoch; this is the audio-side equivalent, driven
+   * by the same epoch signal from useAudioSync.ts.)
+   */
+  reset(): void {
+    this.stopAll();
+    this.buffers.clear();
+    this.loading.clear();
+    this._tracks = [];
+  }
+
   // ── Queries ───────────────────────────────────────────────────────────────
 
   /** True if the asset's buffer is decoded and ready to play. */

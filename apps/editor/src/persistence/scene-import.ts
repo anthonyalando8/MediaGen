@@ -751,10 +751,45 @@ function buildBeatGroup(
   // Body — one node per word, wrapped + aligned + spoken-word highlight.
   if (beat.body) {
     const words = parseBody(beat.body);
-    const fs = Math.round(W * 0.05);
-    const space = spaceWidth(fs, 600);
-    const lineH = fs * 1.35;
+
+    // Shrink the body font (same floor/step as fitWrappedLines below) until
+    // the wrapped line count actually fits between bodyTop and the bottom
+    // margin. Previously fixed at W*0.05 with no check against available
+    // height — a long enough body (this is the word-synced captions path
+    // text_over_dimmed uses; layerTextNodes/fitWrappedLines' shrink-to-fit
+    // only covers quote_card/title_card/stat_callout/kinetic_type, a
+    // SEPARATE code path) rendered its last lines below the visible frame.
+    // The overflow is proportional to frame size, not resolution-dependent
+    // on its own — a beat that clips at native/source resolution clips by
+    // the same fraction at any export resolution with the same aspect
+    // ratio — but it's a real, silent failure mode for any sufficiently
+    // long body, which text_over_dimmed (the majority archetype across
+    // every format) hits often.
     const bodyTop = Math.round(size.height * 0.6);
+    const bottomMargin = Math.round(size.height * 0.04);
+    const availBodyH = size.height - bottomMargin - bodyTop;
+    const countWrappedLines = (candidateFs: number): number => {
+      const sp = spaceWidth(candidateFs, 600);
+      let n = 1, w = 0;
+      for (const dw of words) {
+        const ww = measureText(dw.text, candidateFs, dw.emphasis ? 700 : 600);
+        if (w > 0 && w + sp + ww > colWidth) { n += 1; w = 0; }
+        w += (w > 0 ? sp : 0) + ww;
+      }
+      return n;
+    };
+    let bodyFontScale = 0.05;
+    const bodyFontScaleFloor = bodyFontScale * _FONT_SCALE_FLOOR_RATIO;
+    let fs = Math.round(W * bodyFontScale);
+    let lineH = fs * 1.35;
+    let nLines = countWrappedLines(fs);
+    while (nLines * lineH > availBodyH && bodyFontScale > bodyFontScaleFloor) {
+      bodyFontScale = Math.max(bodyFontScaleFloor, bodyFontScale * _FONT_SCALE_SHRINK_STEP);
+      fs = Math.round(W * bodyFontScale);
+      lineH = fs * 1.35;
+      nLines = countWrappedLines(fs);
+    }
+    const space = spaceWidth(fs, 600);
 
     // Match display words to word_times (advance a pointer, skipping spillover).
     const wt = beat.word_times ?? [];
