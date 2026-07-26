@@ -27,7 +27,7 @@ import type { ServerUploadProgress, UploadProgress } from "../persistence/asset-
 import { API_BASE_URL } from "../config/api";
 import { addMediaNode } from "../commands/add-media";
 import { appendNodeOp } from "../commands/add-node";
-import { setCompSizeOp } from "../commands/comp-size-ops";
+import { rescaleRootOp, setCompSizeOp } from "../commands/comp-size-ops";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
 
@@ -53,7 +53,17 @@ export function CompSetupPanel() {
 
   function setSize(w: number, h: number) {
     const state = store.getState();
-    state.apply(setCompSizeOp(activeComp(state), w, h));
+    const comp = activeComp(state);
+    const { width: ow, height: oh } = comp.size;
+    state.apply(setCompSizeOp(comp, w, h));
+    // Rescale existing content to match — see comp-size-ops.ts's
+    // rescaleRootOp doc (two ops: root + resizeRef, so repeated resizes
+    // don't compound). Skipped when unchanged, or no prior valid size.
+    if (ow > 0 && oh > 0 && (ow !== w || oh !== h)) {
+      const { rootOp, resizeRefOp } = rescaleRootOp(comp, ow, oh, w, h);
+      state.apply(rootOp);
+      state.apply(resizeRefOp);
+    }
   }
 
   function applyCustom() {

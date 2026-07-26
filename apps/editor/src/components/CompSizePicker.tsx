@@ -15,7 +15,7 @@ import { useState } from "react";
 import { ChevronUp, Check } from "lucide-react";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
 import { activeComp } from "../store/selectors";
-import { setCompSizeOp } from "../commands/comp-size-ops";
+import { rescaleRootOp, setCompSizeOp } from "../commands/comp-size-ops";
 
 interface Preset { label: string; w: number; h: number; sub: string; }
 
@@ -36,7 +36,20 @@ export function CompSizePicker() {
 
   function apply(nw: number, nh: number) {
     const state = store.getState();
-    state.apply(setCompSizeOp(activeComp(state), nw, nh));
+    const comp = activeComp(state);
+    const { width: ow, height: oh } = comp.size;
+    state.apply(setCompSizeOp(comp, nw, nh));
+    // Rescale existing content to match — see comp-size-ops.ts's
+    // rescaleRootOp doc for why this is TWO separate ops (root + the
+    // resizeRef reference state that keeps repeated resizes from
+    // compounding) and why only top-level nodes need touching. Skipped
+    // when the size didn't actually change, or there's no prior valid
+    // size to scale from (a brand-new empty comp).
+    if (ow > 0 && oh > 0 && (ow !== nw || oh !== nh)) {
+      const { rootOp, resizeRefOp } = rescaleRootOp(comp, ow, oh, nw, nh);
+      state.apply(rootOp);
+      state.apply(resizeRefOp);
+    }
     setOpen(false);
   }
 

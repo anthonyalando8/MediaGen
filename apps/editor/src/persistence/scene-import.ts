@@ -1241,7 +1241,13 @@ function buildBeatGroupFromLayers(
       children.push(scrimNode(layer, layerStart, layerDur, W, H));
     } else if (layer.role === "text" && layer.text) {
       const fill = beat.accent_override === "spike" ? palette.spike : palette.fg;
-      const fontScale = layer.size === "hero" ? 0.13 : 0.075;
+      // "hero" was 0.13 (13% of frame width) — proportionate for a longer
+      // phrase, but a short title_card/stat_callout/kinetic_type string
+      // (e.g. a 2-word title) rendered at a flat 0.13 looked disproportionately
+      // huge — closer to "one giant word covering the frame" than a bold
+      // section-opener. Dropped to 0.10 — still clearly the dominant/bold
+      // text on screen, less overwhelming for short strings.
+      const fontScale = layer.size === "hero" ? 0.10 : 0.075;
       if (layer.reveal === "kinetic") {
         children.push(...kineticTextNodes(layer.text, layerStart, layerDur, W, H, fill, fontScale));
       } else {

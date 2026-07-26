@@ -27,4 +27,24 @@ export interface Composition {
    * here — declaring it properly is what let those casts be removed.
    */
   audioTracks?: AudioTrack[];
+  /**
+   * Resize-reference state for `rescaleRootOp` (apps/editor's
+   * comp-size-ops.ts) — WITHOUT this, repeated Frame Size changes across
+   * different aspect ratios compound: each resize scaled content relative
+   * to whatever `size` happened to be from the PREVIOUS resize (which
+   * already reflects that resize's own letterbox shrink), not the
+   * original content, so alternating between two aspect ratios a few
+   * times shrinks everything toward nothing. `baseSize` is captured once
+   * — the first time content is ever rescaled — and never changes again;
+   * `appliedScale`/`appliedOffsetX`/`appliedOffsetY` record the
+   * cumulative transform CURRENTLY baked into `root`'s node positions and
+   * scales relative to that base, so the next resize can correctly
+   * undo it before applying the new one instead of chaining blindly.
+   */
+  resizeRef?: {
+    baseSize: { width: number; height: number };
+    appliedScale: number;
+    appliedOffsetX: number;
+    appliedOffsetY: number;
+  };
 }

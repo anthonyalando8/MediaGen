@@ -18,9 +18,9 @@ llm:
     # OpenRouter — free-tier models exist (IDs ending in ":free"; the free
     # catalog rotates, check https://openrouter.ai/models?max_price=0).
     openrouter:
-      enabled: false
+      enabled: true
       priority: 80
-      model: "meta-llama/llama-3.1-8b-instruct:free"
+      model: "openai/gpt-oss-20b:free"
       api_key: ${OPENROUTER_API_KEY}
 
     # Groq — generous free tier, fast inference on open models.
