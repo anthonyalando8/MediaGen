@@ -39,66 +39,39 @@ import { createId, toFrame } from "core";
 import type { AssetRef, AudioTrack, ColorOKLCH, Composition, Frame, Node, Project } from "core";
 import { CURRENT_SCHEMA_VERSION } from "schema";
 
+// ── Shared text pipeline (extracted P0/P1 — see ./text and the Text
+//    Architecture review). scene-import now owns COMPOSITION + MOTION + the
+//    legacy word-caption path only; typography, fitting, measurement, node
+//    factories and the representation library live under ./text, so those are
+//    IMPORTED here, never redefined. ──
+import type { SceneWordTime, SceneVisual, SceneLayerSource, SceneLayer, SceneBeat } from "./text/scene-types";
+import { measureText, spaceWidth, normWord } from "./text/services/measure";
+import { rolePx, floorPxFor } from "./text/services/type-scale";
+import { LINE_H_BODY, fitTextToBox } from "./text/services/layout";
+import { EASE_OUT, eased } from "./text/services/reveal";
+import { textNode, lowerThirdNodes } from "./text/services/nodes";
+import { buildTextRegion } from "./text/build-text-region";
+
+// Back-compat: fitWrappedLines moved to ./text/services/layout. Re-exported
+// here so existing importers (scene-import-text-fit.test.ts) keep resolving
+// until they're repointed.
+export { fitWrappedLines } from "./text/services/layout";
+
+/**
+ * P4 compat flag. `false` (default) = `text_over_dimmed` compiles through the
+ * original `buildBeatGroup`, byte-for-byte as before. `true` = it routes
+ * through the unified layer compiler (`buildBeatGroupFromLayers` + the
+ * `word-caption` representation for the body + the legacy hud/keyword chrome
+ * below). Flip to `true` only after golden-file parity is confirmed across a
+ * few real generations; then `buildBeatGroup` + `fitWrappedLines` can be
+ * deleted and this flag removed. NOTE: the layer path draws the background
+ * from `layers[]` (one scrim, no second dim-band; no Ken Burns), so the look
+ * is close but not pixel-identical — this is the intended consolidation, not a
+ * silent swap. */
+export const COMPILE_TEXT_OVER_DIMMED_VIA_LAYERS = false;
+
 // ── scene.json shape (only the fields this compiler reads) ──────────────────
 
-interface SceneWordTime {
-  text: string;
-  start_s: number;
-  end_s: number;
-  tier?: number;
-}
-interface SceneVisual {
-  asset_id?: string;
-  fit?: "cover" | "contain" | "fill";
-  opacity?: number;
-}
-// scene/3.0 (see docs/architecture/scene-3.0-schema.md): a beat can carry an
-// explicit `layers[]` composition instead of relying on the flat fields
-// below. Only read when `archetype !== "text_over_dimmed"` — see
-// `compileSceneToProject`'s dispatch. `text_over_dimmed` (the default every
-// beat gets when nothing assigns an archetype) always compiles via the
-// original flat-field path (`buildBeatGroup`), untouched, so every scene
-// generated before this existed renders identically.
-interface SceneLayerSource {
-  query?: string;   // unresolved — scene_export.py couldn't/didn't resolve a stock asset for this layer
-}
-interface SceneLayer {
-  role: "background" | "foreground" | "scrim" | "text" | "shape" | "icon" | "overlay" | "lower_third";
-  source?: SceneLayerSource;
-  fit?: "cover" | "contain" | "fill";
-  slot?: "left" | "right" | "top" | "bottom" | "pip";  // sub-region of the frame; absent = full-bleed
-  shape?: string;                                // role "shape": "divider" (comparison) — more shapes later
-  opacity?: number;                             // scrim target opacity
-  text?: string;
-  reveal?: string;
-  size?: "hero" | "normal";                     // role "text": font-scale hint (title_card/stat_callout use "hero")
-  anchor_y?: number;                            // role "text": vertical center as a fraction of frame height; absent = 0.5
-  asset_id?: string;                            // resolved by scene_export.py, mirrors SceneVisual.asset_id
-  kind?: "image" | "video";
-  in: number;         // beat-relative ms
-  out: number | null; // beat-relative ms; null = runs to beat end
-}
-interface SceneBeat {
-  id?: string;
-  hud_tag?: string;
-  keyword?: string;
-  body?: string;
-  duration_ms?: number;
-  accent_override?: string | null;
-  layout?: string;
-  word_times?: SceneWordTime[];
-  emphasis_times?: SceneWordTime[];
-  visual?: SceneVisual;                 // NEW (v2): b-roll behind the text
-  audio?: { asset_id?: string };        // NEW (v2): this beat's voiceover asset
-  transition?: string;                  // scene-motion: transition INTO this beat
-  entry_vector?: { x: number; y: number; scale: number };  // camera exit carry (whip angle)
-  camera?: string;                      // scene-motion: camera move (push_in/pull_out/tilt_up/…)
-  background?: string;                  // scene-motion: bg treatment (glow/noise/…)
-  pattern_interrupt?: string | null;    // scene-motion: punch effect (chroma/…)
-  intensity?: number;                   // 0..1 master magnitude for moves/effects
-  archetype?: string;                   // scene/3.0: composition family — see scene-3.0-schema.md
-  layers?: SceneLayer[];                // scene/3.0: explicit layer stack (only for archetype !== "text_over_dimmed")
-}
 interface SceneAsset {
   id: string;
   kind: "image" | "video" | "audio";
@@ -116,6 +89,10 @@ interface ScenePalette {
 }
 export interface SceneDoc {
   video_id?: string;
+  /** Contract version stamped by scene_export.py (e.g. "scene/2.0"). Not read
+   * by the compiler, but present in every emitted scene.json — declared so
+   * callers/tests can set it without a type error. */
+  schema?: string;
   theme?: string;
   fps?: number;
   width?: number;
@@ -335,25 +312,6 @@ function patternBurst(pi: string | null | undefined, start: number, dur: number,
   }
 }
 
-// ── Easing ───────────────────────────────────────────────────────────────
-// Constant-velocity ("linear") keyframes read as mechanical — packages/core's
-// evaluator already supports "bezier" interp (default handles ≈ CSS `ease`),
-// and apps/editor's own manual animation presets (commands/channel-ops.ts's
-// EASING_PRESETS, commands/set-span-animation.ts) already use it everywhere.
-// This compiler was the one place still hardcoding "linear" on every
-// keyframe — that mismatch is what makes AI-generated scenes feel less
-// polished than hand-authored ones. EASE_OUT suits entrances/reveals (fast
-// start, settle); bare "bezier" (no handles → the engine's own default)
-// suits continuous moves (camera, Ken Burns, handheld).
-const EASE_OUT = { outHandle: [0, 0] as [number, number], inHandle: [0.58, 1] as [number, number] };
-
-/** All-but-last keyframe eases (bezier, default handles); the last has no
- * outgoing segment to ease so its interp is never consulted — "linear" is
- * just the convention used for terminal keys elsewhere in the codebase. */
-function eased<T extends { frame: number }>(keys: T[]): (T & { interp: "bezier" | "linear" })[] {
-  return keys.map((k, i) => ({ ...k, interp: i < keys.length - 1 ? ("bezier" as const) : ("linear" as const) }));
-}
-
 export class SceneFileError extends Error {
   constructor(message: string) {
     super(message);
@@ -389,117 +347,6 @@ export function hexToOklch(hex: string, fallback: ColorOKLCH = WHITE): ColorOKLC
   return { l: L, c: C, h: H };
 }
 
-// ── Text helpers ────────────────────────────────────────────────────────────
-
-/**
- * Real glyph-advance width via an offscreen canvas — matches what the Pixi
- * text renderer actually draws (same font + weight), so a word placed at
- * `x + measuredWidth` never overlaps the next one. Falls back to a rough
- * per-char estimate only when no canvas is available (SSR/tests). Inter is
- * loaded by the editor's theme.css by import time.
- */
-let _measureCtx: CanvasRenderingContext2D | null | undefined;
-function measureCtx(): CanvasRenderingContext2D | null {
-  if (_measureCtx !== undefined) return _measureCtx;
-  try {
-    _measureCtx = document.createElement("canvas").getContext("2d");
-  } catch {
-    _measureCtx = null;
-  }
-  return _measureCtx;
-}
-function measureText(text: string, fontSize: number, weight: number): number {
-  const ctx = measureCtx();
-  if (!ctx) return text.length * fontSize * (weight >= 600 ? 0.56 : 0.52);
-  ctx.font = `${weight} ${fontSize}px Inter, system-ui, sans-serif`;
-  return ctx.measureText(text).width;
-}
-/** Width of a single space in the given font (measured, not guessed). */
-function spaceWidth(fontSize: number, weight: number): number {
-  return Math.max(fontSize * 0.22, measureText("a a", fontSize, weight) - measureText("aa", fontSize, weight));
-}
-
-/** Normalize a token for matching body words against word_times (lowercase, strip non-alphanumerics). */
-function normWord(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9']/gi, "");
-}
-
-// ── Text sizing system (aspect- & role-aware) ───────────────────────────────
-// Font sizes key off the frame's SHORTER side (min(W,H)/TYPE_BASE) so portrait
-// (1080-wide) and landscape (1080-tall) render text at the same absolute px,
-// instead of the old width-only fractions that oversized landscape. Every role
-// size below is a CAP; the fitter shrinks from it to fit an explicit box, down
-// to an ABSOLUTE readable floor. See docs/scene-composer-text-fixes.md.
-interface FitBox { x: number; y: number; w: number; h: number; }
-interface FitResult { fs: number; lineH: number; lines: { text: string; width: number }[]; totalH: number; fits: boolean; }
-
-const TYPE_BASE = 1080;
-const TYPE_SCALE: Record<string, number> = {
-  hud: 34, keyword: 92, body: 50, caption: 56,
-  hero: 96, heroSub: 52, lowerThird: 44, brand: 30,
-};
-// Absolute readable floors @TYPE_BASE — the fitter never shrinks below these.
-const MIN_PX: Record<string, number> = { display: 34, body: 26, caption: 30 };
-const SAFE = { x: 0.08, y: 0.08 };   // title-safe inset (both axes)
-const MAX_BLOCK_H = 0.62;            // max fraction of frame height one text block may cover
-const LINE_H_DISPLAY = 1.2;
-const LINE_H_BODY = 1.28;
-
-function rolePx(role: string, W: number, H: number): number {
-  return Math.round(((TYPE_SCALE[role] ?? 50) * Math.min(W, H)) / TYPE_BASE);
-}
-function floorPxFor(kind: string, W: number, H: number): number {
-  return Math.round(((MIN_PX[kind] ?? 26) * Math.min(W, H)) / TYPE_BASE);
-}
-function safeBox(W: number, H: number): FitBox {
-  return {
-    x: Math.round(W * SAFE.x), y: Math.round(H * SAFE.y),
-    w: Math.round(W * (1 - 2 * SAFE.x)), h: Math.round(H * (1 - 2 * SAFE.y)),
-  };
-}
-
-/** Fit `text` into a box (width AND height, px): wrap to boxW at `startPx`,
- * shrink (step _FONT_SCALE_SHRINK_STEP, strictly decreasing) until the block
- * fits boxH and no line exceeds boxW, never below the ABSOLUTE `floorPx`.
- * `fits=false` => hit the floor and still overflows: the caller warns/clamps.
- * Replaces the old ratio-of-start floor that left long text oversized. */
-function fitTextToBox(
-  text: string, boxW: number, boxH: number, weight: number,
-  startPx: number, floorPx: number, lineHeightRatio = LINE_H_BODY,
-): FitResult {
-  const maxLineWidth = (ls: { width: number }[]) => ls.reduce((m, l) => Math.max(m, l.width), 0);
-  let fs = Math.max(floorPx, Math.round(startPx));
-  let lines = wrapLines(text, fs, weight, boxW);
-  let lineH = fs * lineHeightRatio;
-  let totalH = lines.length * lineH;
-  while ((totalH > boxH || maxLineWidth(lines) > boxW) && fs > floorPx) {
-    fs = Math.max(floorPx, Math.min(fs - 1, Math.round(fs * _FONT_SCALE_SHRINK_STEP)));
-    lines = wrapLines(text, fs, weight, boxW);
-    lineH = fs * lineHeightRatio;
-    totalH = lines.length * lineH;
-  }
-  return { fs, lineH, lines, totalH, fits: totalH <= boxH && maxLineWidth(lines) <= boxW };
-}
-
-/** Lay out already-fitted lines centered horizontally in `box` at a given
- * `top` (no re-centering) — lets the stacked stat_callout/poster_card pair
- * share one measured layout so the two blocks never collide. */
-function emitCenteredBlock(fit: FitResult, top: number, box: FitBox, start: number, dur: number, fill: ColorOKLCH, weight: number, name: string): Node[] {
-  const entF = Math.min(10, Math.max(4, Math.round(dur * 0.15)));
-  const rise = Math.round(box.h * 0.02);
-  return fit.lines.map((ln, li) => {
-    const x = Math.round(box.x + (box.w - ln.width) / 2);
-    const y = top + li * fit.lineH;
-    return textNode({
-      name: `${name} ${li + 1}`, text: ln.text,
-      x, y, fontSize: fit.fs, weight, align: "left", fill,
-      start, duration: dur,
-      posKeys: [{ frame: start, value: { x, y: y + rise, z: 0 } }, { frame: start + entF, value: { x, y, z: 0 } }],
-      opacityKeys: [{ frame: start, value: 0 }, { frame: start + entF, value: 1 }],
-    });
-  });
-}
-
 interface DisplayWord {
   text: string;
   emphasis: boolean;
@@ -515,84 +362,6 @@ function parseBody(body: string): DisplayWord[] {
     out.push({ text: tok.replace(/\*/g, ""), emphasis });
   }
   return out;
-}
-
-// ── Node factories ──────────────────────────────────────────────────────────
-
-function textNode(opts: {
-  name: string;
-  text: string;
-  x: number;
-  y: number;
-  fontSize: number;
-  weight: number;
-  align: "left" | "center" | "right";
-  fill: ColorOKLCH;
-  start: number;
-  duration: number;
-  tracking?: number;
-  fillChannel?: { keys: { frame: number; value: ColorOKLCH }[] };
-  /** Per-word opacity reveal (word-sync). scalar keys. */
-  opacityKeys?: { frame: number; value: number }[];
-  /** Emphasis scale pop. vec2 keys. */
-  scaleKeys?: { frame: number; value: { x: number; y: number } }[];
-  /** Entrance/exit position move. vec3 keys. */
-  posKeys?: { frame: number; value: { x: number; y: number; z: number } }[];
-}): Node {
-  const channels: any[] = [];
-  if (opts.fillChannel) {
-    channels.push({
-      id: createId(),
-      path: "props.fill",
-      type: "color" as const,
-      keys: eased(opts.fillChannel.keys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
-    });
-  }
-  if (opts.opacityKeys) {
-    channels.push({
-      id: createId(),
-      path: "opacity",
-      type: "scalar" as const,
-      keys: eased(opts.opacityKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
-    });
-  }
-  if (opts.scaleKeys) {
-    channels.push({
-      id: createId(),
-      path: "transform.scale",
-      type: "vec2" as const,
-      keys: eased(opts.scaleKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
-    });
-  }
-  if (opts.posKeys) {
-    channels.push({
-      id: createId(),
-      path: "transform.position",
-      type: "vec3" as const,
-      keys: eased(opts.posKeys).map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
-    });
-  }
-  return {
-    id: createId(),
-    kind: "text",
-    name: opts.name,
-    transform: { position: { x: opts.x, y: opts.y, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
-    opacity: 1,
-    blend: "normal",
-    time: { start: toFrame(opts.start), duration: toFrame(opts.duration) },
-    origin: "user",
-    props: {
-      text: opts.text,
-      fontFamily: "Inter",
-      fontSize: opts.fontSize,
-      weight: opts.weight,
-      align: opts.align,
-      fill: opts.fill,
-      tracking: opts.tracking ?? 0,
-      lineHeight: 1.15,
-    },
-    channels,
-  } as Node;
 }
 
 /**
@@ -1105,188 +874,6 @@ function dividerNode(axis: "horizontal" | "vertical", start: number, dur: number
   } as unknown as Node;
 }
 
-/** How far a shrink step reduces the font scale per iteration of
- * `fitWrappedLines`'s fit loop, and the floor (as a fraction of the
- * requested scale) it won't shrink past — below that, a long single
- * unbreakable word could still overflow at the size floor, so `top` gets a
- * final clamp on top of the shrink (see `fitWrappedLines`). */
-const _FONT_SCALE_SHRINK_STEP = 0.92;
-const _FONT_SCALE_FLOOR_RATIO = 0.55;
-
-function wrapLines(text: string, fs: number, weight: number, colWidth: number): { text: string; width: number }[] {
-  const space = spaceWidth(fs, weight);
-  const words = text.replace(/\*/g, "").split(/\s+/).filter(Boolean);
-  const lines: { text: string; width: number }[] = [];
-  let lineWords: string[] = [];
-  let lineWidth = 0;
-  const flush = () => {
-    if (lineWords.length) lines.push({ text: lineWords.join(" "), width: lineWidth });
-    lineWords = [];
-    lineWidth = 0;
-  };
-  for (const w of words) {
-    const ww = measureText(w, fs, weight);
-    if (lineWords.length > 0 && lineWidth + space + ww > colWidth) flush();
-    lineWords.push(w);
-    lineWidth += (lineWords.length > 1 ? space : 0) + ww;
-  }
-  flush();
-  return lines;
-}
-
-/** Wraps `text` at `fontScaleStart`, then shrinks (down to
- * `_FONT_SCALE_FLOOR_RATIO` of that scale) until the wrapped block's height
- * fits within `H * availHFrac` AND no single line is wider than the
- * column. Fixes two distinct overflow modes: long beat text rendering
- * above/below the visible frame (too many lines — sizing was previously
- * derived from frame WIDTH alone with no check against frame height), and
- * a single unbreakable "word" (no internal space — e.g. a hyphenated
- * keyword like "TAB-SWITCHING") running past the column edge, which the
- * height check alone never catches since one long word doesn't add lines.
- * Short text that already fits at `fontScaleStart` never enters the shrink
- * loop — byte-for-byte unchanged from before this fix. */
-export function fitWrappedLines(text: string, W: number, H: number, weight: number, fontScaleStart: number, availHFrac = 0.86) {
-  const margin = Math.round(W * 0.1);
-  const colWidth = W - margin * 2;
-  const availH = H * availHFrac;
-  const floorScale = fontScaleStart * _FONT_SCALE_FLOOR_RATIO;
-
-  const maxLineWidth = (ls: { width: number }[]) => ls.reduce((m, l) => Math.max(m, l.width), 0);
-
-  let fontScale = fontScaleStart;
-  let fs = Math.round(W * fontScale);
-  let lines = wrapLines(text, fs, weight, colWidth);
-  let lineH = fs * 1.3;
-  let totalH = lines.length * lineH;
-
-  while ((totalH > availH || maxLineWidth(lines) > colWidth) && fontScale > floorScale) {
-    fontScale = Math.max(floorScale, fontScale * _FONT_SCALE_SHRINK_STEP);
-    fs = Math.round(W * fontScale);
-    lines = wrapLines(text, fs, weight, colWidth);
-    lineH = fs * 1.3;
-    totalH = lines.length * lineH;
-  }
-
-  return { fs, lines, lineH, totalH };
-}
-
-/** A centered, wrapped block of text fitted into an explicit `box` (px). Used
- * for quote_card / title_card and the single-block cases in
- * buildBeatGroupFromLayers. Vertically centers within the box; horizontally
- * centers each line; warns (never silently overflows) if it hits the floor. */
-function layerTextNodes(text: string, start: number, dur: number, box: FitBox, fill: ColorOKLCH, startPx: number, floor: number, weight = 700, beatId = ""): Node[] {
-  const fit = fitTextToBox(text, box.w, box.h, weight, startPx, floor, LINE_H_BODY);
-  if (!fit.fits && beatId) console.warn(`[scene-import] text overflow on ${beatId}: "${text.slice(0, 32)}…" (floor ${fit.fs}px)`);
-  const top = box.y + Math.max(0, Math.round((box.h - fit.totalH) / 2));
-  const entF = Math.min(10, Math.max(4, Math.round(dur * 0.15)));
-  const rise = Math.round(box.h * 0.03);
-
-  return fit.lines.map((ln, li) => {
-    const x = Math.round(box.x + (box.w - ln.width) / 2);
-    const y = top + li * fit.lineH;
-    return textNode({
-      name: `quote · line ${li + 1}`,
-      text: ln.text,
-      x, y, fontSize: fit.fs, weight, align: "left", fill,
-      start, duration: dur,
-      posKeys: [
-        { frame: start, value: { x, y: y + rise, z: 0 } },
-        { frame: start + entF, value: { x, y, z: 0 } },
-      ],
-      opacityKeys: [
-        { frame: start, value: 0 },
-        { frame: start + entF, value: 1 },
-      ],
-    });
-  });
-}
-
-/** Kinetic typography: same box fit as `layerTextNodes`, but each LINE pops in
- * on its own staggered beat with a scale bounce — the punchier "kinetic_type"
- * reveal. Starts at heroSub (not hero) so a longer line can't blow up. */
-function kineticTextNodes(text: string, start: number, dur: number, box: FitBox, fill: ColorOKLCH, startPx: number, floor: number, beatId = ""): Node[] {
-  const fit = fitTextToBox(text, box.w, box.h, 800, startPx, floor, LINE_H_DISPLAY);
-  if (!fit.fits && beatId) console.warn(`[scene-import] kinetic overflow on ${beatId} (floor ${fit.fs}px)`);
-  const top = box.y + Math.max(0, Math.round((box.h - fit.totalH) / 2));
-  // Each line's pop starts `staggerF` frames after the previous one, capped
-  // so a long block doesn't take forever to finish landing.
-  const staggerF = Math.min(6, Math.max(2, Math.round(dur * 0.06)));
-  const popF = Math.min(10, Math.max(4, Math.round(dur * 0.12)));
-
-  return fit.lines.map((ln, li) => {
-    const x = Math.round(box.x + (box.w - ln.width) / 2);
-    const y = top + li * fit.lineH;
-    const lineStart = start + li * staggerF;
-    return textNode({
-      name: `kinetic · line ${li + 1}`,
-      text: ln.text,
-      x, y, fontSize: fit.fs, weight: 800, align: "left", fill,
-      start, duration: dur,
-      scaleKeys: [
-        { frame: lineStart, value: { x: 0.7, y: 0.7 } },
-        { frame: lineStart + popF, value: { x: 1.08, y: 1.08 } },
-        { frame: lineStart + popF + 4, value: { x: 1, y: 1 } },
-      ],
-      opacityKeys: [
-        { frame: lineStart, value: 0 },
-        { frame: lineStart + Math.max(1, Math.round(popF * 0.4)), value: 1 },
-      ],
-    });
-  });
-}
-
-/** Broadcast-style lower-third: left-aligned label near the bottom, backed by
- * a semi-transparent bar sized to the TEXT (not a full-width scrim). The label
- * shrinks to stay within the safe width so a long chyron can't overflow. */
-function lowerThirdNodes(text: string, start: number, dur: number, W: number, H: number, fill: ColorOKLCH, accent: ColorOKLCH): Node[] {
-  const margin = Math.round(W * 0.08);
-  const maxLabelW = W - margin * 2;
-  const floor = floorPxFor("display", W, H);
-  let fs = rolePx("lowerThird", W, H);
-  while (measureText(text, fs, 700) > maxLabelW && fs > floor) {
-    fs = Math.max(floor, Math.min(fs - 1, Math.round(fs * _FONT_SCALE_SHRINK_STEP)));
-  }
-  const bandH = Math.round(fs * 2.2);
-  const bandY = Math.round(H * 0.8);
-  const pad = Math.round(fs * 0.6);
-  const labelW = Math.min(measureText(text, fs, 700), maxLabelW);
-  const barW = Math.min(W - margin, labelW + pad * 2);
-  const barX = Math.max(0, margin - pad);
-  const entF = Math.min(8, Math.max(3, Math.round(dur * 0.1)));
-
-  const bar: Node = {
-    id: createId(),
-    kind: "shape",
-    name: "Lower third bar",
-    transform: { position: { x: barX, y: bandY, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0, anchor: { x: 0, y: 0 } },
-    opacity: 0,
-    blend: "normal",
-    time: { start: toFrame(start), duration: toFrame(dur) },
-    origin: "user",
-    props: { shape: "rect", width: barW, height: bandH, radius: 0, fill: { l: 0, c: 0, h: 0 } },
-    channels: [{
-      id: createId(), path: "opacity", type: "scalar" as const,
-      keys: eased([{ frame: start, value: 0 }, { frame: start + entF, value: 0.55 }])
-        .map((k) => ({ frame: toFrame(k.frame), value: k.value, interp: k.interp })),
-    }],
-  } as unknown as Node;
-
-  const label = textNode({
-    name: "Lower third label",
-    text,
-    x: margin, y: bandY + Math.round((bandH - fs) / 2),
-    fontSize: fs, weight: 700, align: "left", fill: fill === accent ? accent : fill,
-    start, duration: dur,
-    posKeys: [
-      { frame: start, value: { x: margin - Math.round(W * 0.03), y: bandY + Math.round((bandH - fs) / 2), z: 0 } },
-      { frame: start + entF, value: { x: margin, y: bandY + Math.round((bandH - fs) / 2), z: 0 } },
-    ],
-    opacityKeys: [{ frame: start, value: 0 }, { frame: start + entF, value: 1 }],
-  });
-
-  return [bar, label];
-}
-
 function buildBeatGroupFromLayers(
   beat: SceneBeat,
   archetype: string,
@@ -1345,47 +932,73 @@ function buildBeatGroupFromLayers(
     }
   }
 
-  // ── Text layers: box-fitted; stacked pairs for stat_callout/poster_card ──
-  const textFill = beat.accent_override === "spike" ? palette.spike : palette.fg;
-  const textLayers = layers.filter((l) => l.role === "text" && l.text);
-  const sb = safeBox(W, H);
-  const winOf = (l: SceneLayer) => {
-    const s = startFrame + Math.round(((l.in ?? 0) / 1000) * fps);
-    const e = l.out != null ? startFrame + Math.round((l.out / 1000) * fps) : startFrame + durationFrames;
-    return { start: s, dur: Math.max(1, e - s) };
-  };
-  if ((archetype === "stat_callout" || archetype === "poster_card") && textLayers.length >= 2) {
-    // Two stacked blocks — hero figure/headline + supporting label/subtext. The
-    // second block's top is derived from the first's MEASURED bottom + a gap,
-    // then the pair is clamped into the safe area, so poster_card's anchor_y
-    // layout variants can never overlap (the old fixed-pair bug).
-    const [first, second] = textLayers;
-    const w1 = winOf(first), w2 = winOf(second);
-    const fit1 = fitTextToBox(first.text!, sb.w, Math.round(sb.h * 0.5), 800, rolePx("hero", W, H), floorPxFor("display", W, H), LINE_H_DISPLAY);
-    const fit2 = fitTextToBox(second.text!, sb.w, Math.round(sb.h * 0.5), 700, rolePx("body", W, H), floorPxFor("body", W, H), LINE_H_BODY);
-    const gap = Math.round(H * 0.03);
-    let top1 = Math.round((first.anchor_y ?? 0.42) * H - fit1.totalH / 2);
-    let top2 = top1 + fit1.totalH + gap;
-    const overflow = top2 + fit2.totalH - (sb.y + sb.h);
-    if (overflow > 0) { top1 -= overflow; top2 -= overflow; }
-    if (top1 < sb.y) { const s = sb.y - top1; top1 += s; top2 += s; }
-    children.push(...emitCenteredBlock(fit1, top1, sb, w1.start, w1.dur, textFill, 800, `${beat.id ?? "beat"} · hero`));
-    children.push(...emitCenteredBlock(fit2, top2, sb, w2.start, w2.dur, textFill, 700, `${beat.id ?? "beat"} · label`));
-  } else {
-    for (const layer of textLayers) {
-      const { start: ts, dur: td } = winOf(layer);
-      const boxH = Math.min(sb.h, Math.round(H * MAX_BLOCK_H));
-      const centerY = layer.anchor_y ?? 0.5;
-      const boxTop = Math.max(sb.y, Math.min(Math.round(centerY * H - boxH / 2), sb.y + sb.h - boxH));
-      const box = { x: sb.x, y: boxTop, w: sb.w, h: boxH };
-      if (layer.reveal === "kinetic") {
-        children.push(...kineticTextNodes(layer.text!, ts, td, box, textFill, rolePx("heroSub", W, H), floorPxFor("display", W, H), beat.id ?? ""));
-      } else {
-        const isHero = layer.size === "hero";
-        children.push(...layerTextNodes(layer.text!, ts, td, box, textFill, rolePx(isHero ? "hero" : "body", W, H), floorPxFor(isHero ? "display" : "body", W, H), isHero ? 800 : 700, beat.id ?? ""));
+  // ── Text region: the selected representation owns typesetting + reveal +
+  // fit (see ./text). Composition + motion stay in this file. The variety
+  // guard can be enabled by threading a scene-level `used` id list through
+  // buildTextRegion — omitted here so behavior matches the legacy routing. ──
+  // ── Legacy chrome for text_over_dimmed on the layer path (P4) ──────────
+  // buildBeatGroupFromLayers renders only layers[]; text_over_dimmed also
+  // carries flat hud_tag/keyword that its layers[] omit. When
+  // COMPILE_TEXT_OVER_DIMMED_VIA_LAYERS routes it here, re-emit those two
+  // (lifted verbatim from buildBeatGroup) so the beat keeps its tag + headline.
+  // Guarded to this archetype so no other archetype — which consumes
+  // `keyword` AS its hero text layer — draws it twice.
+  if (archetype === "text_over_dimmed") {
+    const colWidth = W - margin * 2;
+    const align: "left" | "center" | "right" =
+      beat.layout === "center" || beat.layout === "full" ? "center" : beat.layout === "right" ? "right" : "left";
+    const alignX = (lineWidth: number): number =>
+      align === "center" ? (W - lineWidth) / 2 : align === "right" ? W - margin - lineWidth : margin;
+    if (beat.hud_tag) {
+      const fs = rolePx("hud", W, H);
+      const w = measureText(beat.hud_tag, fs, 700);
+      const hx = alignX(w);
+      const hy = Math.round(H * 0.12);
+      const entF = Math.min(8, Math.max(3, Math.round(durationFrames * 0.1)));
+      const rise = Math.round(H * 0.02);
+      children.push(textNode({
+        name: `${beat.id ?? "beat"} · hud`, text: beat.hud_tag,
+        x: hx, y: hy, fontSize: fs, weight: 700, align, fill: palette.accent,
+        start: startFrame, duration: durationFrames, tracking: 2,
+        posKeys: [
+          { frame: startFrame, value: { x: hx, y: hy + rise, z: 0 } },
+          { frame: startFrame + entF, value: { x: hx, y: hy, z: 0 } },
+        ],
+      }));
+    }
+    if (beat.keyword) {
+      let fs = rolePx("keyword", W, H);
+      const keywordFill = beat.accent_override === "spike" ? palette.spike : palette.fg;
+      let w = measureText(beat.keyword, fs, 800);
+      if (w > colWidth) {
+        fs = Math.max(floorPxFor("display", W, H), Math.floor((fs * colWidth) / w));
+        w = measureText(beat.keyword, fs, 800);
       }
+      const kx = alignX(Math.min(w, colWidth));
+      const ky = Math.round(H * 0.2);
+      const entF = Math.min(10, Math.max(4, Math.round(durationFrames * 0.12)));
+      const rise = Math.round(H * 0.03);
+      children.push(textNode({
+        name: `${beat.id ?? "beat"} · keyword`, text: beat.keyword,
+        x: kx, y: ky, fontSize: fs, weight: 800, align, fill: keywordFill,
+        start: startFrame, duration: durationFrames,
+        posKeys: [
+          { frame: startFrame, value: { x: kx, y: ky + rise, z: 0 } },
+          { frame: startFrame + entF, value: { x: kx, y: ky, z: 0 } },
+        ],
+        scaleKeys: [
+          { frame: startFrame, value: { x: 0.94, y: 0.94 } },
+          { frame: startFrame + entF, value: { x: 1, y: 1 } },
+        ],
+      }));
     }
   }
+
+  const { nodes: textRegionNodes } = buildTextRegion({
+    beat, archetype, size,
+    startFrame, durationFrames, fps, palette,
+  });
+  children.push(...textRegionNodes);
 
   if (brand) {
     const fs = rolePx("brand", W, H);
@@ -1543,10 +1156,15 @@ export function compileSceneToProject(scene: SceneDoc): Project {
     // `buildBeatGroup` call as before this feature existed — parity is
     // structural, not incidental.
     const archetype = beat.archetype ?? "text_over_dimmed";
-    const node =
-      archetype !== "text_over_dimmed" && beat.layers && beat.layers.length > 0
-        ? buildBeatGroupFromLayers(beat, archetype, i, cursor, durFrames, fps, size, palette, brand, ensureBgAsset, linger, transitionIn)
-        : buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, bgAssetId, linger, transitionIn);
+    // P4: text_over_dimmed stays on buildBeatGroup unless the compat flag opts
+    // it into the unified layer path. Every other archetype with layers[]
+    // always uses the layer compiler (unchanged).
+    const viaLayers =
+      !!(beat.layers && beat.layers.length > 0) &&
+      (archetype !== "text_over_dimmed" || COMPILE_TEXT_OVER_DIMMED_VIA_LAYERS);
+    const node = viaLayers
+      ? buildBeatGroupFromLayers(beat, archetype, i, cursor, durFrames, fps, size, palette, brand, ensureBgAsset, linger, transitionIn)
+      : buildBeatGroup(beat, i, cursor, durFrames, fps, size, palette, brand, visual, bgAssetId, linger, transitionIn);
     root.push(node);
 
     // One voiceover AudioTrack per beat, placed at the beat's start (sequential;

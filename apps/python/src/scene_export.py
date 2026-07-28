@@ -29,6 +29,7 @@ import base64
 import hashlib
 import json
 import pathlib
+import re
 
 from visuals import _build_beat_contracts, _style_to_theme, _THEME_PALETTES
 from captions.timeline import attach_to_contracts
@@ -479,6 +480,85 @@ def _synthesize_lower_third_layers(contract: dict) -> list[dict]:
     return layers
 
 
+# ── P3: structured-text representations (definition / list / dialogue) ────────
+# Each emits a generated background + ONE `role: "text"` layer carrying the
+# structured fields the editor's new representations read (`term` / `items` /
+# speaker-tagged items). They are NOT in llm.py's _ARCHETYPE_TYPE_AFFINITY, so
+# the deterministic composer never auto-assigns them — they fire only when a
+# format opts in or an upstream composer sets beat["archetype"]. Inert by
+# default: no current output changes, exactly like every archetype before it
+# opted in. The editor routes the text layer to definition-card / numbered-list
+# / chat-bubbles via `text_intent` (see text_intent.py).
+
+def _derive_list_items(body: str) -> list[dict]:
+    """Best-effort split of a body line into list items: explicit separators
+    (newlines, bullets, numbered prefixes, semicolons) first, else the whole
+    body as one item. A real `items` array emitted by the LLM upstream should
+    supersede this heuristic."""
+    text = (body or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"\s*(?:\n|•|·|;|\s\d+[\.\)]\s)\s*", text)
+    parts = [p.strip(" -–—•·").strip() for p in parts if p and p.strip(" -–—•·").strip()]
+    return [{"text": p} for p in parts] if len(parts) >= 2 else [{"text": text}]
+
+
+def _derive_dialogue(body: str) -> list[dict]:
+    """Best-effort parse of \"Speaker: line\" turns from a body; falls back to a
+    single un-attributed turn. Supersede with a real `items` array upstream."""
+    text = (body or "").strip()
+    if not text:
+        return []
+    turns: list[dict] = []
+    for raw in re.split(r"\n+", text):
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^([A-Za-z][\w .'-]{0,24}):\s*(.+)$", line)
+        turns.append({"speaker": m.group(1).strip(), "text": m.group(2).strip()} if m else {"speaker": "", "text": line})
+    return turns or [{"speaker": "", "text": text}]
+
+
+def _synthesize_definition_layers(contract: dict) -> list[dict]:
+    """Definition card — generated background + a text layer carrying the
+    headword (`term`, from `keyword`) and its gloss (`body`). Editor renders it
+    via the `definition-card` representation."""
+    duration_ms = contract.get("duration_ms") or 5000
+    term = (contract.get("keyword") or "").strip()
+    gloss = (contract.get("body") or "").strip()
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if term or gloss:
+        layers.append({"role": "text", "text": gloss or term, "term": term,
+                        "reveal": "fade", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _synthesize_list_layers(contract: dict) -> list[dict]:
+    """Numbered/bullet list — generated background + a text layer whose `items`
+    drive the `numbered-list` representation."""
+    duration_ms = contract.get("duration_ms") or 5000
+    body = (contract.get("body") or "").strip()
+    items = _derive_list_items(body)
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if items:
+        layers.append({"role": "text", "text": body or items[0]["text"], "items": items,
+                        "reveal": "slide", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _synthesize_dialogue_layers(contract: dict) -> list[dict]:
+    """Chat/dialogue — generated background + a text layer whose speaker-tagged
+    `items` drive the `chat-bubbles` representation."""
+    duration_ms = contract.get("duration_ms") or 5000
+    body = (contract.get("body") or "").strip()
+    items = _derive_dialogue(body)
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if items:
+        layers.append({"role": "text", "text": body, "items": items,
+                        "reveal": "slide", "in": 0, "out": duration_ms})
+    return layers
+
+
 _ARCHETYPE_SYNTHESIZERS = {
     "text_over_dimmed": lambda c, orientation: _synthesize_text_over_dimmed_layers(c),
     "bare_visual": lambda c, orientation: _synthesize_bare_visual_layers(c),
@@ -493,6 +573,10 @@ _ARCHETYPE_SYNTHESIZERS = {
     "broll_montage": lambda c, orientation: _synthesize_broll_montage_layers(c),
     "kinetic_type": lambda c, orientation: _synthesize_kinetic_type_layers(c),
     "lower_third": lambda c, orientation: _synthesize_lower_third_layers(c),
+    # ── P3 structured-text archetypes (opt-in; see block above) ──────────
+    "definition_card": lambda c, orientation: _synthesize_definition_layers(c),
+    "list_card": lambda c, orientation: _synthesize_list_layers(c),
+    "dialogue_card": lambda c, orientation: _synthesize_dialogue_layers(c),
 }
 
 

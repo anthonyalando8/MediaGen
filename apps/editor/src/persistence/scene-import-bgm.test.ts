@@ -5,6 +5,10 @@
 // entirely opt-in server-side — these tests lock in both the "present"
 // path (a real looped AudioTrack) and the "absent" path (today's exact
 // pre-BGM behavior, unchanged).
+//
+// PATCHED for `npx tsc` (whole-program) strictness: `Composition.audioTracks`
+// is typed optional in core, so every access is guarded with `?? []`. Behavior
+// of the assertions is unchanged (compileSceneToProject always sets it).
 import { describe, expect, it } from "vitest";
 import { compileSceneToProject } from "./scene-import";
 import type { SceneDoc } from "./scene-import";
@@ -34,7 +38,8 @@ describe("compileSceneToProject — background music", () => {
   it("compiles scene.bgm into a looped AudioTrack spanning the whole composition", () => {
     const project = compileSceneToProject(baseScene({ bgm: { asset_id: "bgm", volume: 0.15 } }));
     const comp = project.comps[project.rootCompId];
-    const bgmTrack = comp.audioTracks.find((t) => t.name === "Background music");
+    const tracks = comp.audioTracks ?? [];
+    const bgmTrack = tracks.find((t) => t.name === "Background music");
 
     expect(bgmTrack).toBeDefined();
     expect(bgmTrack!.assetId).toBe("bgm");
@@ -43,28 +48,29 @@ describe("compileSceneToProject — background music", () => {
     expect(bgmTrack!.startFrame).toBe(0);
     expect(bgmTrack!.endFrame).toBe(comp.duration);
     // Separate lane from the per-beat VO tracks so they don't collide in the timeline UI.
-    const voTrack = comp.audioTracks.find((t) => t.assetId === "vo_0");
+    const voTrack = tracks.find((t) => t.assetId === "vo_0");
     expect(voTrack!.lane).not.toBe(bgmTrack!.lane);
   });
 
   it("defaults volume to 0.1 when scene.bgm omits it", () => {
     const project = compileSceneToProject(baseScene({ bgm: { asset_id: "bgm" } }));
     const comp = project.comps[project.rootCompId];
-    const bgmTrack = comp.audioTracks.find((t) => t.name === "Background music");
+    const bgmTrack = (comp.audioTracks ?? []).find((t) => t.name === "Background music");
     expect(bgmTrack!.volume).toBe(0.1);
   });
 
   it("adds no bgm track at all when scene.bgm is absent — back-compat with every scene generated before this feature existed", () => {
     const project = compileSceneToProject(baseScene());
     const comp = project.comps[project.rootCompId];
-    expect(comp.audioTracks.find((t) => t.name === "Background music")).toBeUndefined();
+    const tracks = comp.audioTracks ?? [];
+    expect(tracks.find((t) => t.name === "Background music")).toBeUndefined();
     // Only the per-beat VO track should exist.
-    expect(comp.audioTracks).toHaveLength(1);
+    expect(tracks).toHaveLength(1);
   });
 
   it("ignores scene.bgm if its asset_id doesn't resolve to a real audio asset (defensive — shouldn't happen from a well-formed server response)", () => {
     const project = compileSceneToProject(baseScene({ bgm: { asset_id: "does_not_exist" } }));
     const comp = project.comps[project.rootCompId];
-    expect(comp.audioTracks.find((t) => t.name === "Background music")).toBeUndefined();
+    expect((comp.audioTracks ?? []).find((t) => t.name === "Background music")).toBeUndefined();
   });
 });

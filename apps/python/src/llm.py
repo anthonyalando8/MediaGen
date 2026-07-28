@@ -78,6 +78,10 @@ _ALLOWED_ARCHETYPES = {
     "text_over_dimmed", "full_bleed_video", "bare_visual", "split_screen",
     "pip", "quote_card", "stat_callout", "comparison", "broll_montage",
     "title_card", "poster_card", "kinetic_type", "lower_third",
+    # P3 structured-text archetypes (opt-in — not in _ARCHETYPE_TYPE_AFFINITY,
+    # so the composer never auto-assigns them; a format or upstream composer
+    # sets them explicitly). All text-bearing (see partition below).
+    "definition_card", "list_card", "dialogue_card",
 }
 
 # Text-bearing vs textless split of the registry above — used by the composer
@@ -88,6 +92,7 @@ _ALLOWED_ARCHETYPES = {
 _TEXT_BEARING_ARCHETYPES = {
     "text_over_dimmed", "title_card", "poster_card", "quote_card",
     "stat_callout", "kinetic_type", "lower_third",
+    "definition_card", "list_card", "dialogue_card",  # P3 (opt-in)
 }
 _TEXTLESS_ARCHETYPES = {
     "bare_visual", "split_screen", "comparison",
@@ -254,6 +259,12 @@ def assign_composition(data: dict, profile) -> dict:
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
+# P2 · the text-representation selection axis (see apps/editor/src/persistence/
+# text). Independent of archetype/composition; the editor's text/selector.ts
+# scores its representation library against it, falling back to the legacy
+# archetype mapping when it's absent.
+from text_intent import assign_text_intent, normalise_text_intent
+
 _SCRIPT_GEN_MAX_ATTEMPTS = 3
 
 
@@ -299,6 +310,10 @@ def generate_script(topic: str, fmt, model: str | None = None, progress=None) ->
             raw = generate(prompt, on_provider_start=_on_provider_start)
             data = _parse_json(raw.strip())
             data = assign_composition(data, profile)
+            # P2: composition first, so text_intent's archetype fallback sees
+            # the FINAL archetypes. Purely additive — every beat gets a
+            # deterministic text_intent (or none, → editor legacy mapping).
+            assign_text_intent(data.get("beats", []))
             _validate(data, profile)
             print(f"[llm] ✓ Script OK — \"{data['title']}\"")
             _print_cinematic_summary(data)
@@ -424,6 +439,11 @@ def _normalise_schema(data: dict) -> dict:
         # fills the gap when it's absent.
         if beat.get("archetype") not in _ALLOWED_ARCHETYPES:
             beat["archetype"] = "text_over_dimmed"
+
+        # P2: drop an invalid text_intent so a bad upstream value never reaches
+        # the editor selector (defence in depth; assign_text_intent stamps the
+        # real value later, after composition is finalised).
+        normalise_text_intent(beat)
 
     # top-level optional fields
     data.setdefault("thumbnail", data.get("keyword", ""))

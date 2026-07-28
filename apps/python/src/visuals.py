@@ -372,6 +372,11 @@ def _build_beat_contracts(
             # (scene_export.py) uses it to decide whether to synthesize a
             # `layers[]` breakdown for the beat.
             "archetype":       beat.get("archetype", "text_over_dimmed"),
+            # P2: independent text-representation axis (see text_intent.py and
+            # apps/editor/src/persistence/text). Passthrough exactly like
+            # archetype above — it rides onto scene.json via scene_export.py
+            # with no change there. Absent → editor's legacy selector mapping.
+            "text_intent":     beat.get("text_intent"),
             # scene/3.0 (phase 5): which SECTION this beat came from, and
             # that section's pacing_arc (build|steady|rise_fall|wind_down) —
             # see llm.py's _flatten_sections. Absent for every format that
