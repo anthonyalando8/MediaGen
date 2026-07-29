@@ -20,7 +20,8 @@ export type TextRegion = "band" | "full" | "lower" | "corner";
 export type TextIntent =
   | "caption" | "title" | "quote" | "stat" | "definition" | "list"
   | "dialogue" | "warning" | "comparison" | "qa" | "timeline" | "takeaway"
-  | "lower_third" | "emphasis";
+  | "lower_third" | "emphasis"
+  | "meta";
 
 /** Normalised, representation-agnostic view of a beat's text content. */
 export interface BeatFields {
@@ -42,6 +43,7 @@ export interface BeatIntent {
   hasWordTimes: boolean;
   hasItems: boolean;
   hasAttribution: boolean;
+  hasAccentSpan: boolean;
   textLayerCount: number;
 }
 

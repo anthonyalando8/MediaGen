@@ -17,8 +17,10 @@ export const numberedList: TextRepresentation = {
   id: "numbered-list",
   fields: ["items"],
   region: "full",
+  // timeline defers to index-entry's ordinal-chrome treatment; list/takeaway
+  // stay owned by this generic marker+text row.
   supports: (i) =>
-    i.intent === "list" || i.intent === "timeline" || i.intent === "takeaway" ? 1 : i.hasItems ? 0.4 : 0,
+    i.intent === "list" || i.intent === "takeaway" ? 1 : i.intent === "timeline" ? 0.4 : i.hasItems ? 0.4 : 0,
   build(ctx: TextBuildContext): Node[] {
     const { W, H, fps } = ctx.frame;
     const sb = ctx.safe;

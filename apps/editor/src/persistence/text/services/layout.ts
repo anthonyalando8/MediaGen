@@ -10,7 +10,9 @@
 // golden-file tests confirm parity end-to-end, `fitWrappedLines` can be
 // re-expressed as a thin wrapper over `fitTextToBox` and deleted (P4).
 
+import type { ColorOKLCH } from "core";
 import { measureText, spaceWidth } from "./measure";
+import { tierPx, tierFloorPx, tierTracking, type TierName } from "./type-scale";
 
 export interface FitBox { x: number; y: number; w: number; h: number; }
 export interface FitResult { fs: number; lineH: number; lines: { text: string; width: number }[]; totalH: number; fits: boolean; }
@@ -94,4 +96,53 @@ export function fitWrappedLines(text: string, W: number, H: number, weight: numb
     totalH = lines.length * lineH;
   }
   return { fs, lines, lineH, totalH };
+}
+
+// ── P4 · N-role measured stacker ────────────────────────────────────────────
+// Generalises stat-figure's two-block "measure both, stack without collision"
+// math into N roles (kicker/heading/body, …) for editorial-lede.
+
+export interface StackBlock {
+  text?: string;
+  tier: TierName;
+  weight?: number;
+  color?: ColorOKLCH;
+  maxWFrac?: number;   // fraction of `safe.w` this block wraps to (default 1)
+}
+
+export interface StackedBlock {
+  fit: FitResult;
+  box: FitBox;
+  color?: ColorOKLCH;
+  weight?: number;
+  tracking?: number;
+}
+
+/** Stack text blocks vertically by MEASURED height, centered in `safe`.
+ * Blocks with no `text` (e.g. an absent kicker) are skipped entirely rather
+ * than leaving a gap. */
+export function stackByHeight(safe: FitBox, W: number, H: number, blocks: StackBlock[]): StackedBlock[] {
+  const measured = blocks
+    .filter((b) => !!b.text && b.text.trim().length > 0)
+    .map((b) => {
+      const boxW = Math.round(safe.w * (b.maxWFrac ?? 1));
+      const fs = tierPx(b.tier, W, H);
+      const floor = tierFloorPx(b.tier, W, H);
+      const fit = fitTextToBox(b.text!, boxW, safe.h, b.weight ?? 600, fs, floor, LINE_H_BODY);
+      const gap = Math.round(fs * 0.5);
+      return { b, fit, boxW, gap };
+    });
+
+  let totalH = 0;
+  measured.forEach((m, idx) => {
+    totalH += m.fit.totalH;
+    if (idx < measured.length - 1) totalH += m.gap;
+  });
+
+  let y = Math.round(safe.y + Math.max(0, (safe.h - totalH) / 2));
+  return measured.map((m) => {
+    const box: FitBox = { x: safe.x, y, w: m.boxW, h: m.fit.totalH };
+    y += m.fit.totalH + m.gap;
+    return { fit: m.fit, box, color: m.b.color, weight: m.b.weight, tracking: tierTracking(m.b.tier, m.fit.fs) };
+  });
 }

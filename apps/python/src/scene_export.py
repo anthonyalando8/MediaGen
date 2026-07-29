@@ -519,6 +519,171 @@ def _derive_dialogue(body: str) -> list[dict]:
     return turns or [{"speaker": "", "text": text}]
 
 
+_STAT_LABEL_RE = re.compile(
+    r"^((?:[\d][\w.,%+\-–]*)(?:\s+(?:years?|yrs?|percent|%|million|billion|thousand|times))?)\b", re.IGNORECASE,
+)
+
+
+def _short_stat_label(clause: str) -> str:
+    """A short figure to lead a stat-band column with: the clause's leading
+    number/quantity phrase ("5-7 year" -> "5-7 year") when there is one,
+    else its first couple words. Deliberately never the whole clause — the
+    editor's `stat-band` representation renders this at a large fixed-ish
+    size next to the full clause as a caption underneath, so a long
+    fallback here would duplicate the caption as a second, oversized copy
+    of itself."""
+    clause = clause.strip()
+    m = _STAT_LABEL_RE.match(clause)
+    if m:
+        return m.group(1)
+    words = clause.split()
+    return " ".join(words[:2]) if words else clause
+
+
+def _derive_stat_items(keyword: str, body: str) -> list[dict]:
+    """Best-effort 2-4 {label, text} stat entries: the beat's own `keyword`
+    (short, number-led — formats already write these, e.g. listicle's "#1
+    SKIP THIS") as the first figure's label, `body` clauses (split on
+    sentence boundaries) filling the rest — each given a short derived
+    label so every column gets a genuine figure, not a duplicated caption.
+    A real `items[]` from an upstream LLM/composer always supersedes this."""
+    keyword = (keyword or "").strip()
+    body = (body or "").strip()
+    clauses = [c.strip() for c in re.split(r"(?<=[.!?])\s+|\n+", body) if c.strip()]
+    items: list[dict] = []
+    if keyword:
+        items.append({"label": keyword, "text": clauses[0] if clauses else body})
+        clauses = clauses[1:]
+    items.extend({"label": _short_stat_label(c), "text": c} for c in clauses[:3])
+    return items[:4]
+
+
+def _derive_anaphora_items(body: str) -> list[dict]:
+    """Best-effort 2-4 short parallel lines: split `body` on sentence
+    boundaries, keep clauses of <= 6 words (anaphora reads as a punchy
+    rhythm, not full sentences). Falls back to the whole body as one line
+    when the split doesn't yield at least 2 short clauses."""
+    text = (body or "").strip()
+    if not text:
+        return []
+    clauses = [c.strip(" .") for c in re.split(r"(?<=[.!?])\s+", text) if c.strip()]
+    short = [c for c in clauses if c and len(c.split()) <= 6]
+    if len(short) >= 2:
+        return [{"text": c} for c in short[:4]]
+    return [{"text": text}]
+
+
+def _derive_case_items(keyword: str, body: str) -> list[dict]:
+    """Best-effort 1-2 {label, text} case entries: the beat's `keyword` as
+    the first case's label, `body` as its headline; a second sentence (if
+    the body splits into two) becomes a second case."""
+    keyword = (keyword or "").strip()
+    body = (body or "").strip()
+    clauses = [c.strip() for c in re.split(r"(?<=[.!?])\s+", body) if c.strip()]
+    items: list[dict] = []
+    if clauses:
+        items.append({"label": keyword, "text": clauses[0]})
+        if len(clauses) > 1:
+            items.append({"text": clauses[1]})
+    elif keyword:
+        items.append({"text": keyword})
+    return items[:2]
+
+
+def _derive_meta_items(body: str) -> list[dict]:
+    """Best-effort metadata chips: split `body` on the separators a
+    fact-style line already uses (· | ; ,). Weakest of these heuristics —
+    real structured metadata (dates, locations) should come from an
+    upstream source, not be guessed out of narration prose; see llm.py's
+    comment on why `meta_facts` stays opt-in rather than composer-assigned."""
+    text = (body or "").strip()
+    if not text:
+        return []
+    parts = [p.strip(" -–—") for p in re.split(r"\s*(?:·|\||;|,)\s*", text) if p.strip()]
+    return [{"text": p} for p in parts[:4]] if len(parts) >= 2 else [{"text": text}]
+
+
+def _synthesize_stat_band_layers(contract: dict) -> list[dict]:
+    """Multi-figure stat row — generated background + a text layer whose
+    `items` drive the editor's `stat-band` representation. Prefers a real
+    `items[]` on the beat; otherwise derives 2-4 figures from keyword+body."""
+    duration_ms = contract.get("duration_ms") or 5000
+    items = contract.get("items") or _derive_stat_items(contract.get("keyword"), contract.get("body"))
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if items:
+        layers.append({"role": "text", "text": contract.get("body") or contract.get("keyword", ""),
+                        "items": items, "reveal": "fade", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _synthesize_anaphora_stack_layers(contract: dict) -> list[dict]:
+    """Short repeated-phrase stack — generated background + a text layer
+    whose `items` drive the editor's `anaphora-stack` representation."""
+    duration_ms = contract.get("duration_ms") or 5000
+    items = contract.get("items") or _derive_anaphora_items(contract.get("body"))
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if items:
+        layers.append({"role": "text", "text": contract.get("body", ""), "items": items,
+                        "reveal": "kinetic", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _synthesize_case_study_layers(contract: dict) -> list[dict]:
+    """Numbered case(s) — a resolved photo behind a text layer whose `items`
+    drive the editor's `index-entry` representation."""
+    duration_ms = contract.get("duration_ms") or 5000
+    q = contract.get("visual_query") or contract.get("keyword", "")
+    items = contract.get("items") or _derive_case_items(contract.get("keyword"), contract.get("body"))
+    layers: list[dict] = [
+        {"role": "background", "source": {"query": q}, "fit": "cover",
+         "animation": {"camera": contract.get("camera", "")}, "in": 0, "out": None},
+        {"role": "scrim", "shape": "rect", "opacity": 0.45, "in": 0, "out": None},
+    ]
+    if items:
+        layers.append({"role": "text", "text": contract.get("body", ""), "items": items,
+                        "reveal": "fade", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _synthesize_meta_facts_layers(contract: dict) -> list[dict]:
+    """Metadata chip row — generated background + a text layer whose `items`
+    drive the editor's `meta-chips` representation. Opt-in only (see
+    llm.py's `_ARCHETYPE_TYPE_AFFINITY` — never auto-assigned by the
+    composer), since guessing metadata out of narration prose is the
+    weakest of these heuristics."""
+    duration_ms = contract.get("duration_ms") or 5000
+    items = contract.get("items") or _derive_meta_items(contract.get("body"))
+    layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
+    if items:
+        layers.append({"role": "text", "text": contract.get("body", ""), "items": items,
+                        "reveal": "fade", "in": 0, "out": duration_ms})
+    return layers
+
+
+def _derive_accent_span(keyword: str) -> str | None:
+    """Deterministic accent-tint pick for `accent-headline`: the trailing
+    1-2 words of a multi-word keyword (mirrors the "...Quantum Age"
+    reference — the emphasis phrase tends to be the noun the headline lands
+    on). None for a short keyword, where tinting part of it would read as
+    arbitrary rather than meaningful."""
+    words = (keyword or "").strip().split()
+    if len(words) < 3:
+        return None
+    return " ".join(words[-2:])
+
+
+def _assign_accent_span(contracts: list[dict]) -> None:
+    """In place: fill `accent_span` on `title_card` beats that don't already
+    carry one (an upstream value always wins). Scoped to title_card only —
+    accent-headline's primary case — so this doesn't tint a word on every
+    beat's keyword indiscriminately."""
+    for c in contracts:
+        if c.get("archetype") == "title_card" and not c.get("accent_span"):
+            span = _derive_accent_span(c.get("keyword"))
+            if span:
+                c["accent_span"] = span
+
+
 def _synthesize_definition_layers(contract: dict) -> list[dict]:
     """Definition card — generated background + a text layer carrying the
     headword (`term`, from `keyword`) and its gloss (`body`). Editor renders it
@@ -538,7 +703,7 @@ def _synthesize_list_layers(contract: dict) -> list[dict]:
     drive the `numbered-list` representation."""
     duration_ms = contract.get("duration_ms") or 5000
     body = (contract.get("body") or "").strip()
-    items = _derive_list_items(body)
+    items = contract.get("items") or _derive_list_items(body)
     layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
     if items:
         layers.append({"role": "text", "text": body or items[0]["text"], "items": items,
@@ -551,7 +716,7 @@ def _synthesize_dialogue_layers(contract: dict) -> list[dict]:
     `items` drive the `chat-bubbles` representation."""
     duration_ms = contract.get("duration_ms") or 5000
     body = (contract.get("body") or "").strip()
-    items = _derive_dialogue(body)
+    items = contract.get("items") or _derive_dialogue(body)
     layers: list[dict] = [{"role": "background", "source": {}, "in": 0, "out": None}]
     if items:
         layers.append({"role": "text", "text": body, "items": items,
@@ -577,6 +742,14 @@ _ARCHETYPE_SYNTHESIZERS = {
     "definition_card": lambda c, orientation: _synthesize_definition_layers(c),
     "list_card": lambda c, orientation: _synthesize_list_layers(c),
     "dialogue_card": lambda c, orientation: _synthesize_dialogue_layers(c),
+    # ── P4 structured-text archetypes (read off a real reference) ────────
+    # stat_band/case_study are in llm.py's _ARCHETYPE_TYPE_AFFINITY (the
+    # composer can auto-assign them); anaphora_stack/meta_facts are opt-in
+    # only, same as the P3 trio above — see llm.py for why.
+    "stat_band": lambda c, orientation: _synthesize_stat_band_layers(c),
+    "anaphora_stack": lambda c, orientation: _synthesize_anaphora_stack_layers(c),
+    "case_study": lambda c, orientation: _synthesize_case_study_layers(c),
+    "meta_facts": lambda c, orientation: _synthesize_meta_facts_layers(c),
 }
 
 
@@ -640,6 +813,7 @@ def build_scene(
     if timeline:
         attach_to_contracts(contracts, timeline)
     _synthesize_layers(contracts, orientation=media_plan.orientation)
+    _assign_accent_span(contracts)
 
     assets: list[dict] = []
 

@@ -23,7 +23,10 @@ export const heroTitle: TextRepresentation = {
   id: "hero-title",
   fields: ["keyword"],
   region: "full",
-  supports: (i) => (i.intent === "title" ? 1 : i.size === "hero" ? 0.6 : 0.2),
+  // hasBody defers to editorial-lede (never renders a body) and
+  // hasAccentSpan defers to accent-headline (never tints a span) — both are
+  // real rendering-capability gaps, not preference.
+  supports: (i) => (i.intent === "title" ? (i.hasBody || i.hasAccentSpan ? 0.5 : 1) : i.size === "hero" ? 0.6 : 0.2),
   build(ctx: TextBuildContext): Node[] {
     const { W, H, fps } = ctx.frame;
     const out: Node[] = [];

@@ -24,6 +24,7 @@ TEXT_INTENTS = {
     "caption", "title", "quote", "stat", "definition", "list",
     "dialogue", "warning", "comparison", "qa", "timeline", "takeaway",
     "lower_third", "emphasis",
+    "meta",  # meta-chips (P4)
 }
 
 # Rhetorical beat `type` (the LLM already emits this) → default text_intent,
@@ -44,6 +45,10 @@ _TYPE_TO_INTENT = {
     "hook": "emphasis",
     "cta": "emphasis",
     "title": "title",
+    "anaphora": "emphasis",  # anaphora-stack (P4)
+    "section": "title",      # editorial-lede (P4; carries body)
+    "case": "timeline",      # index-entry (P4)
+    "facts": "meta",         # meta-chips (P4)
 }
 
 # When there's no useful `type`, the composition archetype is a decent hint.
@@ -66,6 +71,11 @@ _STRUCTURED_ARCHETYPE_INTENT = {
     "definition_card": "definition",
     "list_card": "list",
     "dialogue_card": "dialogue",
+    # P4 (see scene_export.py / llm.py)
+    "stat_band": "stat",
+    "anaphora_stack": "emphasis",
+    "case_study": "timeline",
+    "meta_facts": "meta",
 }
 
 
@@ -79,6 +89,7 @@ def _intent_for_beat(beat: dict) -> str | None:
     if archetype in _STRUCTURED_ARCHETYPE_INTENT:
         return _STRUCTURED_ARCHETYPE_INTENT[archetype]
 
+    btype = beat.get("type")
     if btype in _TYPE_TO_INTENT:
         return _TYPE_TO_INTENT[btype]
 

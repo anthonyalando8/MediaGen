@@ -377,6 +377,17 @@ def _build_beat_contracts(
             # archetype above — it rides onto scene.json via scene_export.py
             # with no change there. Absent → editor's legacy selector mapping.
             "text_intent":     beat.get("text_intent"),
+            # P4: same passthrough pattern, for the read-off-a-reference
+            # representations (apps/editor .../text/representations/
+            # accent-headline, editorial-lede, stat-band, anaphora-stack,
+            # index-entry, meta-chips). No format/prompt emits these yet —
+            # scene_export.py's structured-archetype synthesizers derive
+            # `items` heuristically from `body` when this is absent, and
+            # `accent_span` is filled deterministically for title_card beats.
+            # A real value from an upstream LLM/composer always wins.
+            "items":           beat.get("items"),
+            "accent_span":     beat.get("accent_span"),
+            "kicker":          beat.get("kicker"),
             # scene/3.0 (phase 5): which SECTION this beat came from, and
             # that section's pacing_arc (build|steady|rise_fall|wind_down) —
             # see llm.py's _flatten_sections. Absent for every format that

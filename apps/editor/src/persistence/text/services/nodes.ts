@@ -11,8 +11,8 @@
 
 import { createId, toFrame } from "core";
 import type { ColorOKLCH, Node } from "core";
-import { eased, EASE_OUT } from "./reveal";
-import { measureText } from "./measure";
+import { eased, EASE_OUT, fadeRise, fadeIn } from "./reveal";
+import { measureText, spaceWidth, normWord } from "./measure";
 import { fitTextToBox, LINE_H_BODY, LINE_H_DISPLAY, _FONT_SCALE_SHRINK_STEP, type FitBox, type FitResult } from "./layout";
 import { rolePx, floorPxFor } from "./type-scale";
 
@@ -160,6 +160,57 @@ export function centeredTextNodes(text: string, start: number, dur: number, box:
       opacityKeys: [{ frame: start, value: 0 }, { frame: start + entF, value: 1 }],
     });
   });
+}
+
+/** Left/right-anchored, vertically-centered wrapped block — the anchored
+ * sibling of `centeredTextNodes` (which is always centered). When `opts.span`
+ * is given, words matching it (case-insensitive, whole-word) render in
+ * `opts.accent` instead of `fill` — the "one word in accent" headline
+ * treatment. Used by accent-headline, editorial-lede, anaphora-stack. */
+export function alignedTextNodes(
+  fit: FitResult, box: FitBox, align: "left" | "right",
+  start: number, dur: number, fill: ColorOKLCH,
+  opts: { weight?: number; accent?: ColorOKLCH; span?: string; tracking?: number; reveal?: "rise" | "fade" } = {},
+): Node[] {
+  const weight = opts.weight ?? 700;
+  const top = box.y + Math.max(0, Math.round((box.h - fit.totalH) / 2));
+  const entF = Math.min(10, Math.max(4, Math.round(dur * 0.15)));
+  const rise = Math.round(box.h * 0.03);
+  const spanWords = opts.span ? new Set(opts.span.split(/\s+/).map(normWord).filter(Boolean)) : null;
+  const enter = (x: number, y: number) => (opts.reveal === "fade" ? fadeIn(start, entF) : fadeRise(start, entF, x, y, rise));
+
+  const out: Node[] = [];
+  fit.lines.forEach((ln, li) => {
+    const y = top + li * fit.lineH;
+    const lineX = align === "left" ? box.x : box.x + box.w - ln.width;
+    if (!spanWords || !spanWords.size) {
+      out.push(textNode({
+        name: `text · line ${li + 1}`, text: ln.text,
+        x: lineX, y, fontSize: fit.fs, weight, align: "left", fill,
+        tracking: opts.tracking, start, duration: dur, ...enter(lineX, y),
+      }));
+      return;
+    }
+    // Split the line into accent/non-accent word runs so each can carry its
+    // own fill, merging adjacent same-color words into one node.
+    const words = ln.text.split(" ");
+    let x = lineX;
+    for (let i = 0; i < words.length; ) {
+      const accentRun = spanWords.has(normWord(words[i]));
+      let j = i + 1;
+      while (j < words.length && spanWords.has(normWord(words[j])) === accentRun) j++;
+      const run = words.slice(i, j).join(" ");
+      out.push(textNode({
+        name: `text · line ${li + 1} run`, text: run,
+        x, y, fontSize: fit.fs, weight, align: "left",
+        fill: accentRun ? (opts.accent ?? fill) : fill,
+        tracking: opts.tracking, start, duration: dur, ...enter(x, y),
+      }));
+      x += measureText(run, fit.fs, weight) + (j < words.length ? spaceWidth(fit.fs, weight) : 0);
+      i = j;
+    }
+  });
+  return out;
 }
 
 /** Kinetic typography: per-line staggered pop-in. (Verbatim `kineticTextNodes`.) */

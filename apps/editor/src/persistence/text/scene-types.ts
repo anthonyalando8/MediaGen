@@ -88,4 +88,10 @@ export interface SceneBeat {
   // Independent of `archetype` (composition). Absent → the selector falls
   // back to the exact legacy archetype/reveal mapping (parity).
   text_intent?: string;
+
+  // ── P4 additive: read off a real reference (accent-headline / editorial-lede) ──
+  // Both optional; only read by those two representations. Every existing
+  // beat omits them and is unaffected.
+  accent_span?: string;   // substring of `keyword` to tint with palette.accent
+  kicker?: string;        // small tracked eyebrow above the headline
 }

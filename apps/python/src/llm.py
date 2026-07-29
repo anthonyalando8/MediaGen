@@ -82,6 +82,14 @@ _ALLOWED_ARCHETYPES = {
     # so the composer never auto-assigns them; a format or upstream composer
     # sets them explicitly). All text-bearing (see partition below).
     "definition_card", "list_card", "dialogue_card",
+    # P4 structured-text archetypes (read off a real reference — see
+    # apps/editor/.../text/representations). stat_band/case_study ARE in
+    # _ARCHETYPE_TYPE_AFFINITY below (real generations can reach them);
+    # anaphora_stack/meta_facts stay opt-in like the P3 trio — heuristically
+    # splitting one beat's narration into repeated-phrase rhythm or
+    # date/location metadata is unreliable enough that auto-assigning it to
+    # arbitrary topics risks nonsense on screen (see scene_export.py).
+    "stat_band", "anaphora_stack", "case_study", "meta_facts",
 }
 
 # Text-bearing vs textless split of the registry above — used by the composer
@@ -93,6 +101,8 @@ _TEXT_BEARING_ARCHETYPES = {
     "text_over_dimmed", "title_card", "poster_card", "quote_card",
     "stat_callout", "kinetic_type", "lower_third",
     "definition_card", "list_card", "dialogue_card",  # P3 (opt-in)
+    "stat_band", "case_study",                        # P4 (auto-assignable)
+    "anaphora_stack", "meta_facts",                   # P4 (opt-in)
 }
 _TEXTLESS_ARCHETYPES = {
     "bare_visual", "split_screen", "comparison",
@@ -134,6 +144,10 @@ _ARCHETYPE_TYPE_AFFINITY = {
     "broll_montage":    {"insight", "climax"},      # energetic explanatory or peak-impact beats
     "kinetic_type":     {"flip", "climax"},         # a punchy reframe/reveal moment
     "lower_third":       {"insight", "truth"},       # an identifying/informational caption over visuals
+    # P4 (auto-assignable) — anaphora_stack/meta_facts deliberately absent,
+    # see _TEXT_BEARING_ARCHETYPES's comment.
+    "stat_band":        {"insight", "truth"},       # multi-figure variant of stat_callout
+    "case_study":       {"insight", "truth"},       # numbered-case variant of lower_third/stat_callout
 }
 
 

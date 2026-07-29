@@ -17,7 +17,9 @@ export const statFigure: TextRepresentation = {
   id: "stat-figure",
   fields: ["keyword"],
   region: "full",
-  supports: (i) => (i.intent === "stat" ? 1 : i.textLayerCount >= 2 ? 0.4 : 0.2),
+  // hasItems defers to stat-band: a structured items[] beat won't have this
+  // module's two-separate-text-layers shape, so build() would ignore items[].
+  supports: (i) => (i.intent === "stat" ? (i.hasItems ? 0.3 : 1) : i.textLayerCount >= 2 ? 0.4 : 0.2),
   build(ctx: TextBuildContext): Node[] {
     const { W, H, fps } = ctx.frame;
     const sb = ctx.safe;

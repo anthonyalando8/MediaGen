@@ -18,6 +18,14 @@ import "./representations/definition-card";
 import "./representations/numbered-list";
 import "./representations/chat-bubbles";
 import "./representations/comparison-labels";
+// ── P4 library (read off a real reference) ────────────────────────────────
+import "./representations/accent-headline";
+import "./representations/stat-band";
+import "./representations/editorial-lede";
+import "./representations/anaphora-stack";
+import "./representations/index-entry";
+import "./representations/meta-chips";
+import "./representations/image-kicker";
 
 export * as registry from "./registry";
 export { select, legacyRepresentationId } from "./selector";

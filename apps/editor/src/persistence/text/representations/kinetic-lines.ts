@@ -15,7 +15,13 @@ export const kineticLines: TextRepresentation = {
   id: "kinetic-lines",
   fields: ["body"],
   region: "full",
-  supports: (i) => (i.intent === "emphasis" ? 1 : i.reveal === "kinetic" ? 0.9 : i.intent === "title" ? 0.4 : 0.2),
+  // hasItems defers to anaphora-stack: `body` is the beat's raw narration
+  // (always present for a spoken beat), so an items-bearing emphasis beat
+  // would otherwise tie here and lose to registration order even though
+  // this module ignores items[] entirely and would just render the whole
+  // body as one block instead of the per-line rhythm.
+  supports: (i) =>
+    i.intent === "emphasis" ? (i.hasItems ? 0.4 : 1) : i.reveal === "kinetic" ? 0.9 : i.intent === "title" ? 0.4 : 0.2,
   build(ctx: TextBuildContext): Node[] {
     const { W, H, fps } = ctx.frame;
     const sb = ctx.safe;

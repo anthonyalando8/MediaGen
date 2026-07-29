@@ -17,6 +17,17 @@ export function layerWindow(layer: SceneLayer, startFrame: number, durationFrame
   return { start, end, dur: Math.max(1, end - start) };
 }
 
+/** Evenly-staggered sub-window for item `idx` of `total`, inside `win`. Same
+ * stagger cadence numbered-list/chat-bubbles already computed inline,
+ * extracted so the per-item P4 representations (stat-band, anaphora-stack,
+ * meta-chips, index-entry) share one definition. */
+export function staggerWindow(win: Window, idx: number, total: number): Window {
+  const staggerF = Math.min(8, Math.max(3, Math.round(win.dur / (total + 2))));
+  const start = win.start + idx * staggerF;
+  const end = win.end || win.start + win.dur;
+  return { start, end, dur: Math.max(1, end - start) };
+}
+
 export interface WordTiming {
   text: string;
   emphasis: boolean;

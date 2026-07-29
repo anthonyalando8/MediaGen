@@ -11,6 +11,7 @@ const TEXT_INTENTS = new Set<TextIntent>([
   "caption", "title", "quote", "stat", "definition", "list",
   "dialogue", "warning", "comparison", "qa", "timeline", "takeaway",
   "lower_third", "emphasis",
+  "meta",
 ]);
 
 export function intentOf(beat: SceneBeat, archetype: string, textLayers: SceneLayer[]): BeatIntent {
@@ -28,6 +29,7 @@ export function intentOf(beat: SceneBeat, archetype: string, textLayers: SceneLa
     hasWordTimes: (beat.word_times?.length ?? 0) > 0,
     hasItems: anyItems,
     hasAttribution: anyAttribution,
+    hasAccentSpan: !!(beat.accent_span && beat.accent_span.trim()),
     textLayerCount: textLayers.length,
   };
 }
