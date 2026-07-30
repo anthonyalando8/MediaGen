@@ -27,9 +27,10 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "beats": [
         {{
           "id":               "beat_01",
-          "type":             "hook | insight | tension | truth | flip | payoff | cta",
+          "type":             "hook | insight | tension | truth | flip | climax | payoff | cta",
           "keyword":          "2-4 WORD PHRASE",
           "text":             "spoken sentence, 12-30 words",
+          "items":            "OPTIONAL array — see STRUCTURED BEATS below. Omit entirely on most beats.",
           "energy":           "high | mid | low",
           "emotion":          "confident | serious | hopeful | surprised | playful",
           "pace":             "slow | mid | fast",
@@ -68,6 +69,53 @@ The TOP LEVEL has "sections", NOT a flat "beats" array. Each section is:
 4. Total beats across ALL sections: 18-36. Total words: 480-750. Match the
    count to how many genuine sub-points the topic has — don't pad a section
    to hit a number, and don't cram unrelated sub-points into one section.
+
+──────────────────────────────────────────────────────────────────────
+BEAT `type` — REQUIRED ON EVERY BEAT, AND VARIED
+──────────────────────────────────────────────────────────────────────
+`type` is not decoration: it drives camera/pace/emotion defaults AND how the
+beat's text is laid out on screen. A script where every body beat is "insight"
+renders as the same card for five minutes. Rules:
+
+- EVERY beat carries an explicit `type`. Never omit it.
+- Across the whole script use at least FIVE distinct types.
+- No more than THREE "insight" beats in a row. Break up long explanatory runs
+  with the type that matches what the beat is actually doing:
+    insight  — explains a mechanism or fact (the default body beat)
+    tension  — names a problem, risk, or cost
+    truth    — states a principle or a quotable claim
+    flip     — corrects a misconception, or pivots "but actually…"
+    climax   — the single most consequential beat of a body section
+    payoff   — resolves a section into its practical consequence
+- "hook" is the FIRST beat only. "cta" is the LAST beat only.
+- Each body section should contain at least two different types.
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURED BEATS — `items` (use on 3-6 beats per script, no more)
+──────────────────────────────────────────────────────────────────────
+Some beats read far better as structure than as a sentence. When a beat is
+GENUINELY one of the shapes below, add an `items` array alongside its `text`.
+The `text` stays the spoken narration; `items` is what appears on screen.
+
+- An ENUMERATION (2-5 parallel things) — `type: "insight"` or `"payoff"`:
+    "items": [{{"text": "Clocks drift"}}, {{"text": "Packets vanish"}}, {{"text": "Retries duplicate"}}]
+  Each item ≤ 6 words. Only when the items are truly parallel — not a sentence
+  chopped at its commas.
+
+- FIGURES worth showing as numbers — `type: "insight"` or `"truth"`:
+    "items": [{{"label": "40%", "text": "of outages start here"}}, {{"label": "3x", "text": "longer to detect"}}]
+  2-4 items, each `label` a short figure. Use ONLY with real numbers from the
+  topic — never invent statistics.
+
+Also, where it's natural (do NOT force these):
+- Put a short verbatim claim in "double quotes" inside `text` on one or two
+  `truth` beats — those render as a pull quote.
+- On `insight` beats that introduce a term, make `keyword` THE TERM itself
+  (2-3 words, no verb) and let `text` define it — those render as a
+  definition card.
+
+Omit `items` on every beat that isn't one of these shapes. A forced list is
+worse than a clean sentence.
 
 ──────────────────────────────────────────────────────────────────────
 WRITING RULES (same as every format)
@@ -114,6 +162,7 @@ EXAMPLE SHAPE (abbreviated — 2 beats per section shown; a real script has
            "visual_query": "server room lights night", "intensity": 0.65, "pattern_interrupt": "", "composition": "" }},
         {{ "id": "beat_02", "type": "insight", "keyword": "THREE PARTS",
            "text": "We'll cover why network calls fail silently, why clocks disagree, and how to design around both.",
+           "items": [{{"text": "Calls fail silently"}}, {{"text": "Clocks disagree"}}, {{"text": "Designing around both"}}],
            "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "clean",
            "camera": "static", "transition": "cut", "background": "solid", "layout": "center",
            "visual_query": "network diagram screen", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }}
@@ -126,7 +175,17 @@ EXAMPLE SHAPE (abbreviated — 2 beats per section shown; a real script has
            "text": "A network call can fail without telling you it failed — the request might have succeeded on the *other end*.",
            "energy": "mid", "emotion": "serious", "pace": "mid", "visual_intent": "documentary",
            "camera": "static", "transition": "cut", "background": "solid", "layout": "left",
-           "visual_query": "network cables data center", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }}
+           "visual_query": "network cables data center", "intensity": 0.55, "pattern_interrupt": "", "composition": "" }},
+        {{ "id": "beat_04", "type": "tension", "keyword": "THE RETRY TRAP",
+           "text": "So you retry — and now the same operation has run twice, which is *worse* than it never running at all.",
+           "energy": "mid", "emotion": "serious", "pace": "slow", "visual_intent": "documentary",
+           "camera": "push_in", "transition": "dip_black", "background": "lines", "layout": "left",
+           "visual_query": "tangled ethernet cables", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }},
+        {{ "id": "beat_05", "type": "truth", "keyword": "IDEMPOTENCE",
+           "text": "The fix has a name: \"make every operation safe to repeat\" — that property is called idempotence.",
+           "energy": "mid", "emotion": "confident", "pace": "mid", "visual_intent": "clean",
+           "camera": "pull_out", "transition": "cut", "background": "gradient", "layout": "center",
+           "visual_query": "whiteboard technical diagram", "intensity": 0.6, "pattern_interrupt": "", "composition": "" }}
       ]
     }},
     {{
@@ -150,8 +209,12 @@ FINAL CHECKLIST (rewrite if any fail):
 3. Total beats 18-36, total words 480-750, each beat 12-30 words.
 4. Body sections build in logical order, each covering ONE distinct sub-point.
 5. ≥3 cameras and ≥2 paces across the WHOLE script; no camera repeated 4+ in a row.
-6. Every beat has a numeric intensity roughly tracking its section's pacing_arc.
-7. Every visual_query is a concrete same-domain noun (not necessarily the literal
+6. Every beat has an explicit `type`; ≥5 distinct types used; no more than 3
+   "insight" beats in a row; "hook" only first, "cta" only last.
+7. 3-6 beats carry an `items` array, and every one of them is a genuine
+   enumeration or figure set — not a sentence split at its commas.
+8. Every beat has a numeric intensity roughly tracking its section's pacing_arc.
+9. Every visual_query is a concrete same-domain noun (not necessarily the literal
    subject) with no mood/abstraction words.
 
 Output the JSON only.

@@ -1,7 +1,7 @@
 // apps/editor/src/components/TimelinePlaceholder.tsx
 //
-// Drop-in replacement. Transport + graph mode are unchanged; the CLIPS-mode
-// body is rewired into a UNIFIED timeline that fixes the audio/layer overlap:
+// Drop-in replacement. Transport + graph mode + the unified layers/audio body
+// are unchanged; this revision fixes TIMELINE ZOOM RANGE and PLAYHEAD FOLLOW.
 //
 //   fixed header column  →  <TimelineTrackHeaders/>  (layers)
 //                           ── Audio ── divider
@@ -12,14 +12,61 @@
 //                           <AudioClipRows/>         (audio clips)
 //                           <playhead>               (one line, both sections)
 //
-// Both columns share ONE vertical scroll (the header column mirrors the scroll
-// column's scrollTop) and the scroll column owns horizontal scroll — so audio
-// header rows and clip rows stay aligned, audio never overlaps layer clips,
-// and the playhead is continuous across Layers + Audio.
+// ─────────────────────────────────────────────────────────────────────────
+// FIX 1 — zoom could not reach "whole timeline in one glance"
+// ─────────────────────────────────────────────────────────────────────────
+// `MIN_PX_PER_FRAME` was a hardcoded 1. A 5-minute comp at 30fps is 9 000
+// frames, so fully zoomed OUT the lane area was still 9 000px wide against a
+// ~1 200px viewport — you could never see more than ~13% of the video at once.
+// The floor has to be a FUNCTION OF CONTENT, not a constant:
+//
+//   • `fitPxPerFrame` = (measured viewport width − gutter) / visibleDuration,
+//     remeasured on resize via ResizeObserver. That is by definition the zoom
+//     at which the entire timeline is visible.
+//   • The slider's minimum is that fit value (never above it), so the extreme
+//     left of the slider ALWAYS means "everything fits".
+//   • The slider is LOG-scaled. With a linear scale and a 0.05–24 range, 99%
+//     of the travel would sit in the unusable high end and the first pixel of
+//     movement would jump several hundred percent.
+//   • A "Fit" button jumps straight there, and long comps open fitted (see
+//     `didAutoFitRef`) instead of opening 8× too deep and looking broken.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// FIX 2 — following the playhead stalled during playback
+// ─────────────────────────────────────────────────────────────────────────
+// Three separate defects compounded:
+//
+//   (a) SMOOTH SCROLL FOUGHT ITSELF. The effect ran on every playhead tick
+//       (~33ms at 30fps) and re-tested against `el.scrollLeft`, which is
+//       MID-ANIMATION during a smooth scroll. The playhead stays outside the
+//       margin until the animation finishes, so each tick issued a fresh
+//       `scrollTo`, restarting the animation from a new position ~30 times a
+//       second. The result reads as stuttering or completely stuck scrolling.
+//       Fix: during playback scroll INSTANTLY (`behavior: "auto"`) — the
+//       playhead is already moving smoothly, so the viewport doesn't need to
+//       animate as well — and keep smooth behaviour only for the paused/manual
+//       "Scroll to playhead" case.
+//
+//   (b) VERTICAL SCROLL CANCELLED FOLLOWING. `handleScroll` fires for BOTH
+//       axes, and any non-programmatic event called `setFollowPlayhead(false)`.
+//       Scrolling down to see a lower track silently turned following off.
+//       Fix: compare `scrollLeft` against the previous value and only treat a
+//       HORIZONTAL delta as an intent to take manual control.
+//
+//   (c) THE PROGRAMMATIC-SCROLL FLAG WAS TIME-BASED. It cleared on a 600ms
+//       timeout, so a user scroll inside that window was swallowed, while a
+//       smooth scroll running long could still be misread as user input. With
+//       instant scrolling during playback we can instead record the exact
+//       scrollLeft we asked for and compare against it — deterministic, no
+//       timers involved in the playback path.
+//
+// Also: following now re-centres with LOOKAHEAD (playhead parked at 30% from
+// the left, not 50%), so more of the timeline ahead of the playhead is visible
+// — which is the part you actually want to see while it plays.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Pause, Play, SkipBack, SkipForward, ZoomIn, ZoomOut, Navigation,
+  Pause, Play, SkipBack, SkipForward, ZoomIn, ZoomOut, Navigation, Maximize2,
 } from "lucide-react";
 import { toFrame } from "core";
 import { useEditorStore, useEditorStoreApi } from "../store/context";
@@ -38,8 +85,22 @@ import { getAudioTracks, trackDurationFrames } from "./audio-kinds";
 import { useAudioSelection } from "./audio-selection";
 
 const DEFAULT_PX_PER_FRAME = 4;
-const MIN_PX_PER_FRAME = 1;
 const MAX_PX_PER_FRAME = 24;
+
+// Absolute floor, only to stop a degenerate 0/NaN before first measure. The
+// REAL minimum is `fitPxPerFrame` below.
+const ABSOLUTE_MIN_PX_PER_FRAME = 0.02;
+
+// Width reserved so the last frame isn't flush against the right edge at fit.
+const FIT_GUTTER_PX = 24;
+
+// Where the playhead sits after a follow re-centre, as a fraction of viewport
+// width. 0.3 keeps 70% of the visible span AHEAD of the playhead.
+const FOLLOW_ANCHOR = 0.3;
+
+// A comp is auto-fitted on open when it would otherwise overflow the viewport
+// by more than this factor at the default zoom.
+const AUTOFIT_OVERFLOW_FACTOR = 2;
 
 type TimelineMode = "clips" | "graph";
 
@@ -70,6 +131,7 @@ export function TimelinePlaceholder() {
   const [litFrame, setLitFrame] = useState<number | null>(null);
   const [spanExpanded, setSpanExpanded] = useState<Set<string>>(new Set());
   const [audioOpen, setAudioOpen] = useState(true);
+  const [viewportWidth, setViewportWidth] = useState(0);
 
   function toggleSpanLane(nodeId: string) {
     setSpanExpanded((prev) => {
@@ -85,9 +147,12 @@ export function TimelinePlaceholder() {
   const snapCtx = useMemo(() => ({ litFrame, setLitFrame }), [litFrame]);
 
   function pickTickInterval(ppf: number): number {
-    const candidates = [1, 2, 5, 10, 15, 30, 60, 90, 150, 300, 600];
+    // Extended upward: at fit zoom on a long comp `ppf` can be ~0.1, where even
+    // a 600-frame tick is only 60px apart. Without these larger candidates the
+    // ruler would draw thousands of overlapping ticks when zoomed fully out.
+    const candidates = [1, 2, 5, 10, 15, 30, 60, 90, 150, 300, 600, 900, 1800, 3600, 9000, 18000];
     for (const f of candidates) if (f * ppf >= 48) return f;
-    return 600;
+    return candidates[candidates.length - 1];
   }
   const tickInterval = pickTickInterval(pixelsPerFrame);
 
@@ -116,6 +181,100 @@ export function TimelinePlaceholder() {
     return Math.max(comp.duration as number, audioEnd) + 30;
   });
 
+  // ── Zoom range ─────────────────────────────────────────────────────────
+  // Measure the scroll viewport so "fit" is a real number rather than a guess.
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    setViewportWidth(el.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setViewportWidth(el.clientWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode]);
+
+  /** The zoom at which the ENTIRE timeline is visible in the viewport. */
+  const fitPxPerFrame = useMemo(() => {
+    const frames = Math.max(1, visibleDuration as number);
+    if (viewportWidth <= 0) return ABSOLUTE_MIN_PX_PER_FRAME;
+    return Math.max(ABSOLUTE_MIN_PX_PER_FRAME, (viewportWidth - FIT_GUTTER_PX) / frames);
+  }, [viewportWidth, visibleDuration]);
+
+  // Never let the floor rise above the default, or short comps would be unable
+  // to zoom out at all (fit on a 2-second comp is a huge px-per-frame).
+  const minPxPerFrame = Math.min(fitPxPerFrame, DEFAULT_PX_PER_FRAME);
+
+  const clampZoom = useCallback(
+    (v: number) => Math.min(MAX_PX_PER_FRAME, Math.max(minPxPerFrame, v)),
+    [minPxPerFrame],
+  );
+
+  // Keep the current zoom legal when the comp or viewport changes size.
+  useEffect(() => {
+    setPixelsPerFrame((v) => clampZoom(v));
+  }, [clampZoom]);
+
+  // Open long comps fitted. Runs once, after the first real measurement — a
+  // 5-minute comp opening at 4px/frame looks broken, and "zoom out until it
+  // fits" is the first thing anyone does.
+  const didAutoFitRef = useRef(false);
+  useEffect(() => {
+    if (didAutoFitRef.current || viewportWidth <= 0) return;
+    didAutoFitRef.current = true;
+    const contentWidth = (visibleDuration as number) * DEFAULT_PX_PER_FRAME;
+    if (contentWidth > viewportWidth * AUTOFIT_OVERFLOW_FACTOR) {
+      setPixelsPerFrame(fitPxPerFrame);
+    }
+  }, [viewportWidth, visibleDuration, fitPxPerFrame]);
+
+  // Log-scaled slider: linear travel over a 0.05–24 range would bunch every
+  // useful zoom into the last few percent of the track.
+  const zoomSliderPos = useMemo(() => {
+    const lo = Math.log(minPxPerFrame);
+    const hi = Math.log(MAX_PX_PER_FRAME);
+    if (hi <= lo) return 1;
+    return (Math.log(clampZoom(pixelsPerFrame)) - lo) / (hi - lo);
+  }, [pixelsPerFrame, minPxPerFrame, clampZoom]);
+
+  function zoomFromSliderPos(pos: number): number {
+    const lo = Math.log(minPxPerFrame);
+    const hi = Math.log(MAX_PX_PER_FRAME);
+    return Math.exp(lo + (hi - lo) * pos);
+  }
+
+  /**
+   * Zoom while keeping `anchorFrame` pinned under the same screen x, so the
+   * timeline expands around the playhead (or the viewport centre) instead of
+   * around frame 0 — otherwise every zoom step throws away your position.
+   */
+  const zoomAround = useCallback((nextPpf: number, anchorFrame?: number) => {
+    const el = scrollContainerRef.current;
+    const target = clampZoom(nextPpf);
+    setPixelsPerFrame((prev) => {
+      if (!el) return target;
+      const frame = anchorFrame ?? (el.scrollLeft + el.clientWidth / 2) / prev;
+      const screenX = frame * prev - el.scrollLeft;
+      // Applied after React commits the new width.
+      requestAnimationFrame(() => {
+        const nextScroll = Math.max(0, frame * target - screenX);
+        lastProgrammaticLeftRef.current = nextScroll;
+        el.scrollLeft = nextScroll;
+      });
+      return target;
+    });
+  }, [clampZoom]);
+
+  const zoomToFit = useCallback(() => {
+    const el = scrollContainerRef.current;
+    setPixelsPerFrame(fitPxPerFrame);
+    if (el) {
+      requestAnimationFrame(() => {
+        lastProgrammaticLeftRef.current = 0;
+        el.scrollLeft = 0;
+      });
+    }
+  }, [fitPxPerFrame]);
+
   // ── Keyboard shortcuts ─────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -131,60 +290,81 @@ export function TimelinePlaceholder() {
         case "ArrowRight": e.preventDefault(); state.setPlayhead(toFrame(Math.min(dur - 1, ph + step))); break;
         case "Home": e.preventDefault(); state.setPlayhead(toFrame(0)); break;
         case "End": e.preventDefault(); state.setPlayhead(toFrame(Math.max(0, dur - 1))); break;
+        // Timeline zoom, anchored on the playhead. Bare keys (no modifier) so
+        // they don't collide with the browser's own page zoom.
+        case "-": case "_": e.preventDefault(); zoomAround(pixelsPerFrame / 1.4, ph); break;
+        case "=": case "+": e.preventDefault(); zoomAround(pixelsPerFrame * 1.4, ph); break;
+        case "0": e.preventDefault(); zoomToFit(); break;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [store, playing]);
+  }, [store, playing, pixelsPerFrame, zoomAround, zoomToFit]);
 
   // ── Scroll-to-playhead ─────────────────────────────────────────────────
-  // `el.scrollTo({ behavior: "smooth" })` fires native `scroll` events of its
-  // own as it animates. Without this flag, `handleScroll` can't tell that
-  // apart from a real user scroll and immediately calls setFollowPlayhead
-  // (false), which cancels following on the very next playhead update — the
-  // timeline would auto-scroll once and then stop tracking during playback.
-  // The timeout is a fallback clear (smooth-scroll animations run well under
-  // this) in case a `scroll` event is ever missed.
-  const programmaticScrollRef = useRef(false);
-  const programmaticScrollTimeoutRef = useRef<number | undefined>(undefined);
+  // We record the exact scrollLeft we asked for. `handleScroll` compares the
+  // incoming value against it to tell OUR scroll from the USER's — no timers,
+  // and correct even when several scrolls land in the same frame.
+  const lastProgrammaticLeftRef = useRef<number | null>(null);
+  const lastScrollLeftRef = useRef(0);
 
-  function beginProgrammaticScroll() {
-    programmaticScrollRef.current = true;
-    if (programmaticScrollTimeoutRef.current !== undefined) {
-      window.clearTimeout(programmaticScrollTimeoutRef.current);
+  /** Scroll so the playhead sits at FOLLOW_ANCHOR across the viewport. */
+  const scrollToPlayhead = useCallback((smooth: boolean) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const x = (store.getState().playhead as number) * pixelsPerFrame;
+    const maxLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    const target = Math.min(maxLeft, Math.max(0, x - el.clientWidth * FOLLOW_ANCHOR));
+    lastProgrammaticLeftRef.current = target;
+    if (smooth) {
+      el.scrollTo({ left: target, behavior: "smooth" });
+    } else {
+      el.scrollLeft = target;   // instant — see FIX 2(a)
     }
-    programmaticScrollTimeoutRef.current = window.setTimeout(() => {
-      programmaticScrollRef.current = false;
-    }, 600);
-  }
+  }, [pixelsPerFrame, store]);
 
   useEffect(() => {
     if (!followPlayhead) return;
     const el = scrollContainerRef.current;
     if (!el) return;
+    // Everything already fits — there is nothing to follow.
+    if (el.scrollWidth <= el.clientWidth) return;
+
     const x = (playhead as number) * pixelsPerFrame;
     const { scrollLeft, clientWidth } = el;
-    const margin = clientWidth * 0.2;
-    if (x < scrollLeft + margin || x > scrollLeft + clientWidth - margin) {
-      beginProgrammaticScroll();
-      el.scrollTo({ left: Math.max(0, x - clientWidth / 2), behavior: "smooth" });
-    }
-  }, [playhead, pixelsPerFrame, followPlayhead]);
+    const margin = Math.min(80, clientWidth * 0.1);
 
-  function scrollToPlayhead() {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    const x = (playhead as number) * pixelsPerFrame;
-    beginProgrammaticScroll();
-    el.scrollTo({ left: Math.max(0, x - el.clientWidth / 2), behavior: "smooth" });
-  }
+    if (x < scrollLeft + margin || x > scrollLeft + clientWidth - margin) {
+      // Instant while playing: a smooth animation would be restarted by the
+      // next playhead tick before it ever completed.
+      scrollToPlayhead(!playing);
+    }
+  }, [playhead, pixelsPerFrame, followPlayhead, playing, scrollToPlayhead]);
 
   // Mirror vertical scroll onto the fixed header column so rows stay aligned.
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (headerColRef.current) headerColRef.current.scrollTop = e.currentTarget.scrollTop;
-    if (programmaticScrollRef.current) return;   // our own scrollTo, not the user
+    const el = e.currentTarget;
+    if (headerColRef.current) headerColRef.current.scrollTop = el.scrollTop;
+
+    const left = el.scrollLeft;
+    const movedHorizontally = Math.abs(left - lastScrollLeftRef.current) > 0.5;
+    lastScrollLeftRef.current = left;
+
+    // Only a HORIZONTAL scroll means "I want manual control" — scrolling down
+    // to reach another track must not switch following off (FIX 2b).
+    if (!movedHorizontally) return;
+
+    // Was this our own scroll? (FIX 2c — position-based, not time-based.)
+    const expected = lastProgrammaticLeftRef.current;
+    if (expected !== null && Math.abs(left - expected) < 1.5) return;
+    // A smooth scroll emits intermediate positions; treat anything still
+    // heading toward the target as ours.
+    if (expected !== null && !playing) return;
+
     setFollowPlayhead(false);
   }
+
+  const atFit = Math.abs(pixelsPerFrame - fitPxPerFrame) < fitPxPerFrame * 0.02;
 
   return (
     <div className="timeline-panel">
@@ -222,7 +402,11 @@ export function TimelinePlaceholder() {
         <button
           className={`btn btn-icon${followPlayhead ? " btn-active" : ""}`}
           title={followPlayhead ? "Following playhead (click to lock)" : "Scroll to playhead"}
-          onClick={() => { setFollowPlayhead((v) => !v); scrollToPlayhead(); }}
+          onClick={() => {
+            const next = !followPlayhead;
+            setFollowPlayhead(next);
+            scrollToPlayhead(true);
+          }}
         >
           <Navigation size={14} />
         </button>
@@ -235,23 +419,34 @@ export function TimelinePlaceholder() {
         <div className="transport__zoom">
           <button
             className="btn btn-icon"
-            title="Zoom out"
-            onClick={() => setPixelsPerFrame((v) => Math.max(MIN_PX_PER_FRAME, v / 1.25))}
+            title="Zoom out (−)"
+            disabled={pixelsPerFrame <= minPxPerFrame * 1.001}
+            onClick={() => zoomAround(pixelsPerFrame / 1.4, playhead as number)}
           >
             <ZoomOut size={13} />
           </button>
           <input
-            type="range" min={MIN_PX_PER_FRAME} max={MAX_PX_PER_FRAME} step={0.5}
-            value={pixelsPerFrame}
-            onChange={(e) => setPixelsPerFrame(Number(e.target.value))}
-            title="Timeline zoom" aria-label="Timeline zoom"
+            type="range" min={0} max={1} step={0.001}
+            value={zoomSliderPos}
+            onChange={(e) => zoomAround(zoomFromSliderPos(Number(e.target.value)), playhead as number)}
+            title={`Timeline zoom — ${pixelsPerFrame.toFixed(2)} px/frame`}
+            aria-label="Timeline zoom"
           />
           <button
             className="btn btn-icon"
-            title="Zoom in"
-            onClick={() => setPixelsPerFrame((v) => Math.min(MAX_PX_PER_FRAME, v * 1.25))}
+            title="Zoom in (+)"
+            disabled={pixelsPerFrame >= MAX_PX_PER_FRAME * 0.999}
+            onClick={() => zoomAround(pixelsPerFrame * 1.4, playhead as number)}
           >
             <ZoomIn size={13} />
+          </button>
+          <button
+            className={`btn btn-icon${atFit ? " btn-active" : ""}`}
+            title="Fit whole timeline (0)"
+            aria-label="Fit whole timeline"
+            onClick={zoomToFit}
+          >
+            <Maximize2 size={13} />
           </button>
         </div>
       </div>

@@ -148,26 +148,132 @@ _ARCHETYPE_TYPE_AFFINITY = {
     # see _TEXT_BEARING_ARCHETYPES's comment.
     "stat_band":        {"insight", "truth"},       # multi-figure variant of stat_callout
     "case_study":       {"insight", "truth"},       # numbered-case variant of lower_third/stat_callout
+    # P3 structured-text archetypes — now REACHABLE, but only through
+    # `_content_gate` (a beat with no real list/term/dialogue content never
+    # gets one). Without these in the table nothing downstream can ever emit
+    # the `items[]`/term layers the numbered-list / definition-card /
+    # chat-bubbles representations need, so those four representations were
+    # dead in every generated video regardless of text_intent.
+    "list_card":        {"insight", "payoff"},      # enumerations — gated on separators/items[]
+    "definition_card":  {"insight", "truth"},       # keyword=term, text=gloss
+    "dialogue_card":    {"tension", "flip"},        # gated on an explicit items[] only
 }
 
 
-_DENSITY_PER_MIN_ARCHETYPE = 0.10
+# Diversification dials. These are LENGTH-INDEPENDENT on purpose: the "every
+# video looks the same" problem is not a genre or a duration problem, it's that
+# the default archetype was allowed to hold a supermajority of beats in every
+# script. A reel with 2 of 6 beats diversified reads as flat for the same reason
+# a 30-beat explainer with 9 does.
+#
+# `n_beats // 3` was the old hardcoded ceiling and is the single biggest cause:
+# at ANY length it pinned two thirds of beats to `text_over_dimmed` → text_intent
+# "caption" → one representation, regardless of what the format asked for.
+#
+# Tuned so the budget lands near HALF the beats at every length — the default
+# archetype stays the most common single look (it should; it's the one that reads
+# cleanly over footage) without being the only one:
+#
+#     6 beats (reel)       → 3   (was 2)
+#     10 beats (listicle)  → 5   (was 3)
+#     20 beats (explainer) → 9   (was 6)
+#     30 beats (explainer) → 14  (was 9)
+#
+# A format overrides either via `variety.archetype_density` /
+# `variety.archetype_max_share`; a format with `variety: {}` (calm_narrative)
+# opts out of diversification entirely, as before.
+_DENSITY_PER_MIN_ARCHETYPE = 0.15
+_DEFAULT_ARCHETYPE_MAX_SHARE = 2.0 / 3.0
 
 
-def _diversification_budget(n_beats: int, min_archetypes: int) -> int:
+def _diversification_budget(
+    n_beats: int,
+    min_archetypes: int,
+    density: float | None = None,
+    max_share: float | None = None,
+) -> int:
     """How many beats `assign_composition` should move off the default
     archetype, total. Scales with script length (via `n_beats`) and with how
     aggressively the format asks for variety (via `min_archetypes`, now a
     density dial rather than a hard distinct-archetype target — see
-    `assign_composition`'s docstring). `min_archetypes - 1` — today's old
-    fixed cap — becomes a FLOOR, and `n_beats // 3` is a ceiling so
-    diversified beats always stay a clear minority against `text_over_dimmed`."""
+    `assign_composition`'s docstring). `min_archetypes - 1` is a FLOOR and
+    `max_share * n_beats` a ceiling."""
     if min_archetypes <= 1:
         return 0
-    raw = math.ceil(n_beats * _DENSITY_PER_MIN_ARCHETYPE * min_archetypes)
+    if density is None:
+        density = _DENSITY_PER_MIN_ARCHETYPE
+    if max_share is None:
+        max_share = _DEFAULT_ARCHETYPE_MAX_SHARE
+    raw = math.ceil(n_beats * density * min_archetypes)
     floor_val = min_archetypes - 1
-    cap_val = n_beats // 3
+    cap_val = int(n_beats * max_share)
     return max(0, min(cap_val, max(floor_val, raw)))
+    if min_archetypes <= 1:
+        return 0
+    if density is None:
+        density = _default_density(n_beats)
+    if max_share is None:
+        max_share = _default_max_share(n_beats)
+    raw = math.ceil(n_beats * density * min_archetypes)
+    floor_val = min_archetypes - 1
+    cap_val = int(n_beats * max_share)
+    return max(0, min(cap_val, max(floor_val, raw)))
+
+
+# ── Content gates for the structured (P3/P4) archetypes ─────────────────────
+# These archetypes' scene_export synthesizers emit the extra layer fields the
+# editor's structured representations read (`items[]`, term/gloss pairs). They
+# were excluded from _ARCHETYPE_TYPE_AFFINITY because auto-assigning them to
+# arbitrary beats risks nonsense on screen — the fix is not to keep them
+# unreachable but to gate them on the beat ACTUALLY carrying the content, so
+# they're reachable exactly when they'd render something true.
+#
+# WHY THIS MATTERS FOR text_intent: a beat left on `text_over_dimmed` gets no
+# `items` layer, so stamping text_intent "list"/"definition"/"dialogue" on it is
+# inert — the editor's selector drops a representation whose required fields are
+# missing and falls back to a caption. Archetype is what makes those intents
+# real; text_intent alone cannot diversify a script.
+
+_NUMERAL_RE = re.compile(r"\d")
+_LIST_SEPARATOR_RE = re.compile(r"[;•]|\s-\s|,\s")
+_QUOTED_RE = re.compile(r"[\"“”]")
+
+
+def _beat_prose(beat: dict) -> str:
+    """The beat's spoken line. NOTE: at composition time the field is `text` —
+    `body` only exists downstream (visuals.py maps text→body when it builds the
+    render contract), so gates here must never read `body`."""
+    return (beat.get("text") or "").strip()
+
+
+def _content_gate(archetype: str, beat: dict) -> bool:
+    """True when this beat carries what `archetype`'s synthesizer needs to emit
+    a meaningful structured layer. Mirrors scene_export.py's `_derive_*`
+    helpers: those fall back to one-item/whole-line output when the content
+    isn't really structured, which renders as a worse caption — so we'd rather
+    not pick the archetype at all in that case."""
+    prose = _beat_prose(beat)
+    items = beat.get("items")
+    has_items = isinstance(items, (list, tuple)) and len(items) >= 2
+
+    if archetype == "list_card":
+        # _derive_list_items needs ≥2 separator-delimited parts to be a real list.
+        return has_items or len(_LIST_SEPARATOR_RE.findall(prose)) >= 1
+    if archetype == "definition_card":
+        # keyword becomes the term, text becomes the gloss (scene_export:717).
+        return bool(beat.get("keyword") and prose)
+    if archetype == "dialogue_card":
+        return has_items
+    if archetype == "stat_band":
+        # _derive_stat_items wants 2+ figures to fill a band.
+        return has_items or len(_NUMERAL_RE.findall(prose)) >= 2
+    if archetype == "case_study":
+        return has_items or bool(_NUMERAL_RE.search(prose))
+    if archetype == "quote_card":
+        return bool(_QUOTED_RE.search(prose)) or bool(beat.get("attribution"))
+    if archetype == "stat_callout":
+        return bool(_NUMERAL_RE.search(prose))
+    return True
 
 
 def _candidates_for(beat_type: str, content_safe: bool) -> list[str]:
@@ -178,6 +284,14 @@ def _candidates_for(beat_type: str, content_safe: bool) -> list[str]:
     return [
         a for a, wanted in _ARCHETYPE_TYPE_AFFINITY.items()
         if beat_type in wanted and (not content_safe or a in _TEXT_BEARING_ARCHETYPES)
+    ]
+
+
+def _gated_candidates_for(beat: dict, content_safe: bool) -> list[str]:
+    """`_candidates_for` minus archetypes this beat can't actually fill."""
+    return [
+        a for a in _candidates_for(beat.get("type"), content_safe)
+        if _content_gate(a, beat)
     ]
 
 
@@ -215,11 +329,18 @@ def assign_composition(data: dict, profile) -> dict:
     variety = getattr(profile, "variety", None) or {}
     min_archetypes = int(variety.get("min_archetypes", 0) or 0)
     max_consecutive = int(variety.get("max_consecutive_archetype", 0) or 0)
+    density = variety.get("archetype_density")
+    max_share = variety.get("archetype_max_share")
     beats = data.get("beats", [])
     if min_archetypes <= 1 or len(beats) < 2:
         return data
 
-    budget = _diversification_budget(len(beats), min_archetypes)
+    budget = _diversification_budget(
+        len(beats),
+        min_archetypes,
+        float(density) if density else None,
+        float(max_share) if max_share else None,
+    )
     if budget <= 0:
         return data
 
@@ -229,31 +350,53 @@ def assign_composition(data: dict, profile) -> dict:
     structural_idx = [
         i for i, b in enumerate(beats)
         if _is_default(b) and b.get("type") not in _CONTENT_CARRYING_TYPES
-        and _candidates_for(b.get("type"), content_safe=False)
+        and _gated_candidates_for(b, content_safe=False)
     ]
     content_idx = [
         i for i, b in enumerate(beats)
         if _is_default(b) and b.get("type") in _CONTENT_CARRYING_TYPES
-        and _candidates_for(b.get("type"), content_safe=True)
+        and _gated_candidates_for(b, content_safe=True)
     ]
 
+    # Spend the budget SPREAD ACROSS the script rather than front-to-back.
+    # Walking in index order exhausted the budget on the opening beats and left
+    # every beat past it on the default archetype — on an 18-36 beat explainer
+    # that reads as "the video changes look for a while, then goes flat".
+    def _spread(indices: list[int], n: int) -> list[int]:
+        if n <= 0 or not indices:
+            return []
+        if n >= len(indices):
+            return indices
+        step = len(indices) / n
+        return [indices[min(int(k * step), len(indices) - 1)] for k in range(n)]
+
+    # Structural beats first, then content-carrying ones (restricted to
+    # text-bearing archetypes) — spending it the other way round would strip
+    # captions from exactly the beats whose caption IS the content.
+    n_structural = min(len(structural_idx), budget)
+    n_content = min(len(content_idx), budget - n_structural)
+
     spent = 0
-    for i in structural_idx:
-        if spent >= budget:
-            break
+    for i in _spread(structural_idx, n_structural):
         b = beats[i]
-        b["archetype"] = _stable_pick(_candidates_for(b.get("type"), content_safe=False), b)
+        b["archetype"] = _stable_pick(_gated_candidates_for(b, content_safe=False), b)
         spent += 1
-    for i in content_idx:
-        if spent >= budget:
-            break
+    for i in _spread(content_idx, n_content):
         b = beats[i]
-        b["archetype"] = _stable_pick(_candidates_for(b.get("type"), content_safe=True), b)
+        b["archetype"] = _stable_pick(_gated_candidates_for(b, content_safe=True), b)
         spent += 1
 
     # Code-level guarantee (not just a prompt hope): no archetype repeats
     # more than `max_consecutive` beats in a row — now actually exercised,
     # since a real budget of beats gets reassigned above.
+    #
+    # The guard only trims runs of NON-default archetypes. Counting the default
+    # too (as it used to) was a no-op that read like a working guard: on a long
+    # run of `text_over_dimmed` it "fixed" each beat by setting it to
+    # `text_over_dimmed` and resetting the counter, so the monotony it exists to
+    # prevent was the one case it could never break. Breaking up a default run
+    # is the diversification BUDGET's job (raise `archetype_density` /
+    # `archetype_max_share`), not this guard's.
     if max_consecutive > 0:
         run_val, run_len = None, 0
         for beat in beats:
@@ -262,10 +405,81 @@ def assign_composition(data: dict, profile) -> dict:
                 run_len += 1
             else:
                 run_val, run_len = a, 1
-            if run_len > max_consecutive:
+            if run_len > max_consecutive and a != "text_over_dimmed":
                 beat["archetype"] = "text_over_dimmed"
                 run_val, run_len = "text_over_dimmed", 1
 
+    return data
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# scene/3.0 composer pass — beat `type` variety
+# ─────────────────────────────────────────────────────────────────────────────
+# `type` is the root of the whole look-selection chain: it drives the cinematic
+# defaults, `_ARCHETYPE_TYPE_AFFINITY`, and text_intent's pools. A script where
+# every body beat is "insight" can therefore only ever render one look, however
+# good the downstream diversification is — which is exactly what long explainers
+# were doing (models label the first beat, the last beat, and then coast).
+#
+# Enforced in CODE rather than per-prompt for the same reason `assign_composition`
+# is: it then applies to every format, present and future, instead of depending
+# on five prompt files staying in sync. Prompts should still ASK for varied types
+# (a model-chosen type is better than a substituted one) — this is the floor.
+#
+# Runs AFTER _normalise_schema, so the cinematic fields are already filled from
+# the model's original type and are NOT rewritten here; only the affinity/intent
+# axes see the substitution.
+_MAX_CONSECUTIVE_TYPE = 3
+
+# What to substitute when a type runs too long, by the run's own type. Each
+# alternative must be a real `_ALLOWED["type"]` value with entries in
+# `_ARCHETYPE_TYPE_AFFINITY`, and must be a defensible reading of a body beat —
+# we're relabelling what the beat is DOING, not inventing content.
+_TYPE_SUBSTITUTES = {
+    "insight": ("truth", "tension", "flip"),
+    "tension": ("insight", "flip"),
+    "truth":   ("insight", "payoff"),
+    "flip":    ("insight", "tension"),
+    "climax":  ("tension", "truth"),
+    "payoff":  ("truth", "insight"),
+}
+
+
+def enforce_type_variety(data: dict, profile) -> dict:
+    """In place: break up runs of more than `_MAX_CONSECUTIVE_TYPE` identical
+    beat `type`s. No-ops when the format doesn't ask for variety (`variety: {}`,
+    e.g. calm_narrative — a steady read is the point there), and never touches
+    the first or last beat (hook/cta are positional by contract).
+
+    Deterministic: the substitute is chosen by `_stable_pick` off the beat's own
+    text, so the same script always yields the same types."""
+    variety = getattr(profile, "variety", None) or {}
+    if not variety:
+        return data
+    beats = data.get("beats", [])
+    if len(beats) < 4:
+        return data
+
+    # A short script has few beats to spend the budget on, so a 3-in-a-row limit
+    # never binds; scale the limit down with length so reels get the same
+    # *proportional* variety as long-form.
+    limit = int(variety.get("max_consecutive_type", 0) or 0)
+    if limit <= 0:
+        limit = _MAX_CONSECUTIVE_TYPE if len(beats) > 8 else 2
+    run_val, run_len = None, 0
+    for i, beat in enumerate(beats):
+        t = beat.get("type")
+        if t == run_val:
+            run_len += 1
+        else:
+            run_val, run_len = t, 1
+        if run_len <= limit or i in (0, len(beats) - 1):
+            continue
+        options = [s for s in _TYPE_SUBSTITUTES.get(t, ()) if s in _ALLOWED["type"]]
+        if not options:
+            continue
+        beat["type"] = _stable_pick(options, beat)
+        run_val, run_len = beat["type"], 1
     return data
 
 
@@ -323,6 +537,10 @@ def generate_script(topic: str, fmt, model: str | None = None, progress=None) ->
         try:
             raw = generate(prompt, on_provider_start=_on_provider_start)
             data = _parse_json(raw.strip())
+            # scene/3.0: break up long runs of one beat `type` BEFORE composition,
+            # since `type` is what the archetype affinity table and text_intent's
+            # pools both key off. Format-gated (variety: {} opts out).
+            data = enforce_type_variety(data, profile)
             data = assign_composition(data, profile)
             # P2: composition first, so text_intent's archetype fallback sees
             # the FINAL archetypes. Purely additive — every beat gets a
@@ -383,6 +601,17 @@ def _clean_beat_texts(data: dict) -> dict:
 # Internals — schema normalisation & cinematic-field fill-in
 # ---------------------------------------------------------------------------
 
+# Rotation used when a beat arrives with NO `type` at all. The old fallback was
+# the bare literal "insight" for every middle beat, which is the root of the
+# "every 5-minute explainer looks identical" report: `type` drives the cinematic
+# defaults above, the archetype affinity table, AND text_intent's pool, so a
+# 30-beat script arriving as 1 hook + 28 insight + 1 cta could only ever render
+# one look. A well-typed script never reaches this — it applies ONLY to beats
+# whose type the model omitted, so nothing regresses for formats that type
+# their beats properly (see prompts/formats/*/prompt.txt).
+_UNTYPED_MIDDLE_ROTATION = ("insight", "tension", "insight", "truth", "insight", "flip")
+
+
 def _normalise_schema(data: dict) -> dict:
     """
     Normalise old schema (id int, hook bool) to new schema (type, energy),
@@ -403,7 +632,10 @@ def _normalise_schema(data: dict) -> dict:
             elif i == total - 1:
                 beat["type"] = "cta"
             else:
-                beat["type"] = "insight"
+                # Rotate instead of stamping "insight" on every middle beat.
+                # Deterministic (position-based), and weighted toward insight so
+                # an explainer still reads as explanatory rather than dramatic.
+                beat["type"] = _UNTYPED_MIDDLE_ROTATION[i % len(_UNTYPED_MIDDLE_ROTATION)]
 
         # default energy from hook flag or position
         if "energy" not in beat:

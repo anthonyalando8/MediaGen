@@ -23,6 +23,7 @@ Return ONLY valid JSON. No text before or after. No markdown. No code fences.
       "type":             "hook | insight | tension | truth | flip | climax | payoff | cta",
       "keyword":          "2-4 WORD PHRASE",
       "text":             "spoken sentence, 15-25 words, with ONE *emphasis word* per sentence",
+      "items":            "OPTIONAL array — see STRUCTURED BEATS below. Omit on most beats.",
       "energy":           "high | mid | low",
       "emotion":          "urgent | tense | hopeful | melancholic | angry | cold | confident | anxious | serious | playful | amused | surprised",
       "pace":             "slow | mid | fast | explosive",
@@ -50,6 +51,37 @@ STYLE GUIDE — pick style based on topic:
 - analytical: data, finance, systems — centered, considered, neutral
 - humorous:   fun facts, comedy, absurd observations — centered, warm amber accent;
               keywords are punchlines not statements; body text lands the joke
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURED BEATS — `items` (use on 1-2 beats per script)
+──────────────────────────────────────────────────────────────────────
+Some beats read far better as structure than as a sentence, and a reel that
+changes its on-screen SHAPE — not just its words — holds attention much longer.
+When a beat is GENUINELY one of the shapes below, add an `items` array alongside
+its `text`. The `text` stays the spoken narration; `items` is what appears on
+screen.
+
+- An ENUMERATION (2-4 parallel things) — best on `insight` or `payoff`:
+    "items": [{{"text": "Sleep debt compounds"}}, {{"text": "Focus collapses"}}, {{"text": "Mood follows"}}]
+  Each item ≤ 5 words. Only when the items are truly parallel — not a sentence
+  chopped at its commas.
+
+- FIGURES worth showing as numbers — best on `insight` or `truth`:
+    "items": [{{"label": "40%", "text": "slower reaction time"}}, {{"label": "3x", "text": "more errors"}}]
+  2-3 items, each `label` a short figure. Use ONLY real numbers from the topic —
+  never invent statistics.
+
+- A REPEATED OPENING (anaphora) — best on `climax`:
+    "items": [{{"text": "Not tired."}}, {{"text": "Not lazy."}}, {{"text": "Depleted."}}]
+
+Also, where it's natural (do NOT force these):
+- Put a short verbatim claim in "double quotes" inside `text` on a `truth` beat —
+  that renders as a pull quote.
+- On an `insight` beat that introduces a term, make `keyword` THE TERM itself
+  (2-3 words, no verb) and let `text` define it — that renders as a definition
+  card.
+
+Omit `items` on every other beat. A forced list is worse than a clean sentence.
 
 ──────────────────────────────────────────────────────────────────────
 STRICT RULES
@@ -446,5 +478,8 @@ FINAL CHECKLIST before outputting (rewrite if any fail):
 11. global.subject is a concrete photographable noun (not a feeling).
 12. EVERY visual_query is a concrete same-domain noun (beat-specific preferred over
     repeating the literal subject) and contains NO mood/emotion/abstraction words.
+13. 1-2 beats carry an `items` array, and each is a genuine enumeration, figure
+    set, or anaphora — not a sentence split at its commas.
+14. ≥4 distinct beat `type` values across the script; no type repeated 3+ in a row.
 
 Output the JSON only.

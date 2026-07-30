@@ -21,6 +21,9 @@ variety:
   max_consecutive_camera: 3
   min_archetypes: 3
   max_consecutive_archetype: 3
+  # No archetype_density / archetype_max_share here: llm.py's defaults are now
+  # LENGTH-AWARE (see _default_density/_default_max_share), so an 18-36 beat
+  # script already gets the long-form budget. Declare them only to override.
 
 voice:
   style: analytical
