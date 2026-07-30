@@ -2,6 +2,13 @@
 //
 // P3 · Messenger-style dialogue — one bubble per `items[]` entry, alternating
 // sides by `speaker`, each with a rounded background and staggered entrance.
+//
+// FIX (P4): each bubble used to fit its text into the WHOLE safe height and
+// the stack was centered with an unclamped `totalH`, so one long message could
+// fill the frame and several turns spilled off the top and bottom. Now the
+// turn count is capped and each bubble's text is fit into an EQUAL share of the
+// safe height (`perBubbleH`), so the measured stack is guaranteed ≤ safe.h and
+// the top is clamped into the safe box.
 
 import type { ColorOKLCH, Node } from "core";
 import { register } from "../registry";
@@ -13,6 +20,7 @@ import { layerWindow } from "../services/timing";
 import { fadeRise } from "../services/reveal";
 
 const DARK: ColorOKLCH = { l: 0.12, c: 0, h: 0 };
+const MAX_TURNS = 6;
 
 export const chatBubbles: TextRepresentation = {
   id: "chat-bubbles",
@@ -22,7 +30,7 @@ export const chatBubbles: TextRepresentation = {
   build(ctx: TextBuildContext): Node[] {
     const { W, H, fps } = ctx.frame;
     const sb = ctx.safe;
-    const items = ctx.fields.items ?? [];
+    const items = (ctx.fields.items ?? []).slice(0, MAX_TURNS);
     if (!items.length) return [];
     const layer = ctx.textLayers[0];
     const win = layer
@@ -35,18 +43,29 @@ export const chatBubbles: TextRepresentation = {
     const padY = Math.round(fs * 0.5);
     const gap = Math.round(fs * 0.7);
 
-    // Measure each bubble first so we can center the stack vertically.
+    // Each bubble may claim at most an equal share of the safe height minus the
+    // inter-bubble gaps — so N bubbles can never sum past safe.h. fitTextToBox
+    // shrinks the font to honour that per-bubble cap.
+    const gapsTotal = gap * (items.length - 1);
+    const perBubbleH = Math.max(fs * 2, Math.floor((sb.h - gapsTotal) / items.length));
+    const perTextH = Math.max(fs, perBubbleH - padY * 2);
+
     const speakers = [...new Set(items.map((it) => it.speaker ?? ""))];
     const laid = items.map((it) => {
-      const fit = fitTextToBox(it.text, maxBubbleW - padX * 2, sb.h, 500, fs, tierPx("bodyS", W, H), LINE_H_BODY);
+      const fit = fitTextToBox(it.text, maxBubbleW - padX * 2, perTextH, 500, fs, tierPx("bodyS", W, H), LINE_H_BODY);
       const textW = fit.lines.reduce((m, l) => Math.max(m, l.width), 0);
       const bubbleW = textW + padX * 2;
       const bubbleH = fit.totalH + padY * 2;
       const outgoing = speakers.length > 1 ? (it.speaker ?? "") === speakers[1] : false;
       return { it, fit, bubbleW, bubbleH, outgoing };
     });
+
     const totalH = laid.reduce((s, b) => s + b.bubbleH + gap, -gap);
-    let y = Math.round(H * 0.5 - totalH / 2);
+    // Center, then clamp so the stack never starts above the safe top nor
+    // spills the bottom.
+    let y = Math.round(sb.y + Math.max(0, (sb.h - totalH) / 2));
+    y = Math.min(Math.max(sb.y, y), sb.y + Math.max(0, sb.h - totalH));
+
     const staggerF = Math.min(10, Math.max(3, Math.round(win.dur / (items.length + 2))));
     const entF = Math.min(10, Math.max(4, Math.round(win.dur * 0.1)));
 

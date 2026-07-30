@@ -12,7 +12,7 @@ llm:
   providers:
     ollama:
       enabled: true
-      priority: 100
+      priority: 60
       timeout_s: 180
 
     # OpenRouter — free-tier models exist (IDs ending in ":free"; the free
@@ -33,9 +33,9 @@ llm:
     # Google Gemini — free API tier (check https://ai.google.dev/pricing for
     # current limits/models).
     gemini:
-      enabled: false
-      priority: 60
-      model: "gemini-2.0-flash"
+      enabled: true
+      priority: 100
+      model: "gemini-flash-latest"
       api_key: ${GEMINI_API_KEY}
 
 tts:

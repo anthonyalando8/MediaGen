@@ -1,0 +1,275 @@
+{
+  "video_id": "all-representations-demo",
+  "schema": "scene/2.0",
+  "theme": "tech_blue",
+  "layout": "left",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "palette": {
+    "accent": "#4a7fe0",
+    "spike": "#e2a63c",
+    "bg": "#0a0f1a",
+    "fg": "#f4ece0"
+  },
+  "brand": "AQI",
+  "assets": [],
+  "beats": [
+    {
+      "id": "b01_word_caption",
+      "archetype": "text_over_dimmed",
+      "text_intent": "caption",
+      "keyword": "The Threat",
+      "body": "The threat is not tomorrow it is already here",
+      "duration_ms": 4000,
+      "word_times": [
+        {"text": "The", "start_s": 0.2, "end_s": 0.4},
+        {"text": "threat", "start_s": 0.4, "end_s": 0.8},
+        {"text": "is", "start_s": 0.8, "end_s": 1.0},
+        {"text": "not", "start_s": 1.0, "end_s": 1.3},
+        {"text": "tomorrow", "start_s": 1.3, "end_s": 1.9},
+        {"text": "it", "start_s": 1.9, "end_s": 2.1},
+        {"text": "is", "start_s": 2.1, "end_s": 2.3},
+        {"text": "already", "start_s": 2.3, "end_s": 2.9},
+        {"text": "here", "start_s": 2.9, "end_s": 3.4}
+      ],
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "The threat is not tomorrow it is already here", "reveal": "slide", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b02_hero_title",
+      "archetype": "title_card",
+      "text_intent": "title",
+      "keyword": "The Quantum Threat",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "The Quantum Threat", "reveal": "fade", "size": "hero", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b03_pull_quote",
+      "archetype": "quote_card",
+      "text_intent": "quote",
+      "body": "Security that expires is not security",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Security that expires is not security", "attribution": "AQI Working Group", "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b04_stat_figure",
+      "archetype": "stat_callout",
+      "text_intent": "stat",
+      "keyword": "600M+",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "600M+", "size": "hero", "anchor_y": 0.42, "reveal": "fade", "in": 0, "out": 4000},
+        {"role": "text", "text": "subscribers on quantum-vulnerable encryption", "size": "normal", "anchor_y": 0.62, "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b05_kinetic_lines",
+      "archetype": "kinetic_type",
+      "text_intent": "emphasis",
+      "keyword": "Now",
+      "body": "Not someday. Now.",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Not someday. Now.", "reveal": "kinetic", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b06_numbered_list",
+      "archetype": "list_card",
+      "text_intent": "list",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Four actions ministries can take now", "reveal": "slide", "in": 0, "out": 5000,
+          "items": [
+            {"text": "Inventory every cryptographic dependency"},
+            {"text": "Join the multi-country delegation"},
+            {"text": "Fund domestic research capacity"},
+            {"text": "Adopt post-quantum standards early"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b07_definition_card",
+      "archetype": "definition_card",
+      "text_intent": "definition",
+      "keyword": "Harvest-now, decrypt-later",
+      "body": "Capturing encrypted traffic today to decrypt once quantum hardware matures.",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Capturing encrypted traffic today to decrypt once quantum hardware matures.", "term": "Harvest-now, decrypt-later", "reveal": "fade", "in": 0, "out": 5000}
+      ]
+    },
+    {
+      "id": "b08_chat_bubbles",
+      "archetype": "dialogue_card",
+      "text_intent": "dialogue",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "A short exchange", "reveal": "slide", "in": 0, "out": 5000,
+          "items": [
+            {"speaker": "Ministry", "text": "Is this really near-term?"},
+            {"speaker": "AQI", "text": "Yes — the risk is being logged today."},
+            {"speaker": "Ministry", "text": "Then what do we do first?"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b09_comparison_labels",
+      "archetype": "comparison",
+      "text_intent": "comparison",
+      "keyword": "Classical | Post-Quantum",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "slot": "top", "source": {}, "fit": "cover", "in": 0, "out": null},
+        {"role": "foreground", "slot": "bottom", "source": {}, "fit": "cover", "in": 0, "out": null},
+        {"role": "shape", "shape": "divider", "in": 0, "out": null},
+        {"role": "text", "text": "Classical | Post-Quantum",
+          "items": [{"label": "Classical", "text": "Classical"}, {"label": "Post-Quantum", "text": "Post-Quantum"}],
+          "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b10_accent_headline",
+      "archetype": "title_card",
+      "text_intent": "title",
+      "keyword": "Positioning Africa in the Quantum Age",
+      "accent_span": "Quantum Age",
+      "duration_ms": 4500,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Positioning Africa in the Quantum Age", "reveal": "fade", "size": "hero", "in": 0, "out": 4500}
+      ]
+    },
+    {
+      "id": "b11_editorial_lede",
+      "archetype": "title_card",
+      "text_intent": "title",
+      "hud_tag": "About the Institute",
+      "kicker": "About the Institute",
+      "keyword": "A convening body for the quantum transition",
+      "body": "Working at the intersection of quantum technology, digital infrastructure and African policy.",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "A convening body for the quantum transition", "reveal": "fade", "in": 0, "out": 5000}
+      ]
+    },
+    {
+      "id": "b12_stat_band",
+      "archetype": "stat_band",
+      "text_intent": "stat",
+      "body": "The gap, in three figures",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "The gap, in three figures", "reveal": "fade", "in": 0, "out": 5000,
+          "items": [
+            {"label": "600M+", "text": "subscribers exposed to vulnerable encryption"},
+            {"label": "5-7 yrs", "text": "until current standards break"},
+            {"label": "0", "text": "structured national programmes"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b13_anaphora_stack",
+      "archetype": "anaphora_stack",
+      "text_intent": "emphasis",
+      "keyword": "Why",
+      "duration_ms": 4500,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Why quantum. Why Africa. Why now.", "reveal": "kinetic", "in": 0, "out": 4500,
+          "items": [
+            {"text": "Why quantum."},
+            {"text": "Why Africa."},
+            {"text": "Why now."}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b14_index_entry",
+      "archetype": "case_study",
+      "text_intent": "timeline",
+      "duration_ms": 5000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "scrim", "shape": "rect", "opacity": 0.45, "in": 0, "out": null},
+        {"role": "text", "text": "Two cases", "reveal": "fade", "in": 0, "out": 5000,
+          "items": [
+            {"label": "The Threat", "text": "Current encryption will be broken"},
+            {"label": "The Exposure", "text": "Africa is disproportionately at risk"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b15_meta_chips",
+      "archetype": "meta_facts",
+      "text_intent": "meta",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "in": 0, "out": null},
+        {"role": "text", "text": "Event facts", "reveal": "fade", "in": 0, "out": 4000,
+          "items": [
+            {"text": "UK Africa Quantum AI Convening · 5 Nov 2026"},
+            {"text": "Multi-Country Delegation"},
+            {"text": "London · Invite-Only"}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b16_lower_third_a",
+      "archetype": "lower_third",
+      "text_intent": "lower_third",
+      "keyword": "Dr. A. Okafor — AQI",
+      "body": "Speaking on national quantum readiness.",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "fit": "cover", "in": 0, "out": null},
+        {"role": "text", "text": "Dr. A. Okafor — AQI", "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b17_lower_third_b",
+      "archetype": "lower_third",
+      "text_intent": "lower_third",
+      "keyword": "Prof. N. Mensah — Policy Lead",
+      "body": "On coordinating a regional response.",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "fit": "cover", "in": 0, "out": null},
+        {"role": "text", "text": "Prof. N. Mensah — Policy Lead", "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    },
+    {
+      "id": "b18_image_kicker",
+      "archetype": "lower_third",
+      "text_intent": "lower_third",
+      "keyword": "Research capacity at the centre of the transition",
+      "duration_ms": 4000,
+      "layers": [
+        {"role": "background", "source": {}, "fit": "cover", "in": 0, "out": null},
+        {"role": "text", "text": "Research capacity at the centre of the transition", "reveal": "fade", "in": 0, "out": 4000}
+      ]
+    }
+  ]
+}

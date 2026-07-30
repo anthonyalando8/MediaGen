@@ -138,6 +138,26 @@ export function TimelinePlaceholder() {
   }, [store, playing]);
 
   // ── Scroll-to-playhead ─────────────────────────────────────────────────
+  // `el.scrollTo({ behavior: "smooth" })` fires native `scroll` events of its
+  // own as it animates. Without this flag, `handleScroll` can't tell that
+  // apart from a real user scroll and immediately calls setFollowPlayhead
+  // (false), which cancels following on the very next playhead update — the
+  // timeline would auto-scroll once and then stop tracking during playback.
+  // The timeout is a fallback clear (smooth-scroll animations run well under
+  // this) in case a `scroll` event is ever missed.
+  const programmaticScrollRef = useRef(false);
+  const programmaticScrollTimeoutRef = useRef<number | undefined>(undefined);
+
+  function beginProgrammaticScroll() {
+    programmaticScrollRef.current = true;
+    if (programmaticScrollTimeoutRef.current !== undefined) {
+      window.clearTimeout(programmaticScrollTimeoutRef.current);
+    }
+    programmaticScrollTimeoutRef.current = window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+    }, 600);
+  }
+
   useEffect(() => {
     if (!followPlayhead) return;
     const el = scrollContainerRef.current;
@@ -146,6 +166,7 @@ export function TimelinePlaceholder() {
     const { scrollLeft, clientWidth } = el;
     const margin = clientWidth * 0.2;
     if (x < scrollLeft + margin || x > scrollLeft + clientWidth - margin) {
+      beginProgrammaticScroll();
       el.scrollTo({ left: Math.max(0, x - clientWidth / 2), behavior: "smooth" });
     }
   }, [playhead, pixelsPerFrame, followPlayhead]);
@@ -154,13 +175,15 @@ export function TimelinePlaceholder() {
     const el = scrollContainerRef.current;
     if (!el) return;
     const x = (playhead as number) * pixelsPerFrame;
+    beginProgrammaticScroll();
     el.scrollTo({ left: Math.max(0, x - el.clientWidth / 2), behavior: "smooth" });
   }
 
   // Mirror vertical scroll onto the fixed header column so rows stay aligned.
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
-    setFollowPlayhead(false);
     if (headerColRef.current) headerColRef.current.scrollTop = e.currentTarget.scrollTop;
+    if (programmaticScrollRef.current) return;   // our own scrollTo, not the user
+    setFollowPlayhead(false);
   }
 
   return (
@@ -210,14 +233,26 @@ export function TimelinePlaceholder() {
         </div>
 
         <div className="transport__zoom">
-          <ZoomOut size={13} />
+          <button
+            className="btn btn-icon"
+            title="Zoom out"
+            onClick={() => setPixelsPerFrame((v) => Math.max(MIN_PX_PER_FRAME, v / 1.25))}
+          >
+            <ZoomOut size={13} />
+          </button>
           <input
             type="range" min={MIN_PX_PER_FRAME} max={MAX_PX_PER_FRAME} step={0.5}
             value={pixelsPerFrame}
             onChange={(e) => setPixelsPerFrame(Number(e.target.value))}
             title="Timeline zoom" aria-label="Timeline zoom"
           />
-          <ZoomIn size={13} />
+          <button
+            className="btn btn-icon"
+            title="Zoom in"
+            onClick={() => setPixelsPerFrame((v) => Math.min(MAX_PX_PER_FRAME, v * 1.25))}
+          >
+            <ZoomIn size={13} />
+          </button>
         </div>
       </div>
 

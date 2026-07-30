@@ -490,22 +490,46 @@ def _synthesize_lower_third_layers(contract: dict) -> list[dict]:
 # opted in. The editor routes the text layer to definition-card / numbered-list
 # / chat-bubbles via `text_intent` (see text_intent.py).
 
+# A frame can only hold so many rows before the editor must shrink type past
+# readability, and a row longer than ~one wrapped line reads as a paragraph,
+# not a list item. Bound the CONTRACT here so overflow can't be produced
+# upstream of the renderer; overflow items become a follow-on beat, not a
+# taller frame. (The editor still fits/clamps defensively — this just keeps it
+# in a regime where the result looks intentional.)
+MAX_LIST_ITEMS = 5
+MAX_ITEM_CHARS = 64
+MAX_DIALOGUE_TURNS = 6
+MAX_TURN_CHARS = 90
+
+
+def _clip(text: str, limit: int) -> str:
+    """Trim to `limit` chars on a word boundary, adding an ellipsis if cut."""
+    t = (text or "").strip()
+    if len(t) <= limit:
+        return t
+    cut = t[:limit].rsplit(" ", 1)[0].rstrip(" ,;:–—-")
+    return (cut or t[:limit].rstrip()) + "…"
+
+
 def _derive_list_items(body: str) -> list[dict]:
     """Best-effort split of a body line into list items: explicit separators
     (newlines, bullets, numbered prefixes, semicolons) first, else the whole
-    body as one item. A real `items` array emitted by the LLM upstream should
+    body as one item. Capped to MAX_LIST_ITEMS rows, each clipped to
+    MAX_ITEM_CHARS. A real `items` array emitted by the LLM upstream should
     supersede this heuristic."""
     text = (body or "").strip()
     if not text:
         return []
     parts = re.split(r"\s*(?:\n|•|·|;|\s\d+[\.\)]\s)\s*", text)
     parts = [p.strip(" -–—•·").strip() for p in parts if p and p.strip(" -–—•·").strip()]
-    return [{"text": p} for p in parts] if len(parts) >= 2 else [{"text": text}]
+    items = [{"text": p} for p in parts] if len(parts) >= 2 else [{"text": text}]
+    return [{"text": _clip(it["text"], MAX_ITEM_CHARS)} for it in items[:MAX_LIST_ITEMS]]
 
 
 def _derive_dialogue(body: str) -> list[dict]:
     """Best-effort parse of \"Speaker: line\" turns from a body; falls back to a
-    single un-attributed turn. Supersede with a real `items` array upstream."""
+    single un-attributed turn. Capped to MAX_DIALOGUE_TURNS turns, each clipped
+    to MAX_TURN_CHARS. Supersede with a real `items` array upstream."""
     text = (body or "").strip()
     if not text:
         return []
@@ -516,7 +540,8 @@ def _derive_dialogue(body: str) -> list[dict]:
             continue
         m = re.match(r"^([A-Za-z][\w .'-]{0,24}):\s*(.+)$", line)
         turns.append({"speaker": m.group(1).strip(), "text": m.group(2).strip()} if m else {"speaker": "", "text": line})
-    return turns or [{"speaker": "", "text": text}]
+    turns = turns or [{"speaker": "", "text": text}]
+    return [{**t, "text": _clip(t["text"], MAX_TURN_CHARS)} for t in turns[:MAX_DIALOGUE_TURNS]]
 
 
 _STAT_LABEL_RE = re.compile(
