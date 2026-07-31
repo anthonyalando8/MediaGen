@@ -1,0 +1,323 @@
+Write a RANKED COUNTDOWN (listicle) vertical video script.
+
+TOPIC: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 5 words, includes the count (e.g. '5 Habits Killing Focus')",
+  "thumbnail": "2-4 word emotionally charged phrase",
+  "style": "contrarian | builder | intense | cinematic | calm | analytical | humorous",
+
+  "global": {{
+    "theme":        "dark_kinetic | luxury_minimal | tech_hud | cinematic_grain | documentary_gritty | clean_modern | warm_amber | editorial_white | tech_blue | cyber_noir",
+    "music_mood":   "tense | cinematic | ambient | dark | aggressive | suspense | minimal | emotional | playful | upbeat",
+    "voice_style":  "calm_intense | storyteller | aggressive | documentary | dramatic | analytical | comedic",
+    "camera_style": "static | dynamic | handheld",
+    "subject":      "1-3 word concrete photographable noun for the topic's literal on-screen world (e.g. 'laptop code', 'gym weights', 'kitchen knife'). Anchors every visual_query."
+  }},
+
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook | insight | tension | truth | flip | climax | payoff | cta",
+      "keyword":          "2-4 WORD PHRASE — on item beats it MUST start with the rank (see RANK KEYWORDS)",
+      "text":             "spoken sentence, 12-24 words, with ONE *emphasis word* per sentence",
+      "items":            "OPTIONAL array — see STRUCTURED BEATS. Omit on most beats.",
+      "energy":           "high | mid | low",
+      "emotion":          "urgent | tense | hopeful | melancholic | angry | cold | confident | anxious | serious | playful | amused | surprised",
+      "pace":             "slow | mid | fast | explosive",
+      "visual_intent":    "confrontational | mysterious | clean | chaotic | cinematic | minimal | aggressive | documentary | absurd | quirky",
+      "camera":           "static | push_in | pull_out | handheld | snap_zoom | micro_shake | tilt_up",
+      "transition":       "cut | slam_cut | blur_wipe | flash | fade | dip_black | whip_pan",
+      "background":       "solid | gradient | noise | grid | glow | lines | abstract",
+      "layout":           "left | center | right | full",
+      "visual_query":     "2-4 word LITERAL image search — concrete same-domain noun. No mood words. See VISUAL QUERY rules.",
+      "intensity":        0.55,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURE — this is what makes it a countdown, not an explainer
+──────────────────────────────────────────────────────────────────────
+Exactly this spine, in this order:
+
+  1  beat_01        type "hook"     — name the list and the stake. Do NOT reveal any item.
+  2  N item beats   type "insight"  — ONE item per beat, counting DOWN (#5 → #1)
+  3  the #1 beat    type "climax"   — the last and strongest item IS the climax beat
+  4  one beat       type "payoff"   — the thread connecting all of them
+  5  final beat     type "cta"      — a sharp question or challenge
+
+N is 5 by default. Use 3 for a topic with only three real answers, or 7 when the
+topic genuinely has seven distinct ones. Never pad the list to hit a number — a
+weak #4 costs more retention than a shorter list.
+
+⚠ Count DOWN. #1 is last, and it must be the item a viewer would actually stay for.
+⚠ Every item must be genuinely DISTINCT. Two items that are the same idea reworded
+  is the single most common way this format fails.
+⚠ One item beat may be typed "tension" or "truth" instead of "insight" if that item
+  is a warning or a counter-intuitive claim. At most two such substitutions.
+
+──────────────────────────────────────────────────────────────────────
+RANK KEYWORDS — REQUIRED on every item beat
+──────────────────────────────────────────────────────────────────────
+Item beats' `keyword` must begin with the rank, then the item in 2-3 words:
+
+  "#5 SKIP BREAKFAST" / "#4 PHONE IN BED" / "#1 NO HARD DEADLINE"
+
+Uppercase. No trailing punctuation. The rank prefix is not decoration — the
+renderer reads number-led keywords as the hero figure of the frame, so an item
+beat without it loses its whole visual treatment.
+
+hook / payoff / cta keywords carry NO rank prefix:
+  Good: "FIVE REAL REASONS" / "IT'S ALL ONE THING" / "WHICH ONE IS YOURS"
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURED BEATS — `items` (use on 0-2 beats, never on an item beat)
+──────────────────────────────────────────────────────────────────────
+An item beat is already one idea on screen; do NOT give it an `items` array.
+Use `items` only on the payoff, or on a hook that previews the list:
+
+- A PREVIEW on the hook — 3-4 entries, each ≤ 4 words, the items unnamed enough
+  to stay a tease:
+    "items": [{{"text": "One you know"}}, {{"text": "One you deny"}}, {{"text": "One nobody says"}}]
+
+- FIGURES on the payoff — only with real numbers from the topic, never invented:
+    "items": [{{"label": "4 of 5", "text": "are habits, not talent"}}]
+
+──────────────────────────────────────────────────────────────────────
+STRICT RULES
+──────────────────────────────────────────────────────────────────────
+TEXT: every beat text 12-24 words. Total across all beats: 110-230.
+
+TEXT ON AN ITEM BEAT: state the item, then the consequence. Two short sentences
+is ideal. Do not restate the keyword verbatim — the keyword is already on screen.
+  Good keyword "#4 PHONE IN BED":
+    "It's not the *screen* — it's that your brain now files your bedroom under work."
+  Bad (restates the keyword):
+    "Number four is keeping your *phone* in bed at night."
+
+TONE: speak as someone who has an actual ranking and will defend it. Use "you".
+Be specific. Name real things.
+
+BANNED PHRASES: "here's the thing" / "the truth is" / "most people" / "in today's world"
+                "have you ever" / "let's talk about" / "follow for more"
+                "number one might surprise you" / "coming in at number"
+                "without further ado" / "let's dive in"
+
+HOOK: create the stake, not a table of contents. The viewer should want #1 immediately.
+
+ENDING: end with a challenge or sharp question. Not a follow CTA.
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT VARIETY — MANDATORY
+──────────────────────────────────────────────────────────────────────
+A countdown is the format most at risk of rendering as five identical frames.
+The words change; if nothing else does, it reads as one slide repeated. Across
+the script you MUST:
+   1. Use at least 3 different `camera` values
+   2. Use at least 2 different `pace` values
+   3. Use at least 2 different `layout` values
+   4. Use at least 2 different `background` values
+   5. Never repeat the same `camera` on 3 consecutive beats
+   6. Never repeat the same `layout` on 3 consecutive beats
+   7. Consecutive ITEM beats must differ in at least TWO of
+      camera / layout / background / pace
+Rewrite before outputting if any fail.
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT FIELD GUIDANCE
+──────────────────────────────────────────────────────────────────────
+- camera:        hook=push_in, #1/climax=snap_zoom, payoff=pull_out. Rotate static,
+                 handheld, tilt_up, micro_shake across the item beats.
+- transition:    cut between early items, whip_pan or slam_cut as the count tightens,
+                 dip_black before #1, fade on payoff.
+- background:    rotate across items — grid, solid, lines, gradient. Never the same
+                 background on two consecutive items.
+- layout:        alternate. left=editorial, center=calm, right=cinematic, full=impact.
+                 Put #1 on full.
+- emotion:       vary per item — what this specific item should make them feel.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL. Mood words ("dark solitude atmospheric") return generic
+landscape stock, because nature dominates the image pool — that's why a coding
+video ends up showing a mountain. Over-niche queries return zero results and fall
+back to a random photo. Both are failures.
+
+RULES (all mandatory):
+1. SAME-DOMAIN CONCRETE NOUN. Prefer THIS item's own concrete noun over reusing
+   the global `subject` — a countdown is a gift here, because each item names a
+   different literal thing (a phone, a calendar, a mirror, a receipt). Use it.
+   Fall back to `subject` + a new setting only when an item has no noun of its own.
+2. Then AT MOST 1-2 VISUAL modifiers: lighting, angle, setting — "night",
+   "close up", "macro", "overhead", "office", "screen glow".
+3. BANNED in queries — every feeling and abstraction word: "solitude", "struggle",
+   "journey", "atmospheric", "powerful", "freedom", "mind", "soul", "abstract",
+   "chaos", "alone".
+4. Use COMMON stock subjects. If the literal subject is rare, use the nearest
+   common photographable proxy.
+5. 2-4 words. Concrete + visual. No mood.
+
+⚠ Five item beats must produce FIVE DIFFERENT queries. Repeating the subject
+  phrase with a new adjective five times gives you one genre of stock photo for
+  the whole video, which reads as no visuals at all.
+
+Template:  [this item's own noun] + [setting or lighting]
+
+For a SLEEP topic (subject "bed dark room"):
+  Good: "phone screen bed night" / "alarm clock macro" / "coffee cup evening desk"
+        / "bedroom window blinds" / "notebook nightstand lamp"
+  Bad:  "bed dark room tired" / "bed dark room night" / "bed dark room sad"
+        ← same photo five times
+  Bad:  "exhaustion" / "mental fog" / "restless mind"  ← abstractions, returns nature
+
+──────────────────────────────────────────────────────────────────────
+INTENSITY — 0.0 to 1.0, REQUIRED on every beat
+──────────────────────────────────────────────────────────────────────
+A countdown RISES. Each item should sit at or above the one before it.
+
+  hook:        0.85 - 0.92
+  item #5:     0.50 - 0.60      ← the breath beat lives here
+  item #4:     0.60 - 0.70
+  item #3:     0.68 - 0.78
+  item #2:     0.75 - 0.85
+  item #1:     0.95 - 1.00      (typed "climax")
+  payoff:      0.70 - 0.82
+  cta:         0.80 - 0.88
+
+⚠ At least one beat ≤ 0.55 (normally item #5). Without the low point, #1 doesn't land.
+⚠ Item intensities must be non-decreasing from #5 up to #1.
+
+──────────────────────────────────────────────────────────────────────
+PATTERN INTERRUPT — optional, "" on most beats
+──────────────────────────────────────────────────────────────────────
+Only when intensity ≥ 0.80, never on two consecutive beats, max 3 per script.
+
+  ""        → none (default)
+  "slam"    → keyword scale-punch (hook, #1)
+  "chroma"  → RGB split flash (#1)
+  "iris"    → vignette tightens (a warning item)
+  "tilt"    → 1.5° rotation jitter
+  "flash"   → over-exposed frame (payoff)
+  "freeze"  → motion pauses mid-beat (the beat before #1 — use to set up the reveal)
+  "invert"  → 80ms colour invert (once per video max)
+
+──────────────────────────────────────────────────────────────────────
+COMPOSITION — optional, "" usually. At most ONCE per script.
+──────────────────────────────────────────────────────────────────────
+  ""         → standard (use on every beat unless calling)
+  "crop-low" → text sits at bottom 30%
+  "tilt"     → whole frame rotates -2°
+  "corner"   → text bottom-right, max negative space
+  "sparse"   → keyword takes 35% width, rest empty
+
+Use on a mid-list item (#4 or #3), never on the hook or #1.
+
+──────────────────────────────────────────────────────────────────────
+EMPHASIS WORDS — REQUIRED, exactly one per sentence
+──────────────────────────────────────────────────────────────────────
+Wrap ONE word or short phrase per sentence in *asterisks* — the word the
+audience lands on. 1-3 words. Never more than one per sentence, never zero.
+
+  "It's not the *screen* — it's what your brain files next to it."
+  "Every skipped meal is a decision you'll pay for at *4pm*."
+
+──────────────────────────────────────────────────────────────────────
+EXAMPLE (8 beats — subject "bed dark room", top 5)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "5 Habits Wrecking Sleep",
+  "thumbnail": "You're Doing Four",
+  "style": "analytical",
+  "global": {{
+    "theme":        "clean_modern",
+    "music_mood":   "minimal",
+    "voice_style":  "storyteller",
+    "camera_style": "static",
+    "subject":      "bed dark room"
+  }},
+  "beats": [
+    {{
+      "id":"beat_01","type":"hook","keyword":"FIVE REAL REASONS",
+      "text":"Five ordinary habits cost most people an hour of deep sleep a night. You are probably running *four*.",
+      "energy":"high","emotion":"urgent","pace":"fast","visual_intent":"confrontational",
+      "camera":"push_in","transition":"slam_cut","background":"glow","layout":"center",
+      "visual_query":"bedroom dark window night","intensity":0.90,"pattern_interrupt":"slam","composition":""
+    }},
+    {{
+      "id":"beat_02","type":"insight","keyword":"#5 EVENING COFFEE",
+      "text":"Caffeine has a six-hour half-life. Your 4pm cup is still *working* at ten.",
+      "energy":"low","emotion":"serious","pace":"slow","visual_intent":"documentary",
+      "camera":"static","transition":"cut","background":"solid","layout":"left",
+      "visual_query":"coffee cup desk afternoon","intensity":0.55,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_03","type":"insight","keyword":"#4 PHONE IN BED",
+      "text":"It is not the screen light. It is that your brain now files your bedroom under *work*.",
+      "energy":"mid","emotion":"cold","pace":"mid","visual_intent":"clean",
+      "camera":"tilt_up","transition":"cut","background":"grid","layout":"right",
+      "visual_query":"phone screen bed night","intensity":0.66,"pattern_interrupt":"","composition":"sparse"
+    }},
+    {{
+      "id":"beat_04","type":"tension","keyword":"#3 WEEKEND CATCHUP",
+      "text":"Sleeping in on Saturday resets your clock two time zones west. Monday arrives as *jet lag*.",
+      "energy":"mid","emotion":"tense","pace":"mid","visual_intent":"documentary",
+      "camera":"handheld","transition":"whip_pan","background":"lines","layout":"left",
+      "visual_query":"alarm clock bedside macro","intensity":0.74,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_05","type":"insight","keyword":"#2 WARM BEDROOM",
+      "text":"Your core temperature has to fall to trigger sleep. A warm room *blocks* the signal entirely.",
+      "energy":"mid","emotion":"confident","pace":"mid","visual_intent":"minimal",
+      "camera":"static","transition":"cut","background":"gradient","layout":"center",
+      "visual_query":"thermostat wall close up","intensity":0.81,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_06","type":"climax","keyword":"#1 NO FIXED WAKE TIME",
+      "text":"Everything above is downstream of this. One inconsistent alarm undoes *every* other fix you make.",
+      "energy":"high","emotion":"urgent","pace":"explosive","visual_intent":"cinematic",
+      "camera":"snap_zoom","transition":"dip_black","background":"abstract","layout":"full",
+      "visual_query":"alarm clock morning light","intensity":0.98,"pattern_interrupt":"chroma","composition":""
+    }},
+    {{
+      "id":"beat_07","type":"payoff","keyword":"IT'S ALL ONE THING",
+      "text":"Four of these five are timing problems, not effort problems. That is *good* news for you.",
+      "energy":"mid","emotion":"hopeful","pace":"mid","visual_intent":"clean",
+      "camera":"pull_out","transition":"fade","background":"solid","layout":"center",
+      "visual_query":"notebook nightstand lamp","intensity":0.76,"pattern_interrupt":"flash","composition":""
+    }},
+    {{
+      "id":"beat_08","type":"cta","keyword":"WHICH ONE IS YOURS",
+      "text":"Pick the one you already knew was on this list. What is *stopping* you from fixing it tonight?",
+      "energy":"mid","emotion":"serious","pace":"slow","visual_intent":"minimal",
+      "camera":"static","transition":"dip_black","background":"solid","layout":"center",
+      "visual_query":"bedroom door dark hallway","intensity":0.84,"pattern_interrupt":"","composition":""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST before outputting (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1.  Spine correct: hook → item beats counting DOWN → payoff → cta.
+2.  #1 is last, is typed "climax", and is the strongest item.
+3.  Every item beat's keyword starts with "#<rank>" and no other keyword does.
+4.  Items are genuinely distinct ideas — no two are the same point reworded.
+5.  Word count: each beat 12-24, total 110-230.
+6.  Every text field has EXACTLY one *emphasis word* per sentence.
+7.  No item text restates its own keyword.
+8.  Item intensities non-decreasing #5 → #1; #1 ≥ 0.95; one beat ≤ 0.55.
+9.  ≥3 cameras, ≥2 paces, ≥2 layouts, ≥2 backgrounds; no 3-in-a-row on camera or layout.
+10. Consecutive item beats differ in ≥2 of camera / layout / background / pace.
+11. Every visual_query is a concrete same-domain noun, ≤4 words, zero mood words.
+12. All item visual_queries are DIFFERENT nouns, not the subject phrase repeated.
+13. pattern_interrupt only where intensity ≥ 0.80; max 3; never consecutive.
+14. At most ONE non-empty composition, on a mid-list item.
+15. No banned phrase anywhere.
+
+Output the JSON only.

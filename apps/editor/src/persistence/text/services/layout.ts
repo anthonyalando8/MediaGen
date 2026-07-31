@@ -221,3 +221,57 @@ export function stackRows(
     return placed;
   });
 }
+
+
+// ── P5 · Multi-layer stacking ───────────────────────────────────────────────
+// A beat can carry SEVERAL text layers (poster_card's headline+subtext,
+// stat_callout, title_card with a body, hand-authored scenes, or anything the
+// user adds in the editor). Representations that position each layer
+// independently — hero-title and pull-quote both do — compute a box of up to
+// `MAX_BLOCK_H` (62% of frame height) per layer and centre the text inside it.
+//
+// Two such boxes ALWAYS overlap, even with different `anchor_y` values: on a
+// 1920-high frame each box is ~1190px, so anchors of 0.24 and 0.46 produce
+// boxes that overlap by most of their height, and the vertically-centred text
+// inside them collides. Checking whether the anchors are equal is therefore
+// NOT sufficient — the only safe rule is to stack whenever a representation
+// has more than one layer to place.
+//
+// `anchor_y` is still honoured, but as a hint for where the WHOLE stack sits
+// (see `shiftStackToward`) rather than as an independent per-layer centre.
+
+/** True when two or more layers resolve to the same vertical anchor.
+ * Retained for representations that want the narrower test; hero-title and
+ * pull-quote deliberately stack on layer COUNT instead — see above. */
+export function anchorsCollide(anchors: (number | undefined)[]): boolean {
+  if (anchors.length < 2) return false;
+  const effective = anchors.map((a) => a ?? 0.5);
+  return new Set(effective).size < effective.length;
+}
+
+/** The vertical centre (in px) the caller's layers collectively ask for, or
+ * null when no layer carries an explicit `anchor_y`. Uses the midpoint of the
+ * anchor range so a headline-high/subtext-low pair keeps its overall position
+ * instead of snapping to the middle of the frame. */
+export function anchorCenterPx(anchors: (number | undefined)[], H: number): number | null {
+  const explicit = anchors.filter((a): a is number => typeof a === "number");
+  if (!explicit.length) return null;
+  return ((Math.min(...explicit) + Math.max(...explicit)) / 2) * H;
+}
+
+/** Translate a measured stack so its centre lands on `targetCenterY`, clamped
+ * so the stack never leaves `safe`. Pass null to leave it centred. */
+export function shiftStackToward<T extends { box: FitBox }>(
+  stack: T[], safe: FitBox, targetCenterY: number | null,
+): T[] {
+  if (!stack.length || targetCenterY === null) return stack;
+  const top = stack[0].box.y;
+  const last = stack[stack.length - 1].box;
+  const bottom = last.y + last.h;
+  const height = bottom - top;
+  let dy = Math.round(targetCenterY - (top + height / 2));
+  // Never push the stack out of the safe box.
+  dy = Math.max(safe.y - top, Math.min(dy, safe.y + safe.h - bottom));
+  if (!dy) return stack;
+  return stack.map((s) => ({ ...s, box: { ...s.box, y: s.box.y + dy } }));
+}
