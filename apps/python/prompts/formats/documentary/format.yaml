@@ -1,0 +1,48 @@
+id: documentary
+label: "Documentary"
+description: "A narrated non-fiction piece — cold open, context, evidence, a turn, resolution. Measured pacing, documentary narration, B-roll-led visuals. Deliberately not a lecture: no numbered steps, no HUD chips, no kinetic hype. Landscape, sectioned like explainer_5min."
+
+default_resolve_visuals: true
+
+# Same order of magnitude as explainer_5min (this reuses its section
+# mechanism) but a little tighter — documentary beats run longer per
+# thought, so fewer of them cover the same ground.
+beats: { min: 16, max: 30 }
+words_per_beat: { min: 14, max: 32 }
+total_words: { min: 420, max: 700 }
+require_emphasis: false
+
+variety:
+  min_cameras: 3
+  min_paces: 2
+  min_layouts: 2
+  max_consecutive_camera: 3
+  # scene/3.0 composer pass — opts in so stat_callout/stat_band/lower_third/
+  # case_study/quote_card actually get picked (see llm.py's
+  # _ARCHETYPE_TYPE_AFFINITY) instead of every beat staying text_over_dimmed.
+  min_archetypes: 3
+  max_consecutive_archetype: 3
+
+# Genre profile — the feel (see formats.py VoiceProfile/VisualProfile).
+# documentary voice (tts.py's bm_daniel @ 0.98 — defined since the narrator-
+# variation table was built, unused until this format). No HUD chip (that's
+# the composer's internal rhetorical-type label, not documentary framing).
+# Low camera energy + flat intensity: this genre holds a shot and lets the
+# narration carry weight instead of cutting/zooming to manufacture urgency.
+# No pattern interrupts — a glitch/flash effect reads as TikTok, not doc.
+voice:
+  style: documentary
+
+visuals:
+  hud: none
+  camera_energy: low
+  intensity_curve: flat
+  looseness: 0.15
+  interrupt_max: 0
+  peak_budget: 1
+
+# B-roll-led: real footage over static photos where available, landscape
+# for YouTube/web delivery — same orientation as explainer_5min.
+media:
+  mode: hybrid
+  orientation: landscape

@@ -1,36 +1,44 @@
-id: listicle_top5
-label: "Listicle (Top 5, vertical)"
-description: "A ranked countdown — hook, five numbered item beats, payoff, closing question. The simplest non-explainer format: it maps onto the existing beat-type union with no new vocabulary, and its number-led keywords are exactly what stat_callout / _derive_stat_items were built for (see scene_export.py). Portrait."
+id: shortform_tiktok
+label: "Short-form (TikTok / Reels)"
+description: "High-retention creator opinion. Strong hook, 4-8 punchy beats, kinetic cinematics. The original MediaGen format."
 
 default_resolve_visuals: true
 
-# One beat per item is the whole point of the format — 5 items + hook + payoff
-# + cta = 8 typical. The range allows a top-3 through a top-7 without a second
-# pack, and llm.py's _flatten_sections is a no-op here (flat beat list).
-beats: { min: 7, max: 13 }
-words_per_beat: { min: 12, max: 24 }
-total_words: { min: 110, max: 230 }
-require_emphasis: true
+beats: { min: 4, max: 8 }
+# 15-30 mirrors the validator's historical runtime behaviour (the old error
+# message said 15-25, but the check allowed up to 30). Tighten to 25 here if
+# you want the message and the gate to finally agree.
+words_per_beat: { min: 15, max: 30 }
+total_words: { max: 200 }
+require_emphasis: false
 
 variety:
   min_cameras: 3
   min_paces: 2
   min_layouts: 2
+  min_backgrounds: 2
   max_consecutive_camera: 2
-  # A countdown is structurally repetitive — the same beat `type` (insight)
-  # five times in a row is CORRECT here, so the archetype guard has to do the
-  # anti-monotony work instead of the type guard. Tighter than explainer_5min
-  # on purpose.
-  min_archetypes: 4
+  max_consecutive_layout: 2
+  # scene/3.0 composer pass (llm.py assign_composition): opts this format
+  # into archetype diversification — at least 3 distinct archetypes across
+  # the script (text_over_dimmed + 2 more), no archetype more than 2 beats
+  # in a row. listicle/calm_narrative don't set these — they stay 100%
+  # text_over_dimmed until they opt in too.
+  min_archetypes: 3
   max_consecutive_archetype: 2
 
+# Genre profile — the feel, not just the words (see formats.py VoiceProfile /
+# VisualProfile). aggressive voice, exaggerated intensity swings, and more
+# handmade jitter than the default single mutator (kinetic HUD stays on).
 voice:
-  style: storyteller
+  style: aggressive
 
 visuals:
-  intensity_curve: rising   # a countdown builds toward #1
-  looseness: 0.2
+  intensity_curve: spiky
+  looseness: 0.4
 
+# hybrid, motion bg — fast/explosive-paced beats pull a real video clip
+# instead of a static photo; everything else stays image-led.
 media:
-  mode: image
-  orientation: portrait
+  mode: hybrid
+  mood: [dynamic, energetic]

@@ -1,0 +1,50 @@
+id: howto_steps
+label: "How-to (numbered steps, landscape)"
+description: "A procedural tutorial — hook, what you need, N numbered steps in ASCENDING order, the common mistake, the result. The second tier-0 format: no new beat types, no code change beyond the ordinal-keyword predicate. Deliberately calm — flat intensity, almost no pattern interrupts — because a viewer following along cannot be shocked every eight seconds. Landscape."
+
+default_resolve_visuals: true
+
+# hook + needs + 4-8 steps + mistake + result + cta.
+beats: { min: 8, max: 16 }
+words_per_beat: { min: 14, max: 28 }
+total_words: { min: 160, max: 380 }
+require_emphasis: true
+
+variety:
+  min_cameras: 3
+  min_paces: 2
+  min_layouts: 2
+  min_backgrounds: 2
+  max_consecutive_camera: 2
+
+  # CRITICAL for this format. A tutorial's step beats are ALL legitimately
+  # typed `insight` — that's what they are. llm.py's enforce_type_variety
+  # defaults to breaking any run longer than 3, which would relabel step 4
+  # onward as truth/tension/flip and hand them the wrong archetype affinity
+  # and text_intent pool. Raise the limit past the longest possible step run
+  # so the composer stops "correcting" the format's actual shape.
+  max_consecutive_type: 12
+
+  # Step beats repeat their type by design, so — as with listicle_top5 — the
+  # anti-monotony work falls entirely on the archetype guard.
+  min_archetypes: 4
+  max_consecutive_archetype: 2
+
+voice:
+  style: analytical
+
+visuals:
+  intensity_curve: flat      # a procedure has no climax; it has a result
+  looseness: 0.1
+
+  # Someone following instructions is doing something with their hands. An RGB
+  # split or a colour invert mid-step is actively hostile — they lose their
+  # place. One interrupt for the whole video, at most, and only on a genuinely
+  # peak beat.
+  interrupt_threshold: 0.88
+  interrupt_max: 1
+  peak_budget: 2
+
+media:
+  mode: image
+  orientation: landscape

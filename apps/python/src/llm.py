@@ -114,6 +114,27 @@ _TEXTLESS_ARCHETYPES = {
 _CONTENT_CARRYING_TYPES = {"insight", "truth"}
 
 
+# A rank-prefixed keyword ("#4 PHONE IN BED") is the strongest load-bearing-text
+# signal in the schema: on a countdown the rank IS the information, and a
+# textless archetype deletes it — the viewer loses their place in the list. Type
+# alone can't detect this, because a countdown legitimately types item beats
+# `tension` (a warning item) or `climax` (the #1), both of which are structural.
+_RANK_KEYWORD_RE = re.compile(r"^#\s*\d")
+
+
+def _keyword_is_load_bearing(beat: dict) -> bool:
+    """True when the beat's KEYWORD (not its prose) carries the point, so the
+    frame must show text whatever the beat's rhetorical type."""
+    return bool(_RANK_KEYWORD_RE.match((beat.get("keyword") or "").strip()))
+
+
+def _is_content_carrying(beat: dict) -> bool:
+    """Whether this beat's on-screen text is essential. `_CONTENT_CARRYING_TYPES`
+    is the rhetorical case (insight/truth — the prose makes the point);
+    `_keyword_is_load_bearing` is the structural one (a ranked item)."""
+    return beat.get("type") in _CONTENT_CARRYING_TYPES or _keyword_is_load_bearing(beat)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # scene/3.0 composer pass — archetype assignment ("cut-list")
 # ─────────────────────────────────────────────────────────────────────────────
@@ -321,8 +342,9 @@ def assign_composition(data: dict, profile) -> dict:
     validates against this value (`_validate_cinematic_variety` doesn't
     recognise it), so that's safe.
 
-    Budget is spent on structural beats (hook/tension/climax/flip/payoff/cta)
-    first, then on content-carrying beats (insight/truth) restricted to
+    Budget is spent on structural beats first, then on content-carrying ones
+    (see `_is_content_carrying` — insight/truth by type, plus any beat whose
+    KEYWORD is load-bearing, e.g. a ranked listicle item) restricted to
     text-bearing archetypes only — spending it the other way round would
     strip captions from exactly the beats whose caption IS the content.
     """
@@ -349,12 +371,12 @@ def assign_composition(data: dict, profile) -> dict:
 
     structural_idx = [
         i for i, b in enumerate(beats)
-        if _is_default(b) and b.get("type") not in _CONTENT_CARRYING_TYPES
+        if _is_default(b) and not _is_content_carrying(b)
         and _gated_candidates_for(b, content_safe=False)
     ]
     content_idx = [
         i for i, b in enumerate(beats)
-        if _is_default(b) and b.get("type") in _CONTENT_CARRYING_TYPES
+        if _is_default(b) and _is_content_carrying(b)
         and _gated_candidates_for(b, content_safe=True)
     ]
 

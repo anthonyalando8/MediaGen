@@ -17,6 +17,47 @@ CINEMATIC UPGRADE — what changed vs the previous version
    previous beat's camera exit for inter-beat motion carry.
 4. Transition variation based on scene type + energy delta.
 5. Caller-supplied values always override defaults (LLM wins).
+
+────────────────────────────────────────────────────────────────────
+WATCHABILITY PASS (see dropin/WATCHABILITY_FIX.md)
+────────────────────────────────────────────────────────────────────
+Five fixes, all in this file:
+
+  A. HUD OFF BY DEFAULT. `_beat_hud` used to stamp the composer's own
+     rhetorical enum on every frame ("// TRUTH", "// FLIP", "// INSIGHT").
+     That is internal vocabulary, not viewer information, and on a
+     non-explainer format it is actively wrong. The default is now
+     "none"; a format opts back in with `visuals: {hud: auto}`.
+
+  B. PATTERN INTERRUPTS NO LONGER STROBE. The old pass deduped the
+     interrupt TYPE against the previous one but never checked whether
+     the PREVIOUS BEAT had an interrupt at all — and it auto-assigned to
+     every beat over the intensity gate. Both prompts say "never two
+     consecutive"; nothing enforced it, so a rising-intensity script got
+     4-5 back-to-back chroma/invert/slam frames. Now: a minimum gap of
+     clean beats, a whole-video budget, and a hard once-per-video cap on
+     `invert` (which its own prompt documentation always claimed).
+
+  C. THE DECLARED BEAT TYPE WINS OVER POSITION. `_beat_scene` returned
+     "hook" for beat 0 and "cta" for the last beat BEFORE looking at
+     beat["type"], so every video ended on the CTA treatment (push_in,
+     fast, 0.85, "// ACTION") no matter what the script said. Position is
+     now the FALLBACK, consulted only when the type is missing/unknown.
+
+  D. INTENSITY 0.0 SURVIVES. `c.get("intensity") or _intensity_for(...)`
+     discarded a deliberate 0.0 because 0.0 is falsy — the one value a
+     "breath beat" might legitimately ask for. Uses the same isinstance
+     guard the contract construction already used.
+
+  E. PEAK-EFFECT BUDGET. A climax reliably drew slam_cut + chroma +
+     snap_zoom + intensity 1.00 at once, every video, deterministically.
+     `_budget_peak_effects` caps how many maximal choices may land on one
+     beat (default 2), demoting camera first and transition second.
+     Set `visuals: {peak_budget: 0}` in format.yaml to disable.
+
+  F. NO MORE 5000ms PLACEHOLDER. The no-audio path gave every beat a flat
+     5s regardless of how long its line takes to say. Estimated from word
+     count instead, so preview pacing is honest.
 """
 
 from visuals_dir.visuals_calc_word_width import calc_kw_font_size
@@ -32,20 +73,36 @@ _KNOWN_SCENES = {
 }
 
 def _beat_scene(beat: dict, i: int, total: int) -> str:
-    t = beat.get("type", "insight").lower()
+    """Which scene treatment this beat gets.
+
+    FIX C: the beat's DECLARED type wins. Position-based inference is the
+    fallback for beats whose type is absent or outside _KNOWN_SCENES — it used
+    to run first, which meant the last beat of every video was forced to "cta"
+    (and the first to "hook") regardless of the script. That was the
+    "every video is an argument that ends in an ask" assumption, in code.
+    """
+    t = (beat.get("type") or "").lower()
+    if t in _KNOWN_SCENES:
+        return t
     if i == 0:
         return "hook"
     if i == total - 1:
         return "cta"
-    if t in _KNOWN_SCENES:
-        return t
     if beat.get("energy", "") == "high" and i == total - 2:
         return "climax"
     return "insight"
 
 
-def _beat_hud(beat: dict, i: int, total: int, hud_mode: str = "auto") -> str:
-    if hud_mode == "none":
+def _beat_hud(beat: dict, i: int, total: int, hud_mode: str = "none") -> str:
+    """The little "// TAG" chip in the corner.
+
+    FIX A: default is now "none". These strings are the composer's internal
+    rhetorical labels — showing the viewer "// TRUTH" or "// FLIP" leaks the
+    machinery and is the fastest tell that a video was machine-generated. A
+    format that genuinely wants them (a tech_hud/documentary look) opts in with
+    `visuals: {hud: auto}` in its format.yaml.
+    """
+    if hud_mode != "auto":
         return ""  # falsy → scene-import.ts's `if (beat.hud_tag)` already skips rendering it
     t = beat.get("type", "insight").lower()
     mapping = {
@@ -215,6 +272,32 @@ def _exit_vector(camera: str) -> dict:
 
 
 # ───────────────────────────────────────────────────────────────────────────
+# DURATION FALLBACK
+# ───────────────────────────────────────────────────────────────────────────
+
+# Rough narration rate. Only used when real per-beat audio durations aren't
+# available (the visuals-only / preview path). 2.6 words-per-second is the
+# middle of the TTS range across voice styles.
+_WORDS_PER_SEC = 2.6
+_EST_MIN_MS = 1800
+_EST_MAX_MS = 14000
+
+
+def _estimate_duration_ms(beat: dict) -> int:
+    """FIX F: estimate from the line's own length instead of a flat 5000ms.
+
+    A 12-word listicle item and a 24-word one used to render for exactly the
+    same time, which makes preview pacing metronomic and easy to misread as a
+    scripting problem.
+    """
+    words = len((beat.get("text") or "").split())
+    if not words:
+        return 2500
+    est = round(words / _WORDS_PER_SEC * 1000)
+    return int(max(_EST_MIN_MS, min(_EST_MAX_MS, est)))
+
+
+# ───────────────────────────────────────────────────────────────────────────
 # INTENSITY CURVE
 # ───────────────────────────────────────────────────────────────────────────
 
@@ -263,21 +346,109 @@ _PI_BY_SCENE = {
     "cta":     "slam",
 }
 
-def _assign_interrupts(contracts: list) -> None:
+# FIX B. Both prompts already tell the model "never two consecutive beats with
+# interrupts" and "invert once per video max". Neither rule existed in code, and
+# the auto-assign pass below is what actually populates most beats — so the
+# rules were effectively fiction. They are enforced here now.
+_PI_MIN_GAP_BEATS = 1          # ≥1 clean beat between two interrupted beats
+_PI_MAX_PER_VIDEO = 3          # whole-video budget (author-supplied ones count)
+_PI_ONCE_ONLY = {"invert"}     # at most one per video, ever
+_PI_ALTERNATES = ("slam", "flash", "iris", "chroma")
+
+
+def _assign_interrupts(contracts: list, profile: VisualProfile | None = None) -> None:
+    """Distribute frame-level disruptions across the video.
+
+    Author-supplied values are always honoured — but they now COUNT toward the
+    budget, so an explicit script can't be padded past it by this pass.
+    """
+    profile = profile or VisualProfile()
+    threshold = profile.interrupt_threshold
+    budget = profile.interrupt_max
+    if budget < 0:
+        budget = _PI_MAX_PER_VIDEO
+
+    explicit = {i for i, c in enumerate(contracts) if c.get("pattern_interrupt")}
+    used = len(explicit)
+    once_used = {contracts[i]["pattern_interrupt"] for i in explicit} & _PI_ONCE_ONLY
+
     last_pi = None
+    last_idx = -(_PI_MIN_GAP_BEATS + 1)   # so beat 0 is eligible
+
     for i, c in enumerate(contracts):
-        if c.get("pattern_interrupt"):
+        if i in explicit:
             last_pi = c["pattern_interrupt"]
+            last_idx = i
             continue
-        if c.get("intensity", 0) < 0.80:
+        if used >= budget:
             continue
-        scene = c["scene"]
-        choice = _PI_BY_SCENE.get(scene, "slam")
-        if choice == last_pi:
-            alternates = ["slam", "flash", "iris", "chroma"]
-            choice = next((x for x in alternates if x != last_pi), choice)
+        if c.get("intensity", 0) < threshold:
+            continue
+        # ── the adjacency rule the old pass was missing entirely ──
+        if i - last_idx <= _PI_MIN_GAP_BEATS:
+            continue
+        if (i + 1) in explicit:
+            continue   # don't butt up against an author-supplied one either
+
+        choice = _PI_BY_SCENE.get(c["scene"], "slam")
+        if choice == last_pi or choice in once_used:
+            choice = next(
+                (x for x in _PI_ALTERNATES if x != last_pi and x not in once_used),
+                None,
+            )
+            if choice is None:
+                continue
+
         c["pattern_interrupt"] = choice
+        if choice in _PI_ONCE_ONLY:
+            once_used.add(choice)
+        used += 1
         last_pi = choice
+        last_idx = i
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# PEAK-EFFECT BUDGET
+# ───────────────────────────────────────────────────────────────────────────
+
+# FIX E. Because every table here is deterministic, a climax beat drew ALL of
+# slam_cut + chroma + snap_zoom + intensity 1.00 — four maximal choices on the
+# same frame, in every video, identically. Emphasis that never varies stops
+# reading as emphasis. This caps how many may co-occur.
+_HARD_TRANSITIONS = {"slam_cut", "flash", "whip_pan", "dip_black"}
+_EXTREME_CAMERAS = {"snap_zoom", "micro_shake"}
+_CAMERA_DOWNGRADE = {"snap_zoom": "push_in", "micro_shake": "handheld"}
+
+
+def _peak_effect_count(c: dict) -> int:
+    n = 0
+    if c.get("pattern_interrupt"):
+        n += 1
+    if c.get("transition") in _HARD_TRANSITIONS:
+        n += 1
+    if c.get("camera") in _EXTREME_CAMERAS:
+        n += 1
+    return n
+
+
+def _budget_peak_effects(contracts: list, limit: int = 2) -> None:
+    """Demote until at most `limit` maximal effects land on one beat.
+
+    Order matters: the pattern interrupt is the punctuation and is kept, camera
+    is demoted first (least semantic), transition second. `limit <= 0` disables
+    the pass entirely — `visuals: {peak_budget: 0}` in format.yaml.
+    """
+    if limit <= 0:
+        return
+    for c in contracts:
+        if _peak_effect_count(c) <= limit:
+            continue
+        cam = c.get("camera")
+        if cam in _CAMERA_DOWNGRADE:
+            c["camera"] = _CAMERA_DOWNGRADE[cam]
+        if _peak_effect_count(c) <= limit:
+            continue
+        c["transition"] = "cut"
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -330,9 +501,9 @@ def _build_beat_contracts(
     repetitive output when beat JSON is sparse.
 
     `profile` (formats.VisualProfile) is the genre's say over those
-    defaults — HUD, camera energy, intensity curve, looseness. Omitting it
-    (None) reproduces the exact pre-profile behavior via VisualProfile()'s
-    defaults.
+    defaults — HUD, camera energy, intensity curve, looseness, and (new)
+    the interrupt gate/budget + peak-effect budget. Omitting it (None)
+    uses VisualProfile()'s defaults.
     """
     profile = profile or VisualProfile()
     total = len(beats)
@@ -352,7 +523,8 @@ def _build_beat_contracts(
             "hud_tag":         _beat_hud(beat, i, total, profile.hud),
             "keyword":         beat["keyword"],
             "body":            beat.get("text", ""),  # absent for a `silent: true` beat (tts.py)
-            "duration_ms":     beat_durations_ms[i] if beat_durations_ms else 5000,
+            # FIX F: word-count estimate, not a flat 5000ms placeholder.
+            "duration_ms":     beat_durations_ms[i] if beat_durations_ms else _estimate_duration_ms(beat),
             "accent_override": "spike" if beat.get("type", "") == "climax" else None,
             "beat_index":      i + 1,
             "beat_total":      total,
@@ -407,29 +579,39 @@ def _build_beat_contracts(
             # entry_vector inherited from previous beat's exit
             "entry_vector":    {"x": 0, "y": 0, "scale": 1.0},
 
-            # ▼▼▼ NEW: keyword font size — prevents mid-word breaks on long words ▼▼▼
+            # ▼▼▼ keyword font size — prevents mid-word breaks on long words ▼▼▼
             # Calculated from the longest word in the keyword vs the container
             # width for this layout. capture.js injects --sz-kw into :root and
             # applies [class$="-kw"] { font-size: var(--sz-kw) !important; }
             # covering hook-kw, truth-kw, climax-kw, insight-kw, flip-kw, etc.
             "sz_kw":           calc_kw_font_size(beat["keyword"], layout, scene),
-            # ▲▲▲ END NEW ▲▲▲
+            # ▲▲▲ END ▲▲▲
         }
         contracts.append(contract)
 
-    # ── Inter-beat passes: transition + entry_vector handoff ──────────
+    # ── Inter-beat pass: transition ───────────────────────────────────
     for i in range(len(contracts)):
         prev = contracts[i - 1] if i > 0 else None
-
         if not contracts[i]["transition"]:
             contracts[i]["transition"] = _transition_for(prev, contracts[i], i) if prev else "cut"
 
-        if prev is not None:
-            contracts[i]["entry_vector"] = _exit_vector(prev["camera"])
-
+    # ── Intensity, then the passes that read it ───────────────────────
     for i, c in enumerate(contracts):
-        c["intensity"] = c.get("intensity") or _intensity_for(c["scene"], i, len(contracts), profile.intensity_curve)
-    _assign_interrupts(contracts)
+        # FIX D: isinstance, not `or` — 0.0 is a legal, deliberate intensity
+        # (the breath beat) and `or` silently replaced it with the scene default.
+        if not isinstance(c.get("intensity"), (int, float)):
+            c["intensity"] = _intensity_for(c["scene"], i, len(contracts), profile.intensity_curve)
+
+    _assign_interrupts(contracts, profile)
+    _budget_peak_effects(contracts, profile.peak_budget)
     _pick_composition_mutator(contracts, profile.looseness)
+
+    # ── entry_vector handoff — LAST, because _budget_peak_effects may have
+    #    demoted a camera and the next beat's entry inherits from it.
+    for i in range(len(contracts)):
+        if i > 0:
+            contracts[i]["entry_vector"] = _exit_vector(contracts[i - 1]["camera"])
+        else:
+            contracts[i]["entry_vector"] = {"x": 0, "y": 0, "scale": 1.0}
 
     return contracts

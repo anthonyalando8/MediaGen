@@ -66,12 +66,31 @@ class VoiceProfile:
 
 @dataclass
 class VisualProfile:
-    hud: str = "auto"              # "auto" (today's mapping) | "none" (kill the // chip)
+    # ── HUD ──────────────────────────────────────────────────────────────
+    # DEFAULT CHANGED: "none". The "// HOOK" / "// TRUTH" / "// FLIP" chip is
+    # the composer's own rhetorical enum printed on the frame — internal
+    # vocabulary, not viewer information, and meaningless-to-wrong on any
+    # non-explainer format. A format that genuinely wants it (tech_hud,
+    # documentary looks) sets `visuals: {hud: auto}` to get the old mapping.
+    hud: str = "none"              # "none" (default) | "auto" (per-type // chip)
     theme: str = ""                # forces the theme id; "" = today's _style_to_theme() computation
     camera_energy: str = "normal"  # "normal"/"high" = today's per-scene table unchanged | "low" = force static
     intensity_curve: str = "normal"  # "normal" = today's formula unchanged | "flat" | "spiky"
     looseness: float = 0.0         # scales composition-mutator count; 0.0 reproduces today's "always exactly 1"
     texture: str = "none"          # parsed + stored only — no consumer yet, forward-compat with the fix plan's §04
+
+    # ── Pattern-interrupt distribution (visuals.py::_assign_interrupts) ──
+    # The auto-assign pass used to stamp an interrupt on EVERY beat over the
+    # gate with no adjacency rule and no whole-video cap, so a rising-intensity
+    # script strobed for 4-5 beats straight. Both are enforced now, and both
+    # are per-format knobs because the right budget depends on the genre.
+    interrupt_threshold: float = 0.80   # minimum intensity for an auto-assigned interrupt
+    interrupt_max: int = 3              # whole-video budget; 0 = none, -1 = module default
+
+    # ── Peak-effect budget (visuals.py::_budget_peak_effects) ────────────
+    # Max number of maximal choices — hard transition, pattern interrupt,
+    # extreme camera — allowed to land on ONE beat. 0 disables the pass.
+    peak_budget: int = 2
 
 
 @dataclass
@@ -137,12 +156,15 @@ def _voice_profile_from(meta: dict) -> VoiceProfile:
 def _visual_profile_from(meta: dict) -> VisualProfile:
     v = meta.get("visuals") or {}
     return VisualProfile(
-        hud=str(v.get("hud", "auto")),
+        hud=str(v.get("hud", "none")),
         theme=str(v.get("theme", "")),
         camera_energy=str(v.get("camera_energy", "normal")),
         intensity_curve=str(v.get("intensity_curve", "normal")),
         looseness=float(v.get("looseness", 0.0)),
         texture=str(v.get("texture", "none")),
+        interrupt_threshold=float(v.get("interrupt_threshold", 0.80)),
+        interrupt_max=int(v.get("interrupt_max", 3)),
+        peak_budget=int(v.get("peak_budget", 2)),
     )
 
 
@@ -200,12 +222,15 @@ def _summarize(voice: VoiceProfile, visuals: VisualProfile, media: MediaPlan) ->
     voice_text = voice.style or "LLM-driven"
 
     motion_bits = []
-    if visuals.hud == "none":
-        motion_bits.append("no HUD")
+    # HUD is off by default now, so the picker should call out the OPT-IN.
+    if visuals.hud == "auto":
+        motion_bits.append("HUD chips")
     if visuals.camera_energy == "low":
         motion_bits.append("static camera")
     if visuals.intensity_curve != "normal":
         motion_bits.append(f"{visuals.intensity_curve} intensity")
+    if visuals.interrupt_max == 0:
+        motion_bits.append("no interrupts")
     motion_text = ", ".join(motion_bits) if motion_bits else "kinetic"
 
     return {"voice": voice_text, "motion": motion_text, "media": media.mode}

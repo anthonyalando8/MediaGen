@@ -335,8 +335,23 @@ def direct_beat(beat: dict, words: list[CapWord], seed: int = 0) -> list[Caption
     schedule(units, p)
     return units
 
+def _beat_of_word(t: float, spans: list[tuple[float, float]]) -> int:
+    """Which beat's audio span contains time `t`.
 
-def direct_transcript(transcript: dict, script: dict | None, seed: int = 7) -> list[CaptionUnit]:
+    Mirrors captions/timeline.py::_beat_of so the caption layer and the beats
+    layer can never disagree about a word's owner again. Words landing in an
+    inter-beat gap belong to the beat that just ended; words past the last
+    span belong to the last beat.
+    """
+    if not spans:
+        return 0
+    for bi, (lo, hi) in enumerate(spans):
+        if t < hi:
+            return bi if t >= lo or bi == 0 else max(0, bi - 1)
+    return len(spans) - 1
+
+def direct_transcript(transcript: dict, script: dict | None, seed: int = 7,
+                      beat_spans: list[tuple[float, float]] | None = None) -> list[CaptionUnit]:
     """
     Whole-video entry point. Aligns transcript words to script beats by sequential
     text matching so each phrase inherits its beat's emotion/energy/pace/highlights,
@@ -355,9 +370,39 @@ def direct_transcript(transcript: dict, script: dict | None, seed: int = 7) -> l
         neutral = {"emotion": "serious", "energy": "mid", "pace": "mid", "intensity": 0.6, "beat_index": 0}
         return direct_beat(neutral, all_words, seed)
 
-    # Sequential alignment: walk word stream, advance to next beat when this
-    # beat's spoken-word budget is consumed. Robust to small ASR differences
-    # because it matches by COUNT of cleaned words per beat, in order.
+    # PREFERRED: align on the AUDIO CLOCK. `beat_spans` are absolute
+    # (start, end) seconds per beat, computed once in timeline.py from the real
+    # per-beat durations plus the TTS inter-beat gap. Windowing on them means
+    # an ASR divergence affects only the word it happened on, instead of
+    # shifting every subsequent beat like the token walk below did.
+    if beat_spans:
+        buckets: list[list[CapWord]] = [[] for _ in beats]
+        n = min(len(beats), len(beat_spans))
+        usable = beat_spans[:n]
+        for w in all_words:
+            bi = _beat_of_word(w.start, usable)
+            buckets[min(bi, len(buckets) - 1)].append(w)
+
+        units: list[CaptionUnit] = []
+        for bi, beat in enumerate(beats):
+            span = buckets[bi]
+            if not span:
+                continue
+            b = dict(beat)
+            b.setdefault("beat_index", bi)
+            units.extend(direct_beat(b, span, seed + bi))
+
+        # Per-beat scheduling can't see across a beat boundary, so clamp any
+        # unit that lingers into the next one.
+        units.sort(key=lambda u: u.start)
+        for i in range(len(units) - 1):
+            if units[i].end > units[i + 1].start:
+                units[i].end = max(units[i].words[-1].end + 0.05,
+                                   units[i + 1].start - 0.02)
+        return units
+
+    # FALLBACK (no spans supplied — kept for any other caller): the original
+    # token-count walk. Drifts on ASR divergence; see dropin/WATCHABILITY_FIX.md.
     units: list[CaptionUnit] = []
     wi = 0
     for bi, beat in enumerate(beats):
@@ -366,7 +411,6 @@ def direct_transcript(transcript: dict, script: dict | None, seed: int = 7) -> l
         beat_text = re.sub(r"\*", "", beat.get("text", ""))
         n_expected = max(1, len(_clean_tokens(beat_text)))
         span = all_words[wi: wi + n_expected]
-        # extend the span to the next sentence end if we cut mid-sentence
         nxt = wi + n_expected
         while nxt < len(all_words) and not re.search(r"[.!?]$", all_words[nxt - 1].text) \
                 and (nxt - (wi + n_expected)) < 4:
@@ -379,14 +423,12 @@ def direct_transcript(transcript: dict, script: dict | None, seed: int = 7) -> l
         if wi >= len(all_words):
             break
 
-    # any trailing words (ASR over-run) → neutral tail
     if wi < len(all_words):
         tail = {"emotion": "serious", "energy": "mid", "pace": "mid", "intensity": 0.6,
                 "beat_index": len(beats)}
         units.extend(direct_beat(tail, all_words[wi:], seed + 99))
 
     return units
-
 
 def _clean_tokens(text: str) -> list[str]:
     return [t for t in re.split(r"\s+", text) if _strip(t)]

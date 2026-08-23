@@ -274,7 +274,8 @@ def _warm_models() -> None:
         from tts import get_kokoro
         from captions.captions import load_whisper
         print("[server] Warming models…")
-        get_kokoro()
+        if (CFG.get("tts", {}).get("provider") or "kokoro").strip().lower() == "kokoro":
+            get_kokoro()
         load_whisper(CFG["subs"]["whisper_model"])
         _MODELS_WARM = True
         print("[server] Models warm.")

@@ -38,9 +38,12 @@ import io
 import pathlib
 import numpy as np
 import soundfile as sf
+import yaml
 
 from visuals import _beat_scene
 from formats import VoiceProfile
+from media_resolve import _load_env
+from providers.elevenlabs_tts import ElevenLabsProvider
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,6 +216,44 @@ def _speed_for_beat(beat: dict, base_speed: float, scene: str = "", pace_map: di
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TTS backend selection — config.yaml's tts.provider picks ONE narrator for
+# the whole run (never a fallback chain like the LLM side: switching voices
+# mid-video would be jarring, unlike falling back to a different text
+# model). Untouched config.yaml (no `tts.provider` key) -> "kokoro", today's
+# exact behavior — the Kokoro path below is otherwise byte-for-byte
+# unchanged from before this option existed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CONFIG_PATH = pathlib.Path("config.yaml")
+_ELEVENLABS_PROVIDER: ElevenLabsProvider | None = None
+
+
+def _expand_secret(val):
+    """'${FOO}' -> the same .env-or-environ loader media_resolve.py already
+    uses for its own API keys (shell env wins over apps/python/.env)."""
+    if isinstance(val, str) and val.startswith("${") and val.endswith("}"):
+        return _load_env().get(val[2:-1], "")
+    return val
+
+
+def _load_tts_cfg() -> dict:
+    if not _CONFIG_PATH.exists():
+        return {}
+    return (yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}).get("tts") or {}
+
+
+def _get_elevenlabs_provider(tts_cfg: dict) -> ElevenLabsProvider:
+    """Cached — built once (and validated: raises immediately if api_key/
+    voice_id are missing, rather than failing opaquely on the first beat)."""
+    global _ELEVENLABS_PROVIDER
+    if _ELEVENLABS_PROVIDER is None:
+        sub_cfg = dict(tts_cfg.get("elevenlabs") or {})
+        sub_cfg["api_key"] = _expand_secret(sub_cfg.get("api_key"))
+        _ELEVENLABS_PROVIDER = ElevenLabsProvider(sub_cfg)
+    return _ELEVENLABS_PROVIDER
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Model cache — load Kokoro ONCE and reuse (server warms it at startup so the
 # first generate isn't cold; the CLI benefits across a --batch run too).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -260,9 +301,19 @@ def synthesize(
     Returns (voice_path, [beat_0.wav, beat_1.wav, …])
     """
     voice_profile = voice_profile or VoiceProfile()
-    chosen_voice, base_speed = _resolve_voice(script, voice, speed, voice_profile.style, voice_override)
-    print(f"[tts] voice='{chosen_voice}'  base_speed={base_speed}")
-    kokoro = get_kokoro()
+    tts_cfg = _load_tts_cfg()
+    provider_name = (tts_cfg.get("provider") or "kokoro").strip().lower()
+
+    elevenlabs = None
+    if provider_name == "elevenlabs":
+        elevenlabs = _get_elevenlabs_provider(tts_cfg)
+        chosen_voice, base_speed = elevenlabs.voice_id, _DEFAULT_SPEED
+        kokoro = None
+        print(f"[tts] provider='elevenlabs'  voice_id='{chosen_voice}'  base_speed={base_speed}")
+    else:
+        chosen_voice, base_speed = _resolve_voice(script, voice, speed, voice_profile.style, voice_override)
+        print(f"[tts] voice='{chosen_voice}'  base_speed={base_speed}")
+        kokoro = get_kokoro()
 
     silence_gap = np.zeros(int(sample_rate * 0.40), dtype=np.float32)  # 400 ms gap
     all_samples: list[np.ndarray] = []
@@ -294,8 +345,11 @@ def synthesize(
             spd   = _speed_for_beat(beat, base_speed, scene, voice_profile.pace_map)
             pace  = voice_profile.pace_map.get(scene) or beat.get("pace", "mid")
             print(f"[tts]   Beat {i+1} [pace={pace} speed={spd}]: {text[:60]}…")
-            samples, sr = kokoro.create(text, voice=chosen_voice, speed=spd, lang="en-us")
-            samples = np.asarray(samples, dtype=np.float32)
+            if elevenlabs is not None:
+                samples, sr = elevenlabs.synthesize(text, voice=chosen_voice, speed=spd, sample_rate=sample_rate)
+            else:
+                samples, sr = kokoro.create(text, voice=chosen_voice, speed=spd, lang="en-us")
+                samples = np.asarray(samples, dtype=np.float32)
         final_sr = sr
 
         beat_path = out_dir / f"beat_{i}.wav"

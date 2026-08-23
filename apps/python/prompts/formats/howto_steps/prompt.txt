@@ -1,0 +1,341 @@
+Write a HOW-TO / TUTORIAL video script — a procedure a viewer can actually follow.
+
+TOPIC: "{topic}"
+
+Return ONLY valid JSON. No text before or after. No markdown. No code fences.
+
+{{
+  "title": "max 6 words, states the outcome (e.g. 'Sharpen A Knife Properly')",
+  "thumbnail": "2-4 word phrase naming the result or the mistake",
+  "style": "calm | analytical | builder | documentary | cinematic",
+
+  "global": {{
+    "theme":        "clean_modern | editorial_white | documentary_gritty | tech_blue | warm_amber | luxury_minimal | cinematic_grain",
+    "music_mood":   "minimal | ambient | upbeat | cinematic | emotional",
+    "voice_style":  "analytical | documentary | storyteller | calm_intense",
+    "camera_style": "static | dynamic | handheld",
+    "subject":      "1-3 word concrete photographable noun for the thing being worked on (e.g. 'chef knife', 'bicycle chain', 'espresso machine', 'spreadsheet screen'). Anchors every visual_query."
+  }},
+
+  "beats": [
+    {{
+      "id":               "beat_01",
+      "type":             "hook | insight | tension | truth | flip | climax | payoff | cta",
+      "keyword":          "2-4 WORD PHRASE — on step beats it MUST start with the step number (see STEP KEYWORDS)",
+      "text":             "spoken sentence, 14-28 words, with ONE *emphasis word* per sentence",
+      "items":            "OPTIONAL array — use on the WHAT YOU NEED beat only. See STRUCTURED BEATS.",
+      "energy":           "high | mid | low",
+      "emotion":          "serious | confident | hopeful | cold | tense | playful | surprised",
+      "pace":             "slow | mid | fast",
+      "visual_intent":    "clean | minimal | documentary | cinematic",
+      "camera":           "static | push_in | pull_out | handheld | tilt_up | micro_shake",
+      "transition":       "cut | blur_wipe | fade | dip_black",
+      "background":       "solid | gradient | grid | lines | glow",
+      "layout":           "left | center | right | full",
+      "visual_query":     "2-4 word LITERAL image search — the concrete object THIS step acts on. See VISUAL QUERY rules.",
+      "intensity":        0.55,
+      "pattern_interrupt":"",
+      "composition":      ""
+    }}
+  ]
+}}
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURE — the spine, in this order
+──────────────────────────────────────────────────────────────────────
+  1  beat_01        type "hook"     — the OUTCOME and why the usual way fails.
+                                       Do not list the steps here.
+  2  beat_02        type "insight"  — WHAT YOU NEED. Carries an `items` array.
+                                       Omit this beat entirely if the topic
+                                       needs nothing but attention.
+  3  N step beats   type "insight"  — ONE action per beat, counting UP (1 → N)
+  4  one beat       type "tension"  — THE COMMON MISTAKE. What people get wrong
+                                       and what it costs. Placed after the steps,
+                                       not among them.
+  5  one beat       type "payoff"   — how you know it worked. The observable result.
+  6  final beat     type "cta"      — what to try next, or a question. Not "subscribe".
+
+N is 4-8. Use the number of steps the procedure genuinely has.
+
+⚠ Count UP. Step 1 is first. (This is the opposite of a countdown — do not rank
+  by importance, order by SEQUENCE.)
+⚠ ONE action per step beat. If a step contains "and then", it is two steps.
+⚠ Steps must be in the order a person actually does them. A step that depends on
+  a later step is the worst failure this format has.
+⚠ Every step beat is typed "insight". That is correct and intentional — do not
+  vary the type for the sake of variety. Visual variety comes from the per-beat
+  camera/layout/background fields below.
+
+──────────────────────────────────────────────────────────────────────
+STEP KEYWORDS — REQUIRED on every step beat
+──────────────────────────────────────────────────────────────────────
+Step beats' `keyword` must begin with the step number, then the action in 2-3
+words. Lead with a VERB.
+
+  "STEP 1 FIND THE BEVEL" / "STEP 2 WET THE STONE" / "STEP 5 STROP THE EDGE"
+
+Uppercase. No trailing punctuation. The number prefix is not decoration — the
+renderer treats a number-led keyword as the frame's hero text and will never
+give that beat a textless composition, so a step without it can lose its label
+entirely.
+
+hook / needs / mistake / payoff / cta keywords carry NO number:
+  "SHARP IN FIVE MINUTES" / "WHAT YOU NEED" / "EVERYONE SKIPS THIS"
+  / "THE PAPER TEST" / "TRY IT ON ONE KNIFE"
+
+──────────────────────────────────────────────────────────────────────
+STRUCTURED BEATS — `items` on the WHAT YOU NEED beat
+──────────────────────────────────────────────────────────────────────
+The materials list is a genuine enumeration and reads far better as a list than
+as a sentence:
+
+    "items": [{{"text": "Whetstone, 1000 grit"}}, {{"text": "A damp towel"}},
+              {{"text": "Ten flat minutes"}}]
+
+2-4 entries, each ≤ 5 words, each a real thing. The `text` field stays the spoken
+narration ("You need three things, and one of them is patience.").
+
+Do NOT put `items` on a step beat — a step is one action, and splitting it into
+bullets makes it look like several. Do not put `items` anywhere else.
+
+──────────────────────────────────────────────────────────────────────
+STRICT RULES
+──────────────────────────────────────────────────────────────────────
+TEXT: every beat 14-28 words. Total across all beats: 160-380.
+
+TEXT ON A STEP BEAT: say what to DO, then the tell that it's working. Imperative
+mood. Do not restate the keyword — it is already on screen.
+  Good, keyword "STEP 2 WET THE STONE":
+    "Soak it until the bubbles stop rising. A dry stone *glazes* and stops cutting
+     within a minute."
+  Bad (restates the keyword, adds nothing):
+    "Step two is to wet the *stone* before you begin."
+
+BE SPECIFIC. Numbers, angles, times, temperatures, counts — whatever the topic
+really has. "A few minutes" is a failure; "about ten minutes" is a step.
+Never invent a figure you aren't sure of; say the observable tell instead.
+
+TONE: someone who has done this many times showing you, not a manual reading
+itself aloud. Use "you". No hedging, no encouragement padding.
+
+BANNED PHRASES: "here's the thing" / "the truth is" / "in today's world"
+                "let's dive in" / "without further ado" / "it's that simple"
+                "and that's all there is to it" / "make sure to" / "don't forget to"
+                "follow for more" / "in this video"
+
+⚠ Never narrate the video's own structure. No "first I'll show you", no
+  "now that we've covered", no "in the next step". The step number on screen
+  already carries the sequence.
+
+──────────────────────────────────────────────────────────────────────
+PER-BEAT VARIETY — MANDATORY
+──────────────────────────────────────────────────────────────────────
+Every step beat shares a type and a purpose, so if the visual fields don't move
+the whole middle of the video is one frame with changing words. Across the script:
+   1. At least 3 different `camera` values
+   2. At least 2 different `pace` values
+   3. At least 2 different `layout` values
+   4. At least 2 different `background` values
+   5. Never the same `camera` on 3 consecutive beats
+   6. Consecutive STEP beats must differ in at least TWO of
+      camera / layout / background
+Rewrite before outputting if any fail.
+
+Keep the motion SMALL. This format allows push_in, pull_out, tilt_up, handheld,
+micro_shake and static — it does not allow snap_zoom, and transitions are limited
+to cut / blur_wipe / fade / dip_black. A viewer copying what they see needs a
+stable frame; showiness here reads as amateur, not energetic.
+
+──────────────────────────────────────────────────────────────────────
+VISUAL QUERY — REQUIRED, must return a CONTEXTUAL image
+──────────────────────────────────────────────────────────────────────
+Image search is LITERAL. Mood words ("precision mastery focus") return generic
+stock — nature and abstract dominate the pool — so a knife-sharpening video ends
+up showing a mountain. Over-niche queries return nothing and fall back to a
+random photo.
+
+This format has the easiest job of any: each step ACTS ON A PHYSICAL THING. Name it.
+
+RULES (all mandatory):
+1. THE OBJECT OF THIS STEP, concretely. Step 2 wets a stone → "whetstone water
+   soaking". Step 5 tests the edge → "knife blade paper cut". Only fall back to
+   the global `subject` when a step has no object of its own.
+2. Then AT MOST 1-2 visual modifiers: "close up", "macro", "overhead", "hands",
+   "kitchen", "workbench", "daylight".
+3. "hands" is unusually useful here and mostly absent from other formats — a
+   pair of hands doing the thing is the single most on-topic tutorial image
+   available. Use it on 2-3 step beats.
+4. BANNED: every feeling and abstraction — "precision", "mastery", "focus",
+   "patience", "journey", "craft", "perfection", "satisfying", "zen".
+5. 2-4 words. Concrete + visual.
+
+⚠ Every step beat needs a DIFFERENT query. Repeating "chef knife close up" with
+  a new adjective five times gives one photo for the whole procedure.
+
+For a KNIFE-SHARPENING topic (subject "chef knife"):
+  Good: "whetstone water soaking" / "hands sharpening knife angle" / "knife edge
+        macro closeup" / "blade paper slicing test" / "leather strop workbench"
+  Bad:  "chef knife" ×5 / "precision craft" / "satisfying sharpness" / "mastery"
+
+──────────────────────────────────────────────────────────────────────
+INTENSITY — 0.0 to 1.0, REQUIRED on every beat
+──────────────────────────────────────────────────────────────────────
+A procedure is EVEN. It does not build to a peak — it arrives at a result. Keep
+the whole middle in a narrow band; the only lift is the mistake beat.
+
+  hook:            0.72 - 0.80
+  what you need:   0.40 - 0.50
+  step beats:      0.48 - 0.62      flat across all of them, ±0.06 at most
+  the mistake:     0.72 - 0.82      the one moment with real pressure
+  payoff:          0.58 - 0.68
+  cta:             0.55 - 0.65
+
+⚠ No beat above 0.85. There is no climax in a tutorial; a frame that slams while
+  someone is holding a knife is a bad video.
+⚠ Step intensities must stay within 0.14 of each other. A rising staircase makes
+  step 6 feel more important than step 2, which is false — every step is required.
+
+──────────────────────────────────────────────────────────────────────
+PATTERN INTERRUPT — leave "" on essentially every beat
+──────────────────────────────────────────────────────────────────────
+Someone following along has their hands busy and their eyes on a detail. A
+frame-level disruption makes them lose their place. At most ONE in the whole
+script, on the mistake beat, and only if that beat is ≥ 0.80:
+
+  ""       → none. This is the correct value for every beat but possibly one.
+  "iris"   → vignette tightens. The only tasteful option here (the mistake beat).
+  "freeze" → motion pauses. Acceptable on the mistake beat as an alternative.
+
+Never "slam", "chroma", "invert", "tilt" or "flash" in this format.
+
+──────────────────────────────────────────────────────────────────────
+COMPOSITION — optional, "" usually. At most ONCE per script.
+──────────────────────────────────────────────────────────────────────
+  ""         → standard (use on every beat unless calling)
+  "crop-low" → text sits at bottom 30% — good when the object needs the frame
+  "sparse"   → keyword takes 35% width, rest empty
+  "corner"   → text bottom-right, max negative space
+
+Use on a step beat whose image deserves room. Never "tilt" — a dutch angle on an
+instructional frame is disorienting.
+
+──────────────────────────────────────────────────────────────────────
+EMPHASIS WORDS — REQUIRED, exactly one per sentence
+──────────────────────────────────────────────────────────────────────
+Wrap ONE word or short phrase per sentence in *asterisks* — the word the
+listener must land on. In this format it should usually be the TELL or the
+CONSEQUENCE, not the action.
+
+  "Soak it until the bubbles stop. A dry stone *glazes* and stops cutting."
+  "Hold the spine two coins off the surface — about *fifteen degrees*."
+  "If it tears the paper instead of slicing, the burr is still *attached*."
+
+──────────────────────────────────────────────────────────────────────
+EXAMPLE (9 beats — subject "chef knife", 5 steps)
+──────────────────────────────────────────────────────────────────────
+{{
+  "title": "Sharpen A Knife Properly",
+  "thumbnail": "You're Rounding The Edge",
+  "style": "calm",
+  "global": {{
+    "theme":        "clean_modern",
+    "music_mood":   "minimal",
+    "voice_style":  "analytical",
+    "camera_style": "static",
+    "subject":      "chef knife"
+  }},
+  "beats": [
+    {{
+      "id":"beat_01","type":"hook","keyword":"SHARP IN TEN MINUTES",
+      "text":"A pull-through sharpener tears metal off your blade. Ten minutes on a stone gets you an edge that *lasts* months.",
+      "energy":"mid","emotion":"confident","pace":"mid","visual_intent":"clean",
+      "camera":"push_in","transition":"cut","background":"gradient","layout":"left",
+      "visual_query":"chef knife cutting board","intensity":0.76,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_02","type":"insight","keyword":"WHAT YOU NEED",
+      "text":"Three things, and one of them is just sitting still for a while without checking your *phone*.",
+      "items":[{{"text":"Whetstone, 1000 grit"}},{{"text":"A damp towel"}},{{"text":"Ten flat minutes"}}],
+      "energy":"low","emotion":"serious","pace":"slow","visual_intent":"minimal",
+      "camera":"static","transition":"cut","background":"solid","layout":"center",
+      "visual_query":"whetstone towel workbench","intensity":0.45,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_03","type":"insight","keyword":"STEP 1 SOAK THE STONE",
+      "text":"Submerge it until the bubbles stop rising. A dry stone *glazes* over and stops cutting within a minute.",
+      "energy":"low","emotion":"serious","pace":"slow","visual_intent":"documentary",
+      "camera":"static","transition":"cut","background":"solid","layout":"left",
+      "visual_query":"whetstone water soaking","intensity":0.52,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_04","type":"insight","keyword":"STEP 2 FIND THE ANGLE",
+      "text":"Stack two coins under the spine and rest the blade on them. That is *fifteen degrees*, near enough.",
+      "energy":"mid","emotion":"confident","pace":"mid","visual_intent":"clean",
+      "camera":"tilt_up","transition":"blur_wipe","background":"grid","layout":"right",
+      "visual_query":"hands holding knife angle","intensity":0.58,"pattern_interrupt":"","composition":"crop-low"
+    }},
+    {{
+      "id":"beat_05","type":"insight","keyword":"STEP 3 PUSH THROUGH THE EDGE",
+      "text":"Push away from yourself, heel to tip, with the weight of your fingers only. Never *saw* back and forth.",
+      "energy":"mid","emotion":"serious","pace":"mid","visual_intent":"documentary",
+      "camera":"handheld","transition":"cut","background":"lines","layout":"left",
+      "visual_query":"hands sharpening knife stone","intensity":0.56,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_06","type":"insight","keyword":"STEP 4 FEEL FOR THE BURR",
+      "text":"Run a thumb across the back of the edge. A faint wire catching your skin means that side is *done*.",
+      "energy":"low","emotion":"confident","pace":"slow","visual_intent":"minimal",
+      "camera":"pull_out","transition":"cut","background":"solid","layout":"center",
+      "visual_query":"knife edge macro closeup","intensity":0.54,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_07","type":"insight","keyword":"STEP 5 STRIP THE BURR",
+      "text":"Ten light passes on leather or cardboard. This is the step that turns a sharp edge into a *lasting* one.",
+      "energy":"mid","emotion":"hopeful","pace":"mid","visual_intent":"clean",
+      "camera":"static","transition":"blur_wipe","background":"gradient","layout":"right",
+      "visual_query":"leather strop workbench","intensity":0.60,"pattern_interrupt":"","composition":""
+    }},
+    {{
+      "id":"beat_08","type":"tension","keyword":"EVERYONE SKIPS THIS",
+      "text":"Most people stop at the burr and call it sharp. That wire folds over on the first cut and the edge *dies* that day.",
+      "energy":"mid","emotion":"cold","pace":"mid","visual_intent":"documentary",
+      "camera":"micro_shake","transition":"dip_black","background":"lines","layout":"full",
+      "visual_query":"dull knife blade closeup","intensity":0.79,"pattern_interrupt":"iris","composition":""
+    }},
+    {{
+      "id":"beat_09","type":"cta","keyword":"TRY THE PAPER TEST",
+      "text":"Hold a sheet of paper and slice down. If it glides instead of tearing, you are *finished* — go check your worst knife.",
+      "energy":"mid","emotion":"confident","pace":"mid","visual_intent":"clean",
+      "camera":"static","transition":"fade","background":"solid","layout":"center",
+      "visual_query":"knife slicing paper test","intensity":0.62,"pattern_interrupt":"","composition":""
+    }}
+  ]
+}}
+
+Note the example has no `payoff` beat: the paper test IS the result, so it doubles
+as the closing challenge. That's legitimate — merge payoff and cta when the
+observable result is itself the thing to go try. Keep them separate when the
+result needs explaining before you can ask for anything.
+
+──────────────────────────────────────────────────────────────────────
+FINAL CHECKLIST before outputting (rewrite if any fail):
+──────────────────────────────────────────────────────────────────────
+1.  Spine correct: hook → (needs) → steps ASCENDING → mistake → (payoff) → cta.
+2.  Every step beat's keyword starts with "STEP <n>" and leads with a verb.
+3.  No non-step keyword carries a number prefix.
+4.  Steps are in real execution order; no step depends on a later one.
+5.  Exactly one action per step beat — no "and then".
+6.  Every step beat is typed "insight".
+7.  Word count: each beat 14-28, total 160-380.
+8.  Every text field has EXACTLY one *emphasis word* per sentence.
+9.  No step text restates its own keyword.
+10. All step intensities within 0.14 of each other; no beat above 0.85.
+11. ≥3 cameras, ≥2 paces, ≥2 layouts, ≥2 backgrounds; no camera 3-in-a-row.
+12. Consecutive step beats differ in ≥2 of camera / layout / background.
+13. No snap_zoom; no slam/chroma/invert/tilt/flash interrupts.
+14. Every visual_query is a concrete object, ≤4 words, no mood words, and all
+    step queries are DIFFERENT objects. 2-3 of them use "hands".
+15. `items` appears on the WHAT YOU NEED beat only, if at all.
+16. No banned phrase, and no narration of the video's own structure.
+
+Output the JSON only.

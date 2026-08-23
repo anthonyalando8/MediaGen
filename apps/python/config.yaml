@@ -12,21 +12,21 @@ llm:
   providers:
     ollama:
       enabled: true
-      priority: 60
+      priority: 80
       timeout_s: 180
 
     # OpenRouter — free-tier models exist (IDs ending in ":free"; the free
     # catalog rotates, check https://openrouter.ai/models?max_price=0).
     openrouter:
       enabled: true
-      priority: 80
+      priority: 70
       model: "openai/gpt-oss-20b:free"
       api_key: ${OPENROUTER_API_KEY}
 
     # Groq — generous free tier, fast inference on open models.
     groq:
       enabled: false
-      priority: 70
+      priority: 60
       model: "llama-3.1-8b-instant"
       api_key: ${GROQ_API_KEY}
 
@@ -42,6 +42,19 @@ tts:
   voice: "auto"            # kokoro voices: af_heart af_sky am_adam bf_emma bm_daniel
   speed: 1.05                  # slightly faster reads punchier on tiktok
   sample_rate: 24000
+
+  # Narrator backend — "kokoro" (default, free/offline/unlimited) or
+  # "elevenlabs" (cloud API, noticeably more natural for story/documentary
+  # narration; free tier ~10 min/month). See
+  # apps/python/src/providers/elevenlabs_tts.py for setup details.
+  provider: "kokoro"
+  elevenlabs:
+    api_key: ${ELEVENLABS_API_KEY}
+    # REQUIRED when provider is "elevenlabs" — no default. Pick a voice at
+    # https://elevenlabs.io/app/voice-library (search "narration" /
+    # "documentary" / "audiobook") and paste its Voice ID here.
+    voice_id: "Gfpl8Yo74Is0W6cPUWWT"
+    model_id: "eleven_multilingual_v2"   # or eleven_flash_v2_5 / eleven_turbo_v2_5 for ~half the credit cost
 
 render:
   concurrency: 2

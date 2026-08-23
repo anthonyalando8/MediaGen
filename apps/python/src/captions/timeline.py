@@ -29,6 +29,30 @@ LAYERS (two clocks, on purpose)
 
 Import path (their layout: src/timeline.py, src/captions/caption_director.py):
     from captions.caption_director import direct_transcript
+
+────────────────────────────────────────────────────────────────────
+FIX — ONE CLOCK, NOT TWO (see dropin/WATCHABILITY_FIX.md)
+────────────────────────────────────────────────────────────────────
+This module and caption_director used to align words to beats by two
+DIFFERENT and incompatible methods, and both results landed in this one
+timeline.json:
+
+  • here            — by TIME WINDOW, from cumulative durations + gap_s.
+  • direct_transcript — by TOKEN COUNT, walking the word stream and
+                        advancing a cursor per beat, never consulting the
+                        audio clock at all.
+
+The token walk cannot recover from an ASR divergence: `wi = nxt` commits the
+cursor, and the "extend to the next sentence end" lookahead can additionally
+consume up to 4 words of the FOLLOWING beat. So one merged token ("4pm") or
+one dropped filler shifted every subsequent beat's caption choreography, and
+the error accumulated monotonically — worst in the last third of a long
+script, where captions carry visibly the wrong beat's emotion and pace.
+
+The `starts`/`durations_s` computation therefore now happens FIRST, and the
+resulting absolute (start, end) spans are handed to direct_transcript, which
+windows on them. `beat_spans=None` still falls back to the old token walk, so
+any other caller of direct_transcript is unaffected.
 """
 
 from __future__ import annotations
@@ -90,29 +114,15 @@ def build_timeline(
     seed        — MUST match cfg.subs.seed so the caption layer is identical
                   to what captions.py renders.
     """
-    # 1. Director: transcript → choreographed units (GLOBAL times). This is the
-    #    caption layer AND our word→beat alignment in one pass.
-    units = direct_transcript(transcript, script, seed=seed)
-
     fps = cfg.get("video", {}).get("fps", 30)
 
-    # 2. BEATS layer — per-beat, BEAT-RELATIVE word timing for scene sync.
-    #    Reference = the beat's AUDIO START (cumulative durations), NOT the
-    #    first spoken word. The scene animation clock starts at the beat's
-    #    audio segment start (leading silence included), so word times must be
-    #    relative to that, or emphasis fires early by the leading-silence amount.
-    #
-    #    Words are assigned to beats by TIME WINDOW (which beat's audio span
-    #    contains the word) rather than token count — more accurate for timing
-    #    and independent of ASR token drift. Assumes voice.wav is the per-beat
-    #    WAVs concatenated (so cumulative durations = beat boundaries).
-    all_tw = _flatten_transcript_words(transcript)
-    # voice.wav is the per-beat WAVs concatenated with a fixed silence gap
-    # between beats (tts.synthesize's silence_gap). whisper timed the words
-    # against voice.wav, so each beat's true start there includes the
-    # accumulated gaps. Omitting them made per-beat-relative word times drift
-    # LATE by gap*beat_index — captions lagging the narrator. gap_s MUST match
-    # tts.synthesize's silence gap (0.40s).
+    # 1. THE AUDIO CLOCK — computed FIRST, because both layers below key off it.
+    #    voice.wav is the per-beat WAVs concatenated with a fixed silence gap
+    #    between beats (tts.synthesize's silence_gap). whisper timed the words
+    #    against voice.wav, so each beat's true start there includes the
+    #    accumulated gaps. Omitting them made per-beat-relative word times
+    #    drift LATE by gap*beat_index — captions lagging the narrator. gap_s
+    #    MUST match tts.synthesize's silence gap (0.40s).
     gap_s = float(cfg.get("tts", {}).get("gap_s", 0.40))
     starts = []
     acc = 0.0
@@ -120,6 +130,21 @@ def build_timeline(
         starts.append(acc)
         acc += d + gap_s
     n_beats_dur = len(durations_s)
+
+    # Absolute (start, end) span of each beat's audio — the single source of
+    # truth for "which beat does this word belong to", used by BOTH layers.
+    beat_spans = [(starts[bi], starts[bi] + durations_s[bi]) for bi in range(n_beats_dur)]
+
+    # 2. Director: transcript → choreographed units (GLOBAL times). This is the
+    #    caption layer, aligned on the SAME spans as the beats layer below.
+    units = direct_transcript(transcript, script, seed=seed, beat_spans=beat_spans)
+
+    # 3. BEATS layer — per-beat, BEAT-RELATIVE word timing for scene sync.
+    #    Reference = the beat's AUDIO START (cumulative durations), NOT the
+    #    first spoken word. The scene animation clock starts at the beat's
+    #    audio segment start (leading silence included), so word times must be
+    #    relative to that, or emphasis fires early by the leading-silence amount.
+    all_tw = _flatten_transcript_words(transcript)
 
     def _beat_of(t: float) -> int:
         for bi in range(n_beats_dur):
@@ -161,7 +186,7 @@ def build_timeline(
             "emphasis":        emphasis,                 # the *starred* words the scene reacts to
         })
 
-    # 3. Caption layer — GLOBAL times, exactly what captions.py will render.
+    # 4. Caption layer — GLOBAL times, exactly what captions.py will render.
     cap_units = []
     for u in units:
         cap_units.append({
